@@ -162,6 +162,106 @@ async def create_presqu_accident_item(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+
+@router.post("/import-bulk")
+async def import_bulk_presqu_accidents(
+    items_data: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    """Import en masse de presqu'accidents depuis l'extraction IA.
+    Accepte TOUS les champs y compris status, commentaire_traitement, responsable_action.
+    """
+    try:
+        items_list = items_data.get("items", [])
+        if not items_list:
+            raise HTTPException(status_code=400, detail="Aucun item a importer")
+
+        current_year = datetime.now().year
+        count = await db.presqu_accident_items.count_documents({
+            "numero": {"$regex": f"^{current_year}-"}
+        })
+
+        # Mapping statut: valider contre l'enum
+        valid_statuses = {s.value for s in PresquAccidentStatus}
+        valid_services = {s.value for s in PresquAccidentService}
+
+        created = 0
+        errors_list = []
+
+        for idx, raw in enumerate(items_list):
+            try:
+                count += 1
+                numero = f"{current_year}-{str(count).zfill(3)}"
+
+                # Valider le service
+                service = raw.get("service", "AUTRE")
+                if service not in valid_services:
+                    service = "AUTRE"
+
+                # Valider le statut (ou defaut A_TRAITER)
+                status_val = raw.get("status", "A_TRAITER")
+                if status_val not in valid_statuses:
+                    status_val = "A_TRAITER"
+
+                # Construire l'item complet avec TOUS les champs
+                item = PresquAccidentItem(
+                    numero=numero,
+                    titre=raw.get("titre", "Sans titre")[:200],
+                    description=raw.get("description") or "-",
+                    date_incident=raw.get("date_incident") or datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+                    lieu=raw.get("lieu") or "-",
+                    service=PresquAccidentService(service),
+                    categorie_incident=raw.get("categorie_incident") or None,
+                    declarant=raw.get("declarant") or None,
+                    personnes_impliquees=raw.get("personnes_impliquees") or None,
+                    mesures_immediates=raw.get("mesures_immediates") or None,
+                    actions_proposees=raw.get("actions_proposees") or None,
+                    contexte_cause=raw.get("contexte_cause") or None,
+                    conditions_incident=raw.get("conditions_incident") or None,
+                    commentaire_traitement=raw.get("commentaire_traitement") or None,
+                    responsable_action=raw.get("responsable_action") or None,
+                    status=PresquAccidentStatus(status_val),
+                    severite=PresquAccidentSeverity(raw.get("severite", "MOYEN")),
+                    created_by=current_user.get("id"),
+                    updated_by=current_user.get("id")
+                )
+
+                item_dict = item.model_dump()
+                await db.presqu_accident_items.insert_one(item_dict)
+                if "_id" in item_dict:
+                    del item_dict["_id"]
+                created += 1
+
+            except Exception as e:
+                errors_list.append(f"Item {idx+1}: {str(e)}")
+                logger.error(f"Erreur import PA item {idx+1}: {e}")
+
+        # Audit une seule fois pour l'import en masse
+        await audit_service.log_action(
+            user_id=current_user["id"],
+            user_name=f"{current_user['prenom']} {current_user['nom']}",
+            user_email=current_user["email"],
+            action=ActionType.CREATE,
+            entity_type=EntityType.PRESQU_ACCIDENT,
+            entity_id="bulk_import",
+            entity_name=f"Import en masse: {created} presqu'accidents"
+        )
+
+        return {
+            "success": True,
+            "created": created,
+            "errors": len(errors_list),
+            "error_details": errors_list[:10]
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erreur import en masse: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+
 @router.put("/items/{item_id}")
 async def update_presqu_accident_item(
     item_id: str,
