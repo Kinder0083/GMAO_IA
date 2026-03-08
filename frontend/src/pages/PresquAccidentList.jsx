@@ -4,7 +4,7 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Badge } from '../components/ui/badge';
-import { Plus, Download, Upload, AlertTriangle, Search, Filter, Edit, Trash2, Paperclip, ClipboardCheck, X, Eye, Wifi, WifiOff, RefreshCw, ChevronDown, ChevronUp, Wrench, Brain, Loader2, FileSpreadsheet, CheckCircle } from 'lucide-react';
+import { Plus, Download, Upload, AlertTriangle, Search, Filter, Edit, Trash2, Paperclip, ClipboardCheck, X, Eye, Wifi, WifiOff, RefreshCw, ChevronDown, ChevronUp, Wrench, Brain, Loader2, FileSpreadsheet, CheckCircle, Camera, Image } from 'lucide-react';
 import { useToast } from '../hooks/use-toast';
 import { presquAccidentAPI, usersAPI, rolesAPI, equipmentsAPI } from '../services/api';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
@@ -21,6 +21,8 @@ function PresquAccidentList() {
   const { toast } = useToast();
   const { confirm, ConfirmDialog } = useConfirmDialog();
   const importInputRef = useRef(null);
+  const createFileInputRef = useRef(null);
+  const createCameraInputRef = useRef(null);
   const [filteredItems, setFilteredItems] = useState([]);
   const [stats, setStats] = useState(null);
   const [openForm, setOpenForm] = useState(false);
@@ -579,6 +581,13 @@ function PresquAccidentList() {
   const handleFileSelect = (e) => {
     const files = Array.from(e.target.files);
     setPendingFiles(prev => [...prev, ...files]);
+    e.target.value = '';
+  };
+
+  const handleCameraCapture = (e) => {
+    const files = Array.from(e.target.files);
+    setPendingFiles(prev => [...prev, ...files]);
+    e.target.value = '';
   };
 
   const removePendingFile = (index) => {
@@ -1251,26 +1260,98 @@ function PresquAccidentList() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  <div className="border-2 border-dashed rounded-lg p-4">
+                  {/* Boutons Camera + Fichier */}
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => createCameraInputRef.current?.click()}
+                      className="gap-2"
+                      data-testid="create-camera-btn"
+                    >
+                      <Camera size={16} />
+                      Photo
+                    </Button>
                     <input
+                      ref={createCameraInputRef}
+                      type="file"
+                      accept="image/*,video/*"
+                      capture="environment"
+                      multiple
+                      onChange={handleCameraCapture}
+                      className="hidden"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => createFileInputRef.current?.click()}
+                      className="gap-2"
+                      data-testid="create-file-btn"
+                    >
+                      <Plus size={16} />
+                      Fichier
+                    </Button>
+                    <input
+                      ref={createFileInputRef}
                       type="file"
                       multiple
                       onChange={handleFileSelect}
-                      className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                      className="hidden"
                     />
-                    <p className="text-xs text-gray-500 mt-2">Photos, documents... pour illustrer l'incident</p>
                   </div>
+                  <p className="text-xs text-gray-500">Photos, documents... pour illustrer l'incident</p>
+
+                  {/* Grille de preview des fichiers en attente */}
                   {pendingFiles.length > 0 && (
                     <div className="space-y-2">
-                      <Label className="text-sm">Fichiers selectionnes :</Label>
-                      {pendingFiles.map((file, index) => (
-                        <div key={index} className="flex items-center justify-between bg-gray-50 p-2 rounded">
-                          <span className="text-sm truncate">{file.name}</span>
-                          <Button type="button" variant="ghost" size="sm" onClick={() => removePendingFile(index)}>
-                            <X size={16} />
-                          </Button>
-                        </div>
-                      ))}
+                      <Label className="text-sm">Fichiers selectionnes ({pendingFiles.length}) :</Label>
+                      <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                        {pendingFiles.map((file, index) => {
+                          const isImage = file.type.startsWith('image/');
+                          const isVideo = file.type.startsWith('video/');
+                          return (
+                            <div
+                              key={index}
+                              className="relative group aspect-square rounded-lg border-2 border-gray-200 overflow-hidden bg-gray-50"
+                              data-testid={`pending-file-${index}`}
+                            >
+                              {isImage ? (
+                                <img
+                                  src={URL.createObjectURL(file)}
+                                  alt={file.name}
+                                  className="w-full h-full object-cover"
+                                  onLoad={(e) => URL.revokeObjectURL(e.target.src)}
+                                />
+                              ) : isVideo ? (
+                                <div className="flex flex-col items-center justify-center h-full bg-purple-50">
+                                  <Eye size={20} className="text-purple-500" />
+                                  <span className="text-[10px] text-purple-600 font-semibold mt-1">Video</span>
+                                </div>
+                              ) : (
+                                <div className="flex flex-col items-center justify-center h-full">
+                                  <Paperclip size={20} className="text-gray-400" />
+                                  <span className="text-[10px] text-gray-500 mt-1 px-1 truncate max-w-full">
+                                    {file.name.split('.').pop()?.toUpperCase()}
+                                  </span>
+                                </div>
+                              )}
+                              <div className="absolute bottom-0 inset-x-0 bg-black/50 text-white text-[9px] px-1 py-0.5 truncate">
+                                {file.name}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => removePendingFile(index)}
+                                className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                                data-testid={`remove-pending-${index}`}
+                              >
+                                <X size={12} />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   )}
                 </div>

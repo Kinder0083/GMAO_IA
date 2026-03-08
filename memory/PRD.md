@@ -5,16 +5,25 @@ Application de GMAO complete (FastAPI + React + MongoDB).
 
 ## Fonctionnalites implementees
 
+### Capture photo camera + preview dans formulaire Presqu'accident (9 mars 2026)
+- Boutons "Photo" (camera capture) et "Fichier" ajoutés au formulaire de creation
+- Grille de miniatures avec preview des images, icones pour videos/fichiers
+- Bouton X pour retirer un fichier avant sauvegarde
+- Mode edition : utilise AttachmentUploader + AttachmentsList + AttachmentGallery (lightbox)
+- **Fichiers**: `PresquAccidentList.jsx`
+
+### Action QR "Signaler un presqu'accident" (9 mars 2026)
+- Bouton ajouté en 7e position dans les actions rapides QR
+- Migration auto des configs existantes via ensure_default_actions()
+- **Fichiers**: `qr_routes.py`, `QREquipmentPage.jsx`
+
 ### Mise a jour permissions + README (9 mars 2026)
-- 48 modules de permissions synchronises entre backend et frontend
-- Ajouts frontend: consignationsLoto, contrats
-- Ajouts backend: aiDashboard, aiAutomations, aiWidgets
-- Migration des 13 roles existants avec les nouvelles permissions
-- README.md mis a jour: Dashboard Service, Excel upload/preview, formules, nouveaux endpoints, collections MongoDB
-- Version passee a 1.9.0
+- 48 modules synchronises backend/frontend
+- Migration des 13 roles existants
+- README.md mis a jour v1.9.0
 
 ### Evaluation en temps reel des formules (9 mars 2026)
-- Auto-evaluation avec debounce 600ms, badge live, panneau detail
+- Auto-evaluation debounce 600ms, badge live, panneau detail
 
 ### Constructeur visuel de formules (9 mars 2026)
 - Chips sources, boutons operateurs, palette fonctions, coloration syntaxique
@@ -23,11 +32,7 @@ Application de GMAO complete (FastAPI + React + MongoDB).
 - Grille interactive, modes Cellule/Colonne, onglets multi-feuilles
 
 ### Nettoyage repertoire duplique (9 mars 2026)
-- Suppression de /app/backend/backend/
-
 ### Dashboard Service avec onglets (8 mars 2026)
-- 9 onglets, preference sauvegardee, design classeur
-
 ### Upload Excel local (8-9 mars 2026)
 ### Permission 'contrats' + Migration (8 mars 2026)
 ### Widgets dashboard donnees reelles (8 mars 2026)
@@ -39,8 +44,9 @@ Application de GMAO complete (FastAPI + React + MongoDB).
 
 ## Architecture
 ```
-Backend: server.py, models.py (48 permissions), custom_widgets_routes.py, formula_engine.py, roles_routes.py
-Frontend: RolesManagement.jsx (48 modules), ServiceDashboard.jsx, CustomWidgetEditor.jsx, Dashboard.jsx
+Backend: server.py, models.py, custom_widgets_routes.py, formula_engine.py, roles_routes.py, qr_routes.py
+Frontend: PresquAccidentList.jsx, RolesManagement.jsx, ServiceDashboard.jsx, CustomWidgetEditor.jsx, QREquipmentPage.jsx, Dashboard.jsx
+Shared: AttachmentUploader.jsx, AttachmentsList.jsx, AttachmentGallery.jsx
 ```
 
 ## Credentials
