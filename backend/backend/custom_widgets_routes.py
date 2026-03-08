@@ -1,7 +1,7 @@
 """
 Routes API pour les Widgets Personnalisés
 """
-from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Path
+from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Path, UploadFile, File
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone
 import uuid
@@ -1089,6 +1089,134 @@ async def test_excel_connection(
     """Teste la connexion à un fichier Excel via SMB"""
     result = test_smb_connection(smb_path, username, password)
     return result
+
+
+@router.post("/upload/excel")
+async def upload_excel_file(
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """Upload un fichier Excel depuis l'ordinateur de l'utilisateur"""
+    import openpyxl
+    
+    if not file.filename.endswith(('.xlsx', '.xls', '.csv')):
+        raise HTTPException(status_code=400, detail="Format non supporte. Utilisez .xlsx, .xls ou .csv")
+    
+    try:
+        # Sauvegarder le fichier
+        upload_dir = Path("/app/backend/uploads/excel")
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        
+        file_id = str(uuid.uuid4())[:8]
+        safe_name = f"{file_id}_{file.filename.replace(' ', '_')}"
+        file_path = upload_dir / safe_name
+        
+        content = await file.read()
+        with open(file_path, 'wb') as f:
+            f.write(content)
+        
+        # Lire les infos du fichier
+        sheets = []
+        preview = []
+        if file.filename.endswith(('.xlsx', '.xls')):
+            wb = openpyxl.load_workbook(str(file_path), read_only=True, data_only=True)
+            sheets = wb.sheetnames
+            # Preview de la premiere feuille
+            ws = wb[sheets[0]]
+            for i, row in enumerate(ws.iter_rows(values_only=True)):
+                if i >= 10:
+                    break
+                preview.append([str(c) if c is not None else '' for c in row])
+            wb.close()
+        elif file.filename.endswith('.csv'):
+            import csv
+            with open(file_path, 'r', encoding='utf-8', errors='replace') as cf:
+                reader = csv.reader(cf)
+                for i, row in enumerate(reader):
+                    if i >= 10:
+                        break
+                    preview.append(row)
+            sheets = ['CSV']
+        
+        # Sauvegarder la reference en base
+        file_record = {
+            "id": file_id,
+            "filename": file.filename,
+            "stored_path": str(file_path),
+            "uploaded_by": current_user.get("id"),
+            "uploaded_at": datetime.now(timezone.utc).isoformat(),
+            "sheets": sheets,
+            "size_bytes": len(content)
+        }
+        await db.uploaded_excel_files.insert_one(file_record)
+        
+        return {
+            "success": True,
+            "file_id": file_id,
+            "filename": file.filename,
+            "sheets": sheets,
+            "preview": preview,
+            "stored_path": str(file_path)
+        }
+    except Exception as e:
+        logger.error(f"Erreur upload Excel: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/preview/excel-local/{file_id}")
+async def preview_local_excel(
+    file_id: str,
+    sheet_name: Optional[str] = None,
+    max_rows: int = 10,
+    current_user: dict = Depends(get_current_user)
+):
+    """Preview un fichier Excel uploade localement"""
+    import openpyxl
+    
+    file_record = await db.uploaded_excel_files.find_one({"id": file_id}, {"_id": 0})
+    if not file_record:
+        raise HTTPException(status_code=404, detail="Fichier non trouve")
+    
+    file_path = file_record.get("stored_path")
+    if not file_path or not Path(file_path).exists():
+        raise HTTPException(status_code=404, detail="Fichier supprime du serveur")
+    
+    try:
+        data = []
+        columns = []
+        if file_path.endswith(('.xlsx', '.xls')):
+            wb = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
+            ws = wb[sheet_name] if sheet_name and sheet_name in wb.sheetnames else wb[wb.sheetnames[0]]
+            for i, row in enumerate(ws.iter_rows(values_only=True)):
+                row_data = [str(c) if c is not None else '' for c in row]
+                if i == 0:
+                    columns = row_data
+                else:
+                    data.append(row_data)
+                if i >= max_rows:
+                    break
+            wb.close()
+        elif file_path.endswith('.csv'):
+            import csv
+            with open(file_path, 'r', encoding='utf-8', errors='replace') as cf:
+                reader = csv.reader(cf)
+                for i, row in enumerate(reader):
+                    if i == 0:
+                        columns = row
+                    else:
+                        data.append(row)
+                    if i >= max_rows:
+                        break
+        
+        return {
+            "success": True,
+            "columns": columns,
+            "data": data,
+            "sheets": file_record.get("sheets", []),
+            "total_rows": len(data)
+        }
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 
 @router.post("/preview/excel")

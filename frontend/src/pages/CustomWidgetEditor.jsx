@@ -787,69 +787,175 @@ const DataSourceEditor = ({
 
       {source.type === 'excel' && (
         <div className="space-y-4">
-          <div className="space-y-2">
-            <Label>Chemin SMB du fichier Excel</Label>
-            <div className="flex gap-2">
-              <Input
-                value={source.excel_config?.smb_path || ''}
-                onChange={(e) => onUpdate({
-                  excel_config: { ...source.excel_config, smb_path: e.target.value }
-                })}
-                placeholder="\\serveur\partage\dossier\fichier.xlsx"
-                className="font-mono text-sm"
-              />
-              <Button variant="outline" onClick={onTestExcel}>
-                <Play className="h-4 w-4 mr-1" />
-                Tester
-              </Button>
-            </div>
-            {testResult && (
-              <div className={`flex items-center gap-2 text-sm ${testResult.success ? 'text-green-600' : 'text-red-600'}`}>
-                {testResult.loading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : testResult.success ? (
-                  <Check className="h-4 w-4" />
-                ) : (
-                  <X className="h-4 w-4" />
-                )}
-                {testResult.message}
-              </div>
-            )}
+          {/* Choix source Excel */}
+          <div className="flex gap-2 p-1 bg-gray-100 rounded-lg" data-testid="excel-source-toggle">
+            <button
+              type="button"
+              className={`flex-1 py-2 px-3 text-xs font-medium rounded-md transition-all ${
+                (source.excel_config?.source_mode || 'smb') === 'smb'
+                  ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'
+              }`}
+              onClick={() => onUpdate({
+                excel_config: { ...source.excel_config, source_mode: 'smb' }
+              })}
+            >
+              Serveur Samba / Reseau
+            </button>
+            <button
+              type="button"
+              className={`flex-1 py-2 px-3 text-xs font-medium rounded-md transition-all ${
+                source.excel_config?.source_mode === 'local'
+                  ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'
+              }`}
+              onClick={() => onUpdate({
+                excel_config: { ...source.excel_config, source_mode: 'local' }
+              })}
+            >
+              Fichier local (upload)
+            </button>
           </div>
 
-          {/* Credentials SMB */}
-          <div className="p-3 border rounded-lg bg-gray-50">
-            <Label className="text-sm font-medium mb-2 block">Identifiants SMB (optionnel)</Label>
-            <p className="text-xs text-gray-500 mb-3">
-              Laissez vide pour utiliser les identifiants système, ou entrez des identifiants spécifiques pour ce fichier.
-            </p>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs">Nom d'utilisateur</Label>
-                <Input
-                  type="text"
-                  value={source.excel_config?.smb_username || ''}
-                  onChange={(e) => onUpdate({
-                    excel_config: { ...source.excel_config, smb_username: e.target.value }
-                  })}
-                  placeholder="DOMAINE\\utilisateur"
-                  className="text-sm"
-                />
+          {/* Mode Samba */}
+          {(source.excel_config?.source_mode || 'smb') === 'smb' && (
+            <>
+              <div className="space-y-2">
+                <Label>Chemin SMB du fichier Excel</Label>
+                <div className="flex gap-2">
+                  <Input
+                    value={source.excel_config?.smb_path || ''}
+                    onChange={(e) => onUpdate({
+                      excel_config: { ...source.excel_config, smb_path: e.target.value }
+                    })}
+                    placeholder="\\serveur\partage\dossier\fichier.xlsx"
+                    className="font-mono text-sm"
+                  />
+                  <Button variant="outline" onClick={onTestExcel}>
+                    <Play className="h-4 w-4 mr-1" />
+                    Tester
+                  </Button>
+                </div>
+                {testResult && (
+                  <div className={`flex items-center gap-2 text-sm ${testResult.success ? 'text-green-600' : 'text-red-600'}`}>
+                    {testResult.loading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : testResult.success ? (
+                      <Check className="h-4 w-4" />
+                    ) : (
+                      <X className="h-4 w-4" />
+                    )}
+                    {testResult.message}
+                  </div>
+                )}
               </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Mot de passe</Label>
-                <Input
-                  type="password"
-                  value={source.excel_config?.smb_password || ''}
-                  onChange={(e) => onUpdate({
-                    excel_config: { ...source.excel_config, smb_password: e.target.value }
-                  })}
-                  placeholder="••••••••"
-                  className="text-sm"
-                />
+
+              {/* Credentials SMB */}
+              <div className="p-3 border rounded-lg bg-gray-50">
+                <Label className="text-sm font-medium mb-2 block">Identifiants SMB (optionnel)</Label>
+                <p className="text-xs text-gray-500 mb-3">
+                  Laissez vide pour utiliser les identifiants système, ou entrez des identifiants spécifiques pour ce fichier.
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Nom d'utilisateur</Label>
+                    <Input
+                      type="text"
+                      value={source.excel_config?.smb_username || ''}
+                      onChange={(e) => onUpdate({
+                        excel_config: { ...source.excel_config, smb_username: e.target.value }
+                      })}
+                      placeholder="DOMAINE\\utilisateur"
+                      className="text-sm"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Mot de passe</Label>
+                    <Input
+                      type="password"
+                      value={source.excel_config?.smb_password || ''}
+                      onChange={(e) => onUpdate({
+                        excel_config: { ...source.excel_config, smb_password: e.target.value }
+                      })}
+                      placeholder="••••••••"
+                      className="text-sm"
+                    />
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Mode Upload Local */}
+          {source.excel_config?.source_mode === 'local' && (
+            <div className="space-y-3">
+              <div className="space-y-2">
+                <Label>Fichier Excel depuis votre ordinateur</Label>
+                {source.excel_config?.uploaded_filename ? (
+                  <div className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <Check className="h-5 w-5 text-green-600" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-green-800">{source.excel_config.uploaded_filename}</p>
+                      <p className="text-xs text-green-600">Fichier uploade avec succes</p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        onUpdate({
+                          excel_config: { ...source.excel_config, uploaded_file_id: null, uploaded_filename: null, uploaded_path: null }
+                        });
+                      }}
+                    >
+                      Changer
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <input
+                      type="file"
+                      accept=".xlsx,.xls,.csv"
+                      data-testid="excel-file-input"
+                      className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer border rounded-lg p-1"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const formData = new FormData();
+                        formData.append('file', file);
+                        try {
+                          onUpdate({ excel_config: { ...source.excel_config, _uploading: true } });
+                          const response = await api.post('/custom-widgets/upload/excel', formData, {
+                            headers: { 'Content-Type': 'multipart/form-data' }
+                          });
+                          const data = response.data;
+                          if (data.success) {
+                            onUpdate({
+                              excel_config: {
+                                ...source.excel_config,
+                                source_mode: 'local',
+                                uploaded_file_id: data.file_id,
+                                uploaded_filename: data.filename,
+                                uploaded_path: data.stored_path,
+                                _uploading: false,
+                                _upload_sheets: data.sheets
+                              }
+                            });
+                          }
+                        } catch (err) {
+                          onUpdate({ excel_config: { ...source.excel_config, _uploading: false } });
+                          alert('Erreur lors de l\'upload: ' + (err.response?.data?.detail || err.message));
+                        }
+                      }}
+                    />
+                    {source.excel_config?._uploading && (
+                      <div className="absolute inset-0 bg-white/80 flex items-center justify-center rounded-lg">
+                        <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
+                        <span className="ml-2 text-sm text-blue-600">Upload en cours...</span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
-          </div>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">

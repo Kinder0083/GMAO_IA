@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/tabs';
+import { Tabs } from '../components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '../components/ui/dropdown-menu';
@@ -250,67 +250,81 @@ const ServiceDashboard = () => {
         </div>
       </div>
 
-      {/* Service Tabs */}
+      {/* Service Tabs - Style classeur */}
       {services.length > 0 && (
         <Tabs value={activeService || ''} onValueChange={handleTabChange} className="w-full" data-testid="service-tabs">
-          <TabsList className="flex flex-wrap h-auto gap-1 bg-gray-100 p-1 rounded-lg mb-6">
-            {services.map(svc => (
-              <TabsTrigger
-                key={svc}
-                value={svc}
-                className="data-[state=active]:bg-white data-[state=active]:shadow-sm px-4 py-2 text-sm"
-                data-testid={`tab-${svc.toLowerCase()}`}
-              >
-                {svc}
-                <Badge variant="secondary" className="ml-2 text-[10px] h-5">
-                  {widgets.filter(w => w.service === svc || (!w.service && svc === activeService)).length === 0 && svc === activeService
-                    ? widgets.length
-                    : ''}
-                </Badge>
-              </TabsTrigger>
-            ))}
-          </TabsList>
+          <div className="relative mb-6">
+            <div className="flex flex-wrap gap-0.5 items-end px-2" role="tablist">
+              {services.map(svc => {
+                const isActive = svc === activeService;
+                const count = widgets.length;
+                return (
+                  <button
+                    key={svc}
+                    role="tab"
+                    data-state={isActive ? 'active' : 'inactive'}
+                    data-testid={`tab-${svc.toLowerCase()}`}
+                    onClick={() => handleTabChange(svc)}
+                    className={`
+                      relative px-4 py-2 text-xs font-medium transition-all duration-200 
+                      rounded-t-xl border border-b-0 
+                      ${isActive 
+                        ? 'bg-white text-blue-700 border-gray-200 shadow-sm z-10 -mb-px pb-3' 
+                        : 'bg-gray-50 text-gray-500 border-transparent hover:bg-gray-100 hover:text-gray-700'
+                      }
+                    `}
+                    style={isActive ? { boxShadow: '0 -2px 8px rgba(59,130,246,0.1)' } : {}}
+                  >
+                    <span className="relative z-10">{svc}</span>
+                    {isActive && count > 0 && (
+                      <span className="ml-1.5 inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-blue-100 text-blue-700 text-[10px] font-bold">
+                        {count}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="border-t border-gray-200" />
+          </div>
 
-          {services.map(svc => (
-            <TabsContent key={svc} value={svc} className="mt-0">
-              {loadingWidgets ? (
-                <div className="flex items-center justify-center h-48">
-                  <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+          {/* Contenu de l'onglet actif */}
+          {loadingWidgets ? (
+            <div className="flex items-center justify-center h-48">
+              <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+            </div>
+          ) : widgets.length === 0 ? (
+            <Card>
+              <CardContent className="py-16 text-center">
+                <LayoutGrid className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+                <h3 className="text-lg font-medium text-gray-700 mb-1">Aucun widget pour {activeService}</h3>
+                <p className="text-sm text-gray-500 mb-4">
+                  Creez des widgets personnalises ou utilisez un template
+                </p>
+                <div className="flex items-center justify-center gap-3">
+                  <Button variant="outline" onClick={openTemplateModal}>
+                    <LayoutGrid className="h-4 w-4 mr-1" /> Depuis un template
+                  </Button>
+                  <Button onClick={() => navigate('/service-dashboard/widgets/new')}>
+                    <Plus className="h-4 w-4 mr-1" /> Nouveau widget
+                  </Button>
                 </div>
-              ) : widgets.length === 0 ? (
-                <Card>
-                  <CardContent className="py-16 text-center">
-                    <LayoutGrid className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                    <h3 className="text-lg font-medium text-gray-700 mb-1">Aucun widget pour {svc}</h3>
-                    <p className="text-sm text-gray-500 mb-4">
-                      Creez des widgets personnalises ou utilisez un template
-                    </p>
-                    <div className="flex items-center justify-center gap-3">
-                      <Button variant="outline" onClick={openTemplateModal}>
-                        <LayoutGrid className="h-4 w-4 mr-1" /> Depuis un template
-                      </Button>
-                      <Button onClick={() => navigate('/service-dashboard/widgets/new')}>
-                        <Plus className="h-4 w-4 mr-1" /> Nouveau widget
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                  {widgets.map(widget => (
-                    <WidgetCard
-                      key={widget.id}
-                      widget={widget}
-                      onRefresh={() => refreshWidget(widget.id)}
-                      onEdit={() => navigate(`/service-dashboard/widgets/${widget.id}/edit`)}
-                      onDelete={() => deleteWidget(widget.id)}
-                      isOwner={widget.created_by === user?.id}
-                    />
-                  ))}
-                </div>
-              )}
-            </TabsContent>
-          ))}
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {widgets.map(widget => (
+                <WidgetCard
+                  key={widget.id}
+                  widget={widget}
+                  onRefresh={() => refreshWidget(widget.id)}
+                  onEdit={() => navigate(`/service-dashboard/widgets/${widget.id}/edit`)}
+                  onDelete={() => deleteWidget(widget.id)}
+                  isOwner={widget.created_by === user?.id}
+                />
+              ))}
+            </div>
+          )}
         </Tabs>
       )}
 
