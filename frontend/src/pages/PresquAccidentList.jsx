@@ -143,29 +143,33 @@ function PresquAccidentList() {
     let errors = 0;
     for (const item of toImport) {
       try {
-        await presquAccidentAPI.createItem({
-          titre: item.titre,
-          description: item.description,
-          date_incident: item.date_incident,
-          lieu: item.lieu,
-          service: item.service,
-          categorie_incident: item.categorie_incident,
-          declarant: item.declarant,
-          personnes_impliquees: item.personnes_impliquees,
-          mesures_immediates: item.mesures_immediates,
-          actions_proposees: item.actions_proposees,
-          contexte_cause: item.contexte_cause,
-          conditions_incident: item.conditions_incident,
+        const payload = {
+          titre: item.titre || 'Sans titre',
+          description: item.description || '-',
+          date_incident: item.date_incident || new Date().toISOString().split('T')[0],
+          lieu: item.lieu || '-',
+          service: item.service || 'AUTRE',
           severite: item.severite || 'MOYEN',
-        });
+        };
+        // Ajouter les champs optionnels seulement s'ils ont une valeur
+        if (item.categorie_incident) payload.categorie_incident = item.categorie_incident;
+        if (item.declarant) payload.declarant = item.declarant;
+        if (item.personnes_impliquees) payload.personnes_impliquees = item.personnes_impliquees;
+        if (item.mesures_immediates) payload.mesures_immediates = item.mesures_immediates;
+        if (item.actions_proposees) payload.actions_proposees = item.actions_proposees;
+        if (item.contexte_cause) payload.contexte_cause = item.contexte_cause;
+        if (item.conditions_incident) payload.conditions_incident = item.conditions_incident;
+        await presquAccidentAPI.createItem(payload);
         created++;
       } catch (e) {
         errors++;
+        console.error('Erreur import PA:', item.titre, e?.response?.data || e.message);
       }
     }
     toast({
       title: `Import termine`,
-      description: `${created} cree(s)${errors > 0 ? `, ${errors} erreur(s)` : ''}`
+      description: `${created} cree(s)${errors > 0 ? `, ${errors} erreur(s)` : ''}`,
+      variant: errors > 0 ? 'destructive' : 'default'
     });
     setImporting(false);
     setOpenExtract(false);

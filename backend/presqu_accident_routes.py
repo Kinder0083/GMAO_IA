@@ -1084,10 +1084,12 @@ async def ai_extract_presqu_accidents(
             SERVICE_MAP = {
                 'PRODUCTION': 'PRODUCTION', 'PROD': 'PRODUCTION',
                 'MAINTENANCE': 'MAINTENANCE', 'MAINT': 'MAINTENANCE',
-                'QUALITE': 'QUALITE', 'QHSE': 'QUALITE', 'QSE': 'QUALITE',
+                'QUALITE': 'QHSE', 'QHSE': 'QHSE', 'QSE': 'QHSE', 'QUALITÉ': 'QHSE',
                 'LOGISTIQUE': 'LOGISTIQUE', 'LOG': 'LOGISTIQUE',
-                'ADV': 'ADV', 'LABO': 'LABO', 'LABORATOIRE': 'LABO',
-                'DIRECTION': 'DIRECTION', 'FORMULATION': 'FORMULATION',
+                'ADV': 'ADV',
+                'LABO': 'LABO', 'LABORATOIRE': 'LABO',
+                'DIRECTION': 'AUTRE', 'FORMULATION': 'PRODUCTION',
+                'INDUS': 'INDUS', 'INDUSTRIALISATION': 'INDUS',
             }
 
             STATUS_MAP = {
@@ -1121,8 +1123,10 @@ async def ai_extract_presqu_accidents(
                             statut, commentaire, acteur):
                 service = _map_service(service_raw)
                 status = _map_status(statut) if statut else 'A_TRAITER'
+                # Nettoyer le numero (enlever .0 des floats Excel)
+                num_clean = num.replace('.0', '') if num.endswith('.0') else num
                 titre_suffix = conditions if conditions else (lieu if lieu else description[:60] if description else "")
-                titre = f"PA {num} - {titre_suffix}" if num else f"PA - {titre_suffix}"
+                titre = f"PA {num_clean} - {titre_suffix}" if num_clean else f"PA - {titre_suffix}"
                 # Utiliser date_pa en priorite, sinon date_incident
                 final_date = date_val if date_val else date_incident
                 return {
