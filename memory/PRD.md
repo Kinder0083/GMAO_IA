@@ -5,45 +5,39 @@ Application de GMAO complete (FastAPI + React + MongoDB).
 
 ## Fonctionnalites implementees
 
+### Widgets dashboard connectes a de vraies donnees (8 mars 2026)
+- **Backend**: Nouvel endpoint `GET /api/dashboard/widget-data` retournant: low_stock, out_of_stock, recent_incidents_30d, total_incidents, upcoming_maintenance_7d, overdue_mprev, recent_status_changes_7d
+- **Frontend**: Widgets `Stock bas`, `Incidents recents`, `Maintenances a venir`, `Planning M.Prev`, `Changements statut`, `Taux completion OT`, `Charge de travail` connectes aux donnees reelles
+- **Templates**: 4 nouveaux templates dans Dashboard Service: MTTR, Maintenances a venir (7j), Charge equipe, Changements statut recents
+- **Fichiers**: `server.py`, `Dashboard.jsx`, `api.js`, `custom_widgets_routes.py`
+
 ### Bugfix: Dashboard vide apres personnalisation (8 mars 2026)
-- **Cause**: `getStatConfig()` ne supportait que 8/19 widgets. Les widgets sans config etaient filtres et le layout sauvegarde n'incluait pas les nouveaux widgets actives.
-- **Fix**: Ajout configs pour 11 widgets manquants + reconciliation auto du layout avec les widgets actives
-- **Fichier**: `frontend/src/pages/Dashboard.jsx`
-
-### Fix systeme de mise a jour v7.1 (8 mars 2026)
-- Le processus backend s'arrete lui-meme (`os._exit(0)`) → supervisor redemarre avec le nouveau code
-- Retire la limite memoire Node.js de yarn build
-- Logs dans `/var/log/gmao-iris-restart.log`
-- **Fichier**: `backend/update_service.py`
-
-### Bugfix: NoneType dans generate-report (8 mars 2026)
-- Fix `(it.get('contexte_cause') or '')[:80]` dans 3 occurrences
-- **Fichier**: `backend/ai_presqu_accident_routes.py`
+- Fix `getStatConfig()` + reconciliation layout avec widgets actives
 
 ### Systeme d'archivage IA presqu'accidents (8 mars 2026)
 - Collection `ai_pa_archives`, archivage auto, exclusion des incidents deja analyses
-- Bouton "Archives IA" + page dediee
-- **Fichiers**: `backend/ai_presqu_accident_routes.py`, `frontend/src/pages/PresquAccidentArchivesIA.jsx`
 
-### Corrections anterieures (sessions precedentes)
-- Reecriture systeme de mise a jour (P0)
-- Correction import/export presqu'accidents
-- Logique de fallback IA (Gemini → OpenAI → Claude)
+### Fix systeme de mise a jour v7.1 (8 mars 2026)
+- Auto-exit processus + supervisor restart garanti
+
+### Bugfix: NoneType dans generate-report (8 mars 2026)
+- Fix `(it.get('contexte_cause') or '')[:80]`
 
 ## Architecture
 ```
 Backend:
-  update_service.py              # v7.1 auto-exit + supervisor
-  ai_presqu_accident_routes.py   # IA + archivage + fallback
-  server.py                      # endpoints principaux
-  presqu_accident_routes.py      # import-bulk
+  server.py                      # + endpoint dashboard/widget-data
+  update_service.py              # v7.1
+  ai_presqu_accident_routes.py   # IA + archivage
+  custom_widgets_routes.py       # + 4 nouveaux templates
+  presqu_accident_routes.py
 
 Frontend:
-  pages/Dashboard.jsx                         # Fix widgets + reconciliation layout
-  pages/PresquAccidentArchivesIA.jsx          # Page archives IA
-  pages/PresquAccidentRapport.jsx             # Bouton Archives IA
-  components/Personnalisation/DashboardSection.jsx # Config widgets
-  services/api.js
+  pages/Dashboard.jsx            # Widgets avec donnees reelles
+  pages/PresquAccidentArchivesIA.jsx
+  pages/PresquAccidentRapport.jsx
+  components/Personnalisation/DashboardSection.jsx
+  services/api.js                # + dashboardAPI
   App.js
 ```
 
