@@ -496,6 +496,75 @@ async def get_bell_counts(current_user: dict = Depends(get_current_user)):
     }
 
 
+@api_router.get("/dashboard/widget-data", tags=["Dashboard"])
+async def get_dashboard_widget_data(current_user: dict = Depends(get_current_user)):
+    """Retourne les donnees pour les widgets du dashboard principal."""
+    from datetime import timedelta
+    now = datetime.utcnow()
+    thirty_days_ago = now - timedelta(days=30)
+    seven_days_ago = now - timedelta(days=7)
+
+    try:
+        # Stock bas
+        inventory = await db.inventory.find({}, {"_id": 0, "quantite": 1, "quantiteMin": 1, "seuil_alerte": 1, "stock_monitoring_enabled": 1}).to_list(5000)
+        low_stock = 0
+        out_of_stock = 0
+        for item in inventory:
+            if not item.get("stock_monitoring_enabled", True):
+                continue
+            qty = item.get("quantite", 0) or 0
+            qty_min = item.get("quantiteMin", item.get("seuil_alerte", 0)) or 0
+            if qty <= 0:
+                out_of_stock += 1
+            elif qty_min > 0 and qty <= qty_min:
+                low_stock += 1
+
+        # Incidents recents (presqu'accidents 30 derniers jours)
+        thirty_days_str = thirty_days_ago.strftime("%Y-%m-%d")
+        recent_incidents = await db.presqu_accident_items.count_documents({
+            "date_incident": {"$gte": thirty_days_str}
+        })
+        # Total presqu'accidents
+        total_incidents = await db.presqu_accident_items.count_documents({})
+
+        # Maintenances a venir (7 prochains jours)
+        seven_days_later = now + timedelta(days=7)
+        upcoming_maintenance = await db.preventive_maintenances.count_documents({
+            "statut": "ACTIF",
+            "prochaineMaintenance": {"$gte": now, "$lte": seven_days_later}
+        })
+        # M.Prev en retard
+        overdue_mprev = await db.preventive_maintenances.count_documents({
+            "statut": "ACTIF",
+            "prochaineMaintenance": {"$lte": now}
+        })
+
+        # Changements de statut recents (7 derniers jours)
+        recent_changes = await db.equipment_status_history.count_documents({
+            "changed_at": {"$gte": seven_days_ago.isoformat()}
+        }) if await db.list_collection_names() else 0
+        try:
+            recent_changes = await db.equipment_status_history.count_documents({
+                "changed_at": {"$gte": seven_days_ago.isoformat()}
+            })
+        except Exception:
+            recent_changes = 0
+
+        return {
+            "low_stock": low_stock,
+            "out_of_stock": out_of_stock,
+            "recent_incidents_30d": recent_incidents,
+            "total_incidents": total_incidents,
+            "upcoming_maintenance_7d": upcoming_maintenance,
+            "overdue_mprev": overdue_mprev,
+            "recent_status_changes_7d": recent_changes
+        }
+    except Exception as e:
+        logger.error(f"Erreur dashboard widget-data: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+
 @api_router.post("/auth/login", response_model=Token, tags=["Authentification"],
     summary="Connexion utilisateur",
     description="Authentifie un utilisateur et retourne un token JWT valide 7 jours. Le token doit etre inclus dans le header `Authorization: Bearer <token>` pour les requetes protegees.",

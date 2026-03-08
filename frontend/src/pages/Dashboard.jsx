@@ -33,7 +33,7 @@ import {
 import { useDashboard } from '../hooks/useDashboard';
 import { usePermissions } from '../hooks/usePermissions';
 import { usePreferences } from '../contexts/PreferencesContext';
-import { demandesArretAPI } from '../services/api';
+import { demandesArretAPI, dashboardAPI } from '../services/api';
 import { useToast } from '../hooks/use-toast';
 import DashboardEditToolbar from '../components/Dashboard/DashboardEditToolbar';
 import MaintenanceStatusPendingAlert from '../components/Dashboard/MaintenanceStatusPendingAlert';
@@ -221,6 +221,7 @@ const Dashboard = () => {
   // États pour les données des demandes d'arrêt et reports
   const [demandesStats, setDemandesStats] = useState({ pending: 0, total: 0 });
   const [reportsStats, setReportsStats] = useState({ pending: 0, total: 0, avgDays: 0 });
+  const [widgetData, setWidgetData] = useState(null);
 
   // Utiliser le hook temps réel WebSocket pour le dashboard
   const { 
@@ -241,7 +242,7 @@ const Dashboard = () => {
     })
   );
 
-  // Charger les données des demandes d'arrêt et reports
+  // Charger les données des demandes d'arrêt et reports + widget data
   useEffect(() => {
     const loadDemandesData = async () => {
       try {
@@ -259,8 +260,18 @@ const Dashboard = () => {
         console.error('Erreur chargement données demandes:', error);
       }
     };
+
+    const loadWidgetData = async () => {
+      try {
+        const data = await dashboardAPI.getWidgetData();
+        setWidgetData(data);
+      } catch (error) {
+        console.error('Erreur chargement widget data:', error);
+      }
+    };
     
     loadDemandesData();
+    loadWidgetData();
   }, []);
 
   // Déterminer quels widgets afficher
@@ -502,41 +513,54 @@ const Dashboard = () => {
           trend: `${safeEquipments.filter(eq => eq.statut === 'HORS_SERVICE').length} hors service`
         };
       },
-      'low_stock': () => ({
-        title: 'Stock bas',
-        value: '-',
-        icon: AlertTriangle,
-        color: 'orange',
-        trend: 'Inventaire'
-      }),
+      'low_stock': () => {
+        const ls = widgetData?.low_stock || 0;
+        const oos = widgetData?.out_of_stock || 0;
+        return {
+          title: 'Stock bas',
+          value: ls + oos,
+          icon: AlertTriangle,
+          color: (ls + oos) > 0 ? 'red' : 'green',
+          trend: oos > 0 ? `${oos} en rupture, ${ls} niveau bas` : ls > 0 ? `${ls} article(s) sous seuil` : 'Stock OK'
+        };
+      },
       'recent_incidents': () => ({
         title: 'Incidents recents',
-        value: '-',
+        value: widgetData?.recent_incidents_30d ?? '-',
         icon: AlertTriangle,
-        color: 'red',
-        trend: 'Derniers incidents'
+        color: (widgetData?.recent_incidents_30d || 0) > 5 ? 'red' : 'orange',
+        trend: `${widgetData?.total_incidents || 0} au total`
       }),
       'upcoming_maintenance': () => ({
         title: 'Maintenances a venir',
-        value: '-',
+        value: widgetData?.upcoming_maintenance_7d ?? '-',
         icon: CalendarClock,
         color: 'blue',
-        trend: 'Planification preventive'
+        trend: widgetData?.overdue_mprev > 0 ? `${widgetData.overdue_mprev} en retard` : 'Aucun retard'
       }),
-      'performance_metrics': () => ({
-        title: 'Metriques performance',
-        value: '-',
-        icon: CheckCircle2,
-        color: 'green',
-        trend: 'KPIs'
-      }),
-      'team_activity': () => ({
-        title: 'Activite equipe',
-        value: '-',
-        icon: ClipboardList,
-        color: 'purple',
-        trend: 'Taches par technicien'
-      }),
+      'performance_metrics': () => {
+        const total = safeWorkOrders.length;
+        const done = safeWorkOrders.filter(wo => wo.statut === 'TERMINE').length;
+        const rate = total > 0 ? Math.round((done / total) * 100) : 0;
+        return {
+          title: 'Taux completion OT',
+          value: `${rate}%`,
+          icon: CheckCircle2,
+          color: rate >= 75 ? 'green' : rate >= 50 ? 'orange' : 'red',
+          trend: `${done}/${total} termines`
+        };
+      },
+      'team_activity': () => {
+        const inProgress = safeWorkOrders.filter(wo => wo.statut === 'EN_COURS').length;
+        const pending = safeWorkOrders.filter(wo => wo.statut === 'EN_ATTENTE').length;
+        return {
+          title: 'Charge de travail',
+          value: inProgress + pending,
+          icon: ClipboardList,
+          color: 'purple',
+          trend: `${inProgress} en cours, ${pending} en attente`
+        };
+      },
       'quick_actions': () => ({
         title: 'Actions rapides',
         value: '-',
@@ -560,17 +584,17 @@ const Dashboard = () => {
       }),
       'planning_mprev_summary': () => ({
         title: 'Planning M.Prev',
-        value: '-',
+        value: widgetData?.upcoming_maintenance_7d ?? '-',
         icon: CalendarClock,
-        color: 'blue',
-        trend: 'Maintenance preventive'
+        color: widgetData?.overdue_mprev > 0 ? 'red' : 'blue',
+        trend: widgetData?.overdue_mprev > 0 ? `${widgetData.overdue_mprev} en retard` : '7 prochains jours'
       }),
       'recent_status_changes': () => ({
         title: 'Changements statut',
-        value: '-',
+        value: widgetData?.recent_status_changes_7d ?? '-',
         icon: AlertCircle,
         color: 'orange',
-        trend: 'Historique recent'
+        trend: '7 derniers jours'
       }),
       'global_summary': () => {
         const totalOT = safeWorkOrders.length;
@@ -586,7 +610,7 @@ const Dashboard = () => {
     };
 
     return configs[widgetId] ? configs[widgetId]() : null;
-  }, [workOrders, equipments, canView, demandesStats, reportsStats]);
+  }, [workOrders, equipments, canView, demandesStats, reportsStats, widgetData]);
 
   const colorClasses = {
     blue: 'bg-blue-50 text-blue-600',

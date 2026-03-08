@@ -1125,4 +1125,8 @@ api.aiWidgets = {
   generate: (data) => api.post('/ai/widgets/generate', data).then(r => r.data),
 };
 
+export const dashboardAPI = {
+  getWidgetData: () => api.get('/dashboard/widget-data').then(res => res.data),
+};
+
 export default api;

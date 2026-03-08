@@ -882,6 +882,126 @@ async def get_widget_templates(current_user: dict = Depends(get_current_user)):
                 },
                 "refresh_interval": 30
             }
+        },
+
+        # === KPIs Maintenance ===
+        {
+            "id": "tpl_mttr",
+            "name": "MTTR (Temps moyen de reparation)",
+            "description": "Temps moyen entre l'ouverture et la cloture d'un OT, en heures",
+            "category": "KPIs Maintenance",
+            "icon": "Clock",
+            "preview_value": "4.5h",
+            "config": {
+                "data_sources": [
+                    {
+                        "id": "src_main",
+                        "name": "MTTR",
+                        "type": "gmao",
+                        "gmao_config": {
+                            "data_type": "mttr_hours",
+                            "date_from": "-30d"
+                        }
+                    }
+                ],
+                "primary_source_id": "src_main",
+                "visualization": {
+                    "title": "MTTR",
+                    "subtitle": "30 derniers jours",
+                    "type": "value",
+                    "suffix": " h",
+                    "size": "small",
+                    "color_scheme": "cyan"
+                },
+                "refresh_interval": 60
+            }
+        },
+        {
+            "id": "tpl_upcoming_maintenance",
+            "name": "Maintenances a venir (7j)",
+            "description": "Nombre de maintenances preventives planifiees dans les 7 prochains jours",
+            "category": "KPIs Maintenance",
+            "icon": "Calendar",
+            "preview_value": "3",
+            "config": {
+                "data_sources": [
+                    {
+                        "id": "src_main",
+                        "name": "A venir",
+                        "type": "gmao",
+                        "gmao_config": {
+                            "data_type": "upcoming_maintenance_7d"
+                        }
+                    }
+                ],
+                "primary_source_id": "src_main",
+                "visualization": {
+                    "title": "Maintenances a venir",
+                    "subtitle": "7 prochains jours",
+                    "type": "value",
+                    "size": "small",
+                    "color_scheme": "blue"
+                },
+                "refresh_interval": 30
+            }
+        },
+        {
+            "id": "tpl_team_workload",
+            "name": "Charge de travail equipe",
+            "description": "Nombre d'OT en cours et en attente pour l'equipe",
+            "category": "KPIs Maintenance",
+            "icon": "Users",
+            "preview_value": "15",
+            "config": {
+                "data_sources": [
+                    {
+                        "id": "src_main",
+                        "name": "Charge",
+                        "type": "gmao",
+                        "gmao_config": {
+                            "data_type": "team_workload"
+                        }
+                    }
+                ],
+                "primary_source_id": "src_main",
+                "visualization": {
+                    "title": "Charge equipe",
+                    "subtitle": "OT actifs",
+                    "type": "value",
+                    "size": "small",
+                    "color_scheme": "purple"
+                },
+                "refresh_interval": 5
+            }
+        },
+        {
+            "id": "tpl_equipment_status_changes",
+            "name": "Changements de statut recents",
+            "description": "Nombre de changements de statut d'equipements dans les 7 derniers jours",
+            "category": "Equipements",
+            "icon": "Activity",
+            "preview_value": "8",
+            "config": {
+                "data_sources": [
+                    {
+                        "id": "src_main",
+                        "name": "Changements",
+                        "type": "gmao",
+                        "gmao_config": {
+                            "data_type": "status_changes_7d"
+                        }
+                    }
+                ],
+                "primary_source_id": "src_main",
+                "visualization": {
+                    "title": "Changements statut",
+                    "subtitle": "7 derniers jours",
+                    "type": "value",
+                    "size": "small",
+                    "color_scheme": "orange"
+                },
+                "refresh_interval": 15
+            }
         }
     ]
     
