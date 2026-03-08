@@ -280,10 +280,31 @@ const Dashboard = () => {
   }, [preferences]);
 
   // Initialiser le layout avec les éléments par défaut (widgets + éléments personnalisés)
+  // IMPORTANT: Toujours reconcilier le layout sauvegarde avec les widgets actuellement actives
   useEffect(() => {
-    if (preferences?.dashboard_layout?.items) {
-      setLayoutItems(preferences.dashboard_layout.items);
-      setOriginalLayout(preferences.dashboard_layout.items);
+    const savedItems = preferences?.dashboard_layout?.items;
+    
+    if (savedItems && savedItems.length > 0) {
+      // Garder les elements existants du layout qui sont encore actives
+      const reconciledItems = [...savedItems];
+      
+      // Ajouter les widgets actives qui ne sont pas dans le layout sauvegarde
+      const existingWidgetIds = savedItems
+        .filter(item => item.type === 'widget')
+        .map(item => item.widgetId);
+      
+      const missingWidgets = enabledWidgets.filter(wId => !existingWidgetIds.includes(wId));
+      missingWidgets.forEach((widgetId, i) => {
+        reconciledItems.push({
+          id: `widget-${widgetId}`,
+          type: 'widget',
+          widgetId: widgetId,
+          order: reconciledItems.length + i
+        });
+      });
+      
+      setLayoutItems(reconciledItems);
+      setOriginalLayout(reconciledItems);
     } else {
       // Layout par défaut : tous les widgets activés
       const defaultLayout = enabledWidgets.map((widgetId, index) => ({
@@ -474,11 +495,92 @@ const Dashboard = () => {
         if (!canView('assets')) return null;
         const degradedEquipments = safeEquipments.filter(eq => eq.statut === 'DEGRADE');
         return {
-          title: 'Équipements dégradés',
+          title: 'Equipements degrades',
           value: degradedEquipments.length,
           icon: Wrench,
           color: 'blue',
           trend: `${safeEquipments.filter(eq => eq.statut === 'HORS_SERVICE').length} hors service`
+        };
+      },
+      'low_stock': () => ({
+        title: 'Stock bas',
+        value: '-',
+        icon: AlertTriangle,
+        color: 'orange',
+        trend: 'Inventaire'
+      }),
+      'recent_incidents': () => ({
+        title: 'Incidents recents',
+        value: '-',
+        icon: AlertTriangle,
+        color: 'red',
+        trend: 'Derniers incidents'
+      }),
+      'upcoming_maintenance': () => ({
+        title: 'Maintenances a venir',
+        value: '-',
+        icon: CalendarClock,
+        color: 'blue',
+        trend: 'Planification preventive'
+      }),
+      'performance_metrics': () => ({
+        title: 'Metriques performance',
+        value: '-',
+        icon: CheckCircle2,
+        color: 'green',
+        trend: 'KPIs'
+      }),
+      'team_activity': () => ({
+        title: 'Activite equipe',
+        value: '-',
+        icon: ClipboardList,
+        color: 'purple',
+        trend: 'Taches par technicien'
+      }),
+      'quick_actions': () => ({
+        title: 'Actions rapides',
+        value: '-',
+        icon: AlertCircle,
+        color: 'blue',
+        trend: 'Raccourcis'
+      }),
+      'demandes_arret_stats': () => ({
+        title: 'Stats demandes arret',
+        value: demandesStats.total,
+        icon: Bell,
+        color: 'yellow',
+        trend: `${demandesStats.pending} en attente`
+      }),
+      'reports_stats': () => ({
+        title: 'Stats reports',
+        value: reportsStats.total,
+        icon: CalendarClock,
+        color: 'purple',
+        trend: reportsStats.avgDays > 0 ? `Moy. ${reportsStats.avgDays} jours` : 'Aucun report'
+      }),
+      'planning_mprev_summary': () => ({
+        title: 'Planning M.Prev',
+        value: '-',
+        icon: CalendarClock,
+        color: 'blue',
+        trend: 'Maintenance preventive'
+      }),
+      'recent_status_changes': () => ({
+        title: 'Changements statut',
+        value: '-',
+        icon: AlertCircle,
+        color: 'orange',
+        trend: 'Historique recent'
+      }),
+      'global_summary': () => {
+        const totalOT = safeWorkOrders.length;
+        const totalEquip = safeEquipments.length;
+        return {
+          title: 'Resume global',
+          value: `${totalOT} OT`,
+          icon: CheckCircle2,
+          color: 'green',
+          trend: `${totalEquip} equipement(s)`
         };
       }
     };

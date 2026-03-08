@@ -5,52 +5,53 @@ Application de GMAO complete (FastAPI + React + MongoDB).
 
 ## Fonctionnalites implementees
 
-### Fix systeme de mise a jour v7.0 (8 mars 2026)
-**3 differences critiques identifiees entre la MAJ par l'app et les commandes SSH manuelles:**
-1. **Redemarrage** (cause principale): l'app faisait `supervisorctl restart gmao-iris-backend` avec un nom de processus potentiellement faux et erreurs masquees par `2>/dev/null`. L'utilisateur fait `reboot`. Fix: le script de redemarrage fait maintenant un `reboot` systematique apres sauvegarde du resultat, exactement comme la methode manuelle.
-2. **yarn build**: l'app limitait la memoire Node.js a 1GB (`NODE_OPTIONS=--max_old_space_size=1024`), ce qui pouvait faire echouer le build. Fix: limite retiree.
-3. **Logs**: Les erreurs du script de redemarrage etaient masquees. Fix: tout est logue dans `/var/log/gmao-iris-restart.log`.
+### Bugfix: Dashboard vide apres personnalisation (8 mars 2026)
+- **Cause**: `getStatConfig()` ne supportait que 8/19 widgets. Les widgets sans config etaient filtres et le layout sauvegarde n'incluait pas les nouveaux widgets actives.
+- **Fix**: Ajout configs pour 11 widgets manquants + reconciliation auto du layout avec les widgets actives
+- **Fichier**: `frontend/src/pages/Dashboard.jsx`
+
+### Fix systeme de mise a jour v7.1 (8 mars 2026)
+- Le processus backend s'arrete lui-meme (`os._exit(0)`) → supervisor redemarre avec le nouveau code
+- Retire la limite memoire Node.js de yarn build
+- Logs dans `/var/log/gmao-iris-restart.log`
+- **Fichier**: `backend/update_service.py`
 
 ### Bugfix: NoneType dans generate-report (8 mars 2026)
-- Cause: `contexte_cause` stocke en `null` dans MongoDB. `dict.get('key','')` retourne `None` quand la cle existe avec valeur null. `None[:80]` = crash.
-- Fix: `(it.get('contexte_cause') or '')[:80]` dans 3 occurrences
+- Fix `(it.get('contexte_cause') or '')[:80]` dans 3 occurrences
+- **Fichier**: `backend/ai_presqu_accident_routes.py`
 
-### Systeme d'archivage IA des presqu'accidents (8 mars 2026)
-- Collection `ai_pa_archives` pour stocker les rapports IA archives
-- `analyze-trends` et `generate-report` excluent les incidents deja archives, archivent automatiquement
-- Endpoints CRUD: GET /archives, GET /archives/{id}, DELETE /archives/{id}
-- Bouton "Archives IA" sur la page "Rapport P.accident"
-- Page /presqu-accident-archives-ia avec stats et liste des archives
+### Systeme d'archivage IA presqu'accidents (8 mars 2026)
+- Collection `ai_pa_archives`, archivage auto, exclusion des incidents deja analyses
+- Bouton "Archives IA" + page dediee
+- **Fichiers**: `backend/ai_presqu_accident_routes.py`, `frontend/src/pages/PresquAccidentArchivesIA.jsx`
 
-### Import en masse presqu'accidents (8 mars 2026)
-- Endpoint POST /api/presqu-accident/import-bulk avec tous les champs
-
-### Logique de fallback IA (8 mars 2026)
-- Chaine: modele prefere utilisateur -> OpenAI -> Claude
+### Corrections anterieures (sessions precedentes)
+- Reecriture systeme de mise a jour (P0)
+- Correction import/export presqu'accidents
+- Logique de fallback IA (Gemini → OpenAI → Claude)
 
 ## Architecture
 ```
 Backend:
-  update_service.py              # v7.0 avec reboot post-MAJ
-  ai_presqu_accident_routes.py   # IA + archivage + CRUD archives + fallback
+  update_service.py              # v7.1 auto-exit + supervisor
+  ai_presqu_accident_routes.py   # IA + archivage + fallback
   server.py                      # endpoints principaux
   presqu_accident_routes.py      # import-bulk
 
 Frontend:
-  pages/PresquAccidentArchivesIA.jsx
-  pages/PresquAccidentRapport.jsx
-  components/AIPATrendAnalyzer.jsx
-  components/AIQHSEReport.jsx
+  pages/Dashboard.jsx                         # Fix widgets + reconciliation layout
+  pages/PresquAccidentArchivesIA.jsx          # Page archives IA
+  pages/PresquAccidentRapport.jsx             # Bouton Archives IA
+  components/Personnalisation/DashboardSection.jsx # Config widgets
   services/api.js
   App.js
 ```
 
 ## IMPORTANT: Doublon backend/backend/
-Toute modification doit etre copiee dans les DEUX emplacements.
+Toute modification dans /app/backend/ doit etre copiee dans /app/backend/backend/
 
 ## Credentials
 - Admin: buenogy@gmail.com / Admin2024!
 
 ## Integrations
 - Gemini, OpenAI, Claude (via emergentintegrations + Emergent LLM Key)
-- Note: Budget Gemini depasse - fallback OpenAI actif
