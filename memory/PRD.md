@@ -5,59 +5,52 @@ Application de GMAO complete (FastAPI + React + MongoDB).
 
 ## Fonctionnalites implementees
 
+### Fix systeme de mise a jour v7.0 (8 mars 2026)
+**3 differences critiques identifiees entre la MAJ par l'app et les commandes SSH manuelles:**
+1. **Redemarrage** (cause principale): l'app faisait `supervisorctl restart gmao-iris-backend` avec un nom de processus potentiellement faux et erreurs masquees par `2>/dev/null`. L'utilisateur fait `reboot`. Fix: le script de redemarrage fait maintenant un `reboot` systematique apres sauvegarde du resultat, exactement comme la methode manuelle.
+2. **yarn build**: l'app limitait la memoire Node.js a 1GB (`NODE_OPTIONS=--max_old_space_size=1024`), ce qui pouvait faire echouer le build. Fix: limite retiree.
+3. **Logs**: Les erreurs du script de redemarrage etaient masquees. Fix: tout est logue dans `/var/log/gmao-iris-restart.log`.
+
 ### Bugfix: NoneType dans generate-report (8 mars 2026)
-- **Cause racine**: `contexte_cause` stocke en `null` dans MongoDB. `dict.get('contexte_cause', '')` retourne `None` (pas `''`) quand la cle existe avec valeur null. `None[:80]` provoque `'NoneType' object is not subscriptable`.
-- **Fix**: Remplace `it.get('contexte_cause','')[:80]` par `(it.get('contexte_cause') or '')[:80]` dans les 3 occurrences (analyze-trends x2 + generate-report x1)
-- **Budget LLM**: Le budget Gemini etait depasse ($5.05 > $5.00 max). Le fallback vers OpenAI gpt-4o-mini fonctionne correctement.
+- Cause: `contexte_cause` stocke en `null` dans MongoDB. `dict.get('key','')` retourne `None` quand la cle existe avec valeur null. `None[:80]` = crash.
+- Fix: `(it.get('contexte_cause') or '')[:80]` dans 3 occurrences
 
 ### Systeme d'archivage IA des presqu'accidents (8 mars 2026)
-- **Backend**: Collection `ai_pa_archives` pour stocker les rapports IA archives
-- **Backend**: `analyze-trends` et `generate-report` excluent les incidents deja archives et archivent automatiquement
-- **Backend**: Endpoints CRUD: GET /archives, GET /archives/{id}, DELETE /archives/{id}
-- **Frontend**: Bouton "Archives IA" sur la page "Rapport P.accident"
-- **Frontend**: Page /presqu-accident-archives-ia avec stats et liste des archives
-
-### Corrections systeme de mise a jour (8 mars 2026)
-1. **Backend (update_service.py)**: Approche "worker externe" remplacee par "in-process"
-2. **Frontend (UpdateWarningOverlay.jsx)**: Fix deconnexion admin via flag sessionStorage
-3. **Frontend (Updates.jsx + UpdateNotificationBadge.jsx)**: Token sauvegarde avant broadcast
+- Collection `ai_pa_archives` pour stocker les rapports IA archives
+- `analyze-trends` et `generate-report` excluent les incidents deja archives, archivent automatiquement
+- Endpoints CRUD: GET /archives, GET /archives/{id}, DELETE /archives/{id}
+- Bouton "Archives IA" sur la page "Rapport P.accident"
+- Page /presqu-accident-archives-ia avec stats et liste des archives
 
 ### Import en masse presqu'accidents (8 mars 2026)
 - Endpoint POST /api/presqu-accident/import-bulk avec tous les champs
 
 ### Logique de fallback IA (8 mars 2026)
 - Chaine: modele prefere utilisateur -> OpenAI -> Claude
-- Limitation a 150 incidents par lot
 
 ## Architecture
 ```
 Backend:
+  update_service.py              # v7.0 avec reboot post-MAJ
   ai_presqu_accident_routes.py   # IA + archivage + CRUD archives + fallback
-  update_service.py              # v6.0 in-process
   server.py                      # endpoints principaux
   presqu_accident_routes.py      # import-bulk
 
 Frontend:
-  pages/PresquAccidentArchivesIA.jsx          # Page archives IA
-  pages/PresquAccidentRapport.jsx             # Bouton Archives IA
-  components/AIPATrendAnalyzer.jsx            # Dialog analyse tendances
-  components/AIQHSEReport.jsx                 # Dialog rapport QHSE
-  services/api.js                             # Methodes archives
-  App.js                                      # Route archives
+  pages/PresquAccidentArchivesIA.jsx
+  pages/PresquAccidentRapport.jsx
+  components/AIPATrendAnalyzer.jsx
+  components/AIQHSEReport.jsx
+  services/api.js
+  App.js
 ```
 
 ## IMPORTANT: Doublon backend/backend/
-Les fichiers sont dupliques dans /app/backend/backend/. Toute modification doit etre copiee dans les DEUX emplacements.
+Toute modification doit etre copiee dans les DEUX emplacements.
 
 ## Credentials
 - Admin: buenogy@gmail.com / Admin2024!
 
-## Collections MongoDB cles
-- `presqu_accident_items`: incidents de presqu'accidents
-- `ai_pa_archives`: archives des analyses IA (type: trend_analysis | qhse_report)
-- `ai_analysis_history`: historique brut des analyses
-- `user_preferences`: preferences utilisateur (ai_llm_provider, ai_llm_model)
-
-## Integrations 3rd party
+## Integrations
 - Gemini, OpenAI, Claude (via emergentintegrations + Emergent LLM Key)
 - Note: Budget Gemini depasse - fallback OpenAI actif

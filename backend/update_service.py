@@ -1,7 +1,7 @@
 """
 Service de gestion des mises à jour FSAO Iris
 VERSION CORRIGÉE - Détection automatique des chemins
-UPDATE_SYSTEM_VERSION: v4.0 (format ETAPE x/7, logs /var/log/)
+UPDATE_SYSTEM_VERSION: v7.0 (reboot post-MAJ comme methode manuelle)
 """
 import os
 import json
@@ -877,8 +877,7 @@ class UpdateService:
 
                 # yarn build
                 log("  yarn build ...")
-                build_env_str = "CI=false NODE_OPTIONS=--max_old_space_size=1024"
-                rc, out, err = await run_cmd(f"{build_env_str} yarn build", cwd=frontend_dir, timeout=600)
+                rc, out, err = await run_cmd("CI=false yarn build", cwd=frontend_dir, timeout=600)
                 if rc == 0:
                     index_html = build_dir / "index.html"
                     if index_html.exists():
@@ -956,24 +955,48 @@ class UpdateService:
                 upsert=True
             )
 
-            # Script de redemarrage detache
+            # Redemarrage: utiliser reboot comme la methode manuelle qui fonctionne
+            # Le supervisorctl restart seul est insuffisant car:
+            # 1. Le nom du processus peut ne pas correspondre
+            # 2. Le processus Python garde l'ancien code en memoire si le restart echoue
+            # La methode manuelle de l'utilisateur utilise toujours 'reboot' et ca marche.
             try:
                 restart_script = tempfile.NamedTemporaryFile(
                     mode='w', suffix='.sh', prefix='gmao_restart_', dir='/tmp', delete=False
                 )
                 restart_script.write(f"""#!/bin/bash
+LOG="/var/log/gmao-iris-restart.log"
+echo "$(date) - Debut redemarrage post-MAJ v7.0" >> $LOG
+
 sleep 3
-supervisorctl restart gmao-iris-backend 2>/dev/null || sudo supervisorctl restart gmao-iris-backend 2>/dev/null || supervisorctl restart all 2>/dev/null || sudo supervisorctl restart all 2>/dev/null
+
+# D'abord recharger NGINX pour servir le nouveau frontend immediatement
+nginx -s reload >> $LOG 2>&1 || sudo nginx -s reload >> $LOG 2>&1 || sudo systemctl reload nginx >> $LOG 2>&1
+echo "$(date) - NGINX reloaded" >> $LOG
+
+# Attendre puis reboot propre (methode qui fonctionne a 100%)
+echo "$(date) - Reboot dans 5 secondes..." >> $LOG
 sleep 5
-nginx -s reload 2>/dev/null || sudo nginx -s reload 2>/dev/null || sudo systemctl reload nginx 2>/dev/null
+reboot >> $LOG 2>&1 || sudo reboot >> $LOG 2>&1
+# Fallback si reboot ne marche pas
+sleep 2
+shutdown -r now >> $LOG 2>&1 || sudo shutdown -r now >> $LOG 2>&1
+
 rm -f {restart_script.name}
 """)
                 restart_script.close()
                 os.chmod(restart_script.name, 0o755)
                 sp.Popen(['/bin/bash', restart_script.name], stdout=sp.DEVNULL, stderr=sp.DEVNULL, start_new_session=True)
-                log("  Redemarrage planifie dans 3 secondes")
+                log("  Reboot programme dans ~8 secondes (methode manuelle eprouvee)")
             except Exception as e:
-                log(f"  Impossible de planifier le redemarrage: {e}")
+                log(f"  Impossible de planifier le reboot: {e}")
+                # Fallback ultime
+                try:
+                    sp.Popen(['bash', '-c', 'sleep 5 && (reboot || sudo reboot)'], 
+                             stdout=sp.DEVNULL, stderr=sp.DEVNULL, start_new_session=True)
+                    log("  Fallback: reboot programme dans 5 secondes")
+                except Exception as e2:
+                    log(f"  Fallback reboot impossible: {e2}")
 
             log("=" * 60)
             return {
