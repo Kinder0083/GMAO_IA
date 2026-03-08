@@ -8,7 +8,8 @@ import {
   MqttSettings,
   LlmKeysSettings,
   TimezoneSettings,
-  DataResetSettings
+  DataResetSettings,
+  QRActionsAdmin
 } from '../components/Settings';
 
 /**
@@ -65,6 +66,9 @@ const SpecialSettings = () => {
 
           {/* Réinitialisation des données */}
           <DataResetSettings />
+
+          {/* Actions QR Code — Équipements */}
+          <QRActionsAdmin />
         </div>
       </div>
     </div>

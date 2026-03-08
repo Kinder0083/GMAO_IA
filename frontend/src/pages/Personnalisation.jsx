@@ -9,7 +9,6 @@ import {
   Layout,
   Menu,
   Settings,
-  Bell,
   Home,
   RotateCcw,
   Save,
@@ -28,7 +27,6 @@ import MenuOrganizationSection from '../components/Personnalisation/MenuOrganiza
 import HeaderOrganizationSection from '../components/Personnalisation/HeaderOrganizationSection';
 import DisplayPreferencesSection from '../components/Personnalisation/DisplayPreferencesSection';
 import DashboardSection from '../components/Personnalisation/DashboardSection';
-import NotificationsSection from '../components/Personnalisation/NotificationsSection';
 import AISection from '../components/Personnalisation/AISection';
 
 const Personnalisation = () => {
@@ -162,12 +160,6 @@ const Personnalisation = () => {
       title: 'Dashboard Personnalisé',
       icon: Home,
       component: DashboardSection
-    },
-    {
-      id: 'notifications',
-      title: 'Notifications',
-      icon: Bell,
-      component: NotificationsSection
     },
     {
       id: 'ai',

@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../components/ui/tooltip';
 import ChangePasswordDialog from '../components/Common/ChangePasswordDialog';
 import SupportRequestDialog from '../components/Common/SupportRequestDialog';
-import { GuidedTourSettings, ChangelogAdmin, QRActionsAdmin } from '../components/Settings';
+import { GuidedTourSettings, ChangelogAdmin } from '../components/Settings';
 import { authAPI } from '../services/api';
 import api from '../services/api';
 import { formatErrorMessage } from '../utils/errorFormatter';
@@ -275,51 +275,6 @@ const Settings = () => {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Bell size={20} className="text-blue-600" />
-                Notifications
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium text-gray-900">Activer les notifications</p>
-                    <p className="text-sm text-gray-600">Recevoir des notifications générales</p>
-                  </div>
-                  <Switch
-                    checked={settings.notifications}
-                    onCheckedChange={(checked) => setSettings({ ...settings, notifications: checked })}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium text-gray-900">Notifications par email</p>
-                    <p className="text-sm text-gray-600">Recevoir des alertes par email</p>
-                  </div>
-                  <Switch
-                    checked={settings.emailNotifications}
-                    onCheckedChange={(checked) => setSettings({ ...settings, emailNotifications: checked })}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium text-gray-900">Notifications par SMS</p>
-                    <p className="text-sm text-gray-600">Recevoir des alertes par SMS</p>
-                  </div>
-                  <Switch
-                    checked={settings.smsNotifications}
-                    onCheckedChange={(checked) => setSettings({ ...settings, smsNotifications: checked })}
-                  />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
                 <Lock size={20} className="text-blue-600" />
                 Sécurité
               </CardTitle>
@@ -396,11 +351,6 @@ const Settings = () => {
       {/* Changelog Admin (visible uniquement pour les admins) */}
       {JSON.parse(localStorage.getItem('user') || '{}').role === 'ADMIN' && (
         <ChangelogAdmin />
-      )}
-
-      {/* QR Actions Admin (visible uniquement pour les admins) */}
-      {JSON.parse(localStorage.getItem('user') || '{}').role === 'ADMIN' && (
-        <QRActionsAdmin />
       )}
 
       {/* Save Button */}
