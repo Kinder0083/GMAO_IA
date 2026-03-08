@@ -71,6 +71,7 @@ class UserPermissions(BaseModel):
     consignationsLoto: ModulePermission = ModulePermission(view=True, edit=True, delete=False)  # LOTO - Consignations Lockout/Tagout
     autorisationsParticulieres: ModulePermission = ModulePermission(view=False, edit=False, delete=False)  # Autorisations Particulières - Gestion des autorisations spéciales
     training: ModulePermission = ModulePermission(view=False, edit=False, delete=False)  # Formation - Module de formation et questionnaire nouveaux arrivants
+    contrats: ModulePermission = ModulePermission(view=False, edit=False, delete=False)  # Contrats - Gestion des contrats fournisseurs
 
 # Fonction helper pour obtenir les permissions par défaut selon le rôle
 def get_default_permissions_by_role(role: str) -> UserPermissions:
@@ -121,7 +122,8 @@ def get_default_permissions_by_role(role: str) -> UserPermissions:
             demandesArret=ModulePermission(view=True, edit=True, delete=True),
             consignes=ModulePermission(view=True, edit=True, delete=True),
             autorisationsParticulieres=ModulePermission(view=True, edit=True, delete=True),
-            training=ModulePermission(view=True, edit=True, delete=True)
+            training=ModulePermission(view=True, edit=True, delete=True),
+            contrats=ModulePermission(view=True, edit=True, delete=True)
         )
     
     # Rôle spécial AFFICHAGE : Uniquement accès au tableau d'affichage
@@ -165,7 +167,8 @@ def get_default_permissions_by_role(role: str) -> UserPermissions:
             demandesArret=ModulePermission(view=False, edit=False, delete=False),
             consignes=ModulePermission(view=False, edit=False, delete=False),
             autorisationsParticulieres=ModulePermission(view=False, edit=False, delete=False),
-            training=ModulePermission(view=False, edit=False, delete=False)
+            training=ModulePermission(view=False, edit=False, delete=False),
+            contrats=ModulePermission(view=False, edit=False, delete=False)
         )
     
     # DIRECTEUR : Demande d'inter./Demandes d'amél. en visualisation et modification
@@ -207,7 +210,8 @@ def get_default_permissions_by_role(role: str) -> UserPermissions:
             demandesArret=ModulePermission(view=True, edit=True, delete=False),
             consignes=ModulePermission(view=True, edit=False, delete=False),
             autorisationsParticulieres=ModulePermission(view=True, edit=True, delete=False),
-            training=ModulePermission(view=True, edit=False, delete=False)
+            training=ModulePermission(view=True, edit=False, delete=False),
+            contrats=ModulePermission(view=True, edit=False, delete=False)
         )
     
     # QHSE : Demande d'inter./Demandes d'amél. en visualisation et modification
@@ -250,7 +254,8 @@ def get_default_permissions_by_role(role: str) -> UserPermissions:
             demandesArret=ModulePermission(view=True, edit=True, delete=False),
             consignes=ModulePermission(view=True, edit=True, delete=False),
             autorisationsParticulieres=ModulePermission(view=True, edit=True, delete=False),
-            training=ModulePermission(view=True, edit=True, delete=False)
+            training=ModulePermission(view=True, edit=True, delete=False),
+            contrats=ModulePermission(view=True, edit=True, delete=False)
         )
     
     # LABO et ADV : Demande d'inter. en visualisation et modification
@@ -287,7 +292,8 @@ def get_default_permissions_by_role(role: str) -> UserPermissions:
             demandesArret=ModulePermission(view=False, edit=False, delete=False),
             consignes=ModulePermission(view=True, edit=False, delete=False),
             autorisationsParticulieres=ModulePermission(view=False, edit=False, delete=False),
-            training=ModulePermission(view=True, edit=False, delete=False)
+            training=ModulePermission(view=True, edit=False, delete=False),
+            contrats=ModulePermission(view=True, edit=False, delete=False)
         )
     
     # PROD (RSP_PROD et PROD) : Demande d'inter./Demandes d'amél./Ordres de travail/Améliorations/Equipement en visualisation et modification
@@ -324,7 +330,8 @@ def get_default_permissions_by_role(role: str) -> UserPermissions:
             demandesArret=ModulePermission(view=True, edit=True, delete=False),
             consignes=ModulePermission(view=True, edit=False, delete=False),
             autorisationsParticulieres=ModulePermission(view=True, edit=False, delete=False),
-            training=ModulePermission(view=True, edit=False, delete=False)
+            training=ModulePermission(view=True, edit=False, delete=False),
+            contrats=ModulePermission(view=True, edit=False, delete=False)
         )
     
     # INDUS : Demande d'inter./Demandes d'amél./Ordres de travail/Améliorations/Equipement en visualisation et modification
@@ -366,7 +373,8 @@ def get_default_permissions_by_role(role: str) -> UserPermissions:
             demandesArret=ModulePermission(view=True, edit=True, delete=False),
             consignes=ModulePermission(view=True, edit=False, delete=False),
             autorisationsParticulieres=ModulePermission(view=True, edit=False, delete=False),
-            training=ModulePermission(view=True, edit=False, delete=False)
+            training=ModulePermission(view=True, edit=False, delete=False),
+            contrats=ModulePermission(view=True, edit=False, delete=False)
         )
     
     # LOGISTIQUE : Même que PROD mais peut-être avec accès Fournisseurs
@@ -407,7 +415,8 @@ def get_default_permissions_by_role(role: str) -> UserPermissions:
             demandesArret=ModulePermission(view=True, edit=True, delete=False),
             consignes=ModulePermission(view=True, edit=False, delete=False),
             autorisationsParticulieres=ModulePermission(view=True, edit=False, delete=False),
-            training=ModulePermission(view=True, edit=False, delete=False)
+            training=ModulePermission(view=True, edit=False, delete=False),
+            contrats=ModulePermission(view=True, edit=False, delete=False)
         )
     
     # TECHNICIEN : Permissions complètes sur les modules opérationnels
@@ -448,7 +457,8 @@ def get_default_permissions_by_role(role: str) -> UserPermissions:
             demandesArret=ModulePermission(view=True, edit=True, delete=True),
             consignes=ModulePermission(view=True, edit=True, delete=False),
             autorisationsParticulieres=ModulePermission(view=True, edit=True, delete=False),
-            training=ModulePermission(view=True, edit=True, delete=False)
+            training=ModulePermission(view=True, edit=True, delete=False),
+            contrats=ModulePermission(view=True, edit=True, delete=False)
         )
     
     # VISUALISEUR : Visualisation uniquement sur tout
@@ -489,7 +499,8 @@ def get_default_permissions_by_role(role: str) -> UserPermissions:
             demandesArret=ModulePermission(view=True, edit=False, delete=False),
             consignes=ModulePermission(view=True, edit=False, delete=False),
             autorisationsParticulieres=ModulePermission(view=True, edit=False, delete=False),
-            training=ModulePermission(view=True, edit=False, delete=False)
+            training=ModulePermission(view=True, edit=False, delete=False),
+            contrats=ModulePermission(view=True, edit=False, delete=False)
         )
     
     # Par défaut : permissions minimales
@@ -2451,6 +2462,8 @@ class UserPreferences(BaseModel):
     ai_assistant_gender: str = "female"  # "male" ou "female"
     ai_llm_provider: str = "gemini"  # "gemini", "openai", "anthropic", "deepseek", "mistral"
     ai_llm_model: str = "gemini-2.5-flash"  # Modèle LLM par défaut
+    # Preference onglet Dashboard Service
+    service_dashboard_tab: Optional[str] = None
     
     # Métadonnées
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
@@ -2521,6 +2534,8 @@ class UserPreferencesUpdate(BaseModel):
     ai_assistant_gender: Optional[str] = None
     ai_llm_provider: Optional[str] = None
     ai_llm_model: Optional[str] = None
+    # Preference onglet Dashboard Service
+    service_dashboard_tab: Optional[str] = None
 
 # ==================== SUPPORT HELP REQUEST ====================
 

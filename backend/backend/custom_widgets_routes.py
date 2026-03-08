@@ -59,18 +59,16 @@ async def get_widgets(
     user_role = current_user.get("role")
     user_service = current_user.get("service")
     
-    query = {"$or": [
-        {"created_by": user_id},  # Ses propres widgets
-        {"is_shared": True, "shared_with_roles": user_role},  # Partagés avec son rôle
-    ]}
-    
-    # Si l'utilisateur a un service, inclure les widgets du service
-    if user_service:
-        query["$or"].append({"service": user_service, "is_shared": True})
-    
-    # Filtre par service si spécifié
+    # Si un filtre service est specifie, montrer les widgets de ce service
     if service:
-        query["service"] = service
+        query = {"service": service}
+    else:
+        query = {"$or": [
+            {"created_by": user_id},
+            {"is_shared": True, "shared_with_roles": user_role},
+        ]}
+        if user_service:
+            query["$or"].append({"service": user_service, "is_shared": True})
     
     # Filtre partagés uniquement
     if shared_only:
@@ -1015,6 +1013,7 @@ async def create_widget_from_template(
     meter_id: Optional[str] = None,
     equipment_id: Optional[str] = None,
     custom_name: Optional[str] = None,
+    service: Optional[str] = None,
     current_user: dict = Depends(get_current_user)
 ):
     """Crée un widget à partir d'un template prédéfini"""
@@ -1062,8 +1061,9 @@ async def create_widget_from_template(
         "created_at": datetime.now(timezone.utc).isoformat(),
         "updated_at": datetime.now(timezone.utc).isoformat(),
         "from_template": template_id,
+        "service": service or current_user.get("service"),
         **config,
-        "is_shared": False,
+        "is_shared": True,
         "shared_with_roles": []
     }
     
