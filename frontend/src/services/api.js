@@ -609,6 +609,9 @@ export const presquAccidentAPI = {
   aiFindSimilar: (data) => api.post('/ai-presqu-accident/find-similar', data).then(res => res.data),
   aiAnalyzeTrends: (days = 365) => api.post('/ai-presqu-accident/analyze-trends', { days }).then(res => res.data),
   aiGenerateReport: (days = 365) => api.post('/ai-presqu-accident/generate-report', { days }).then(res => res.data),
+  getAIArchives: () => api.get('/ai-presqu-accident/archives').then(res => res.data),
+  getAIArchive: (id) => api.get(`/ai-presqu-accident/archives/${id}`).then(res => res.data),
+  deleteAIArchive: (id) => api.delete(`/ai-presqu-accident/archives/${id}`).then(res => res.data),
   
   // Attachments (nouveau format multi-fichiers)
   uploadAttachment: (id, file) => {

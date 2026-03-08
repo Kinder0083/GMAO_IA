@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { AlertCircle, TrendingUp, BarChart3, Table2, Grid3X3, PieChart, Clock, Brain, FileText } from 'lucide-react';
+import { AlertCircle, TrendingUp, BarChart3, Table2, Grid3X3, PieChart, Clock, Brain, FileText, Archive } from 'lucide-react';
 import { presquAccidentAPI } from '../services/api';
 import { useToast } from '../hooks/use-toast';
 import { ResponsivePie } from '@nivo/pie';
@@ -10,9 +10,11 @@ import { ResponsiveBar } from '@nivo/bar';
 import { usePresquAccident } from '../hooks/usePresquAccident';
 import AIPATrendAnalyzer from '../components/AIPATrendAnalyzer';
 import AIQHSEReport from '../components/AIQHSEReport';
+import { useNavigate } from 'react-router-dom';
 
 const PresquAccidentRapport = () => {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState(null);
   const [openTrendAnalysis, setOpenTrendAnalysis] = useState(false);
@@ -480,6 +482,14 @@ const PresquAccidentRapport = () => {
             onClick={() => setOpenQHSEReport(true)}
           >
             <FileText size={16} className="mr-1" /> Rapport QHSE
+          </Button>
+          <Button
+            variant="outline"
+            className="border-amber-300 text-amber-700 hover:bg-amber-50"
+            data-testid="open-archives-ia-btn"
+            onClick={() => navigate('/presqu-accident-archives-ia')}
+          >
+            <Archive size={16} className="mr-1" /> Archives IA
           </Button>
           <span className="text-sm text-gray-600 font-medium ml-2">Affichage :</span>
           <Select value={displayMode} onValueChange={setDisplayMode}>

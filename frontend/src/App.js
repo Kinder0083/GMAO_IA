@@ -57,6 +57,7 @@ import SurveillanceAIHistory from "./pages/SurveillanceAIHistory";
 import SurveillanceAIDashboard from "./pages/SurveillanceAIDashboard";
 import PresquAccidentList from "./pages/PresquAccidentList";
 import PresquAccidentRapport from "./pages/PresquAccidentRapport";
+import PresquAccidentArchivesIA from "./pages/PresquAccidentArchivesIA";
 import Documentations from "./pages/Documentations";
 import SSHTerminal from "./pages/SSHTerminal";
 import SystemHealth from "./pages/SystemHealth";
@@ -244,6 +245,7 @@ function App() {
             <Route path="surveillance-ai-dashboard" element={<SurveillanceAIDashboard />} />
             <Route path="presqu-accident" element={<PresquAccidentList />} />
             <Route path="presqu-accident-rapport" element={<PresquAccidentRapport />} />
+            <Route path="presqu-accident-archives-ia" element={<PresquAccidentArchivesIA />} />
             <Route path="documentations" element={<Documentations />} />
             <Route path="documentations/modeles" element={<FormTemplatesPage />} />
             <Route path="documentations/:poleId" element={<PoleDetails />} />

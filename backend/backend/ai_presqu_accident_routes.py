@@ -349,6 +349,37 @@ HISTORIQUE DES INCIDENTS:
 
 
 # ========================================================
+# Helper: Recuperer les IDs deja archives
+# ========================================================
+
+async def _get_archived_incident_ids(archive_type: str = None):
+    """Recupere tous les IDs d'incidents deja archives."""
+    query = {}
+    if archive_type:
+        query["type"] = archive_type
+    archives = await db.ai_pa_archives.find(query, {"_id": 0, "incident_ids": 1}).to_list(length=10000)
+    archived_ids = set()
+    for a in archives:
+        archived_ids.update(a.get("incident_ids", []))
+    return archived_ids
+
+
+async def _get_unanalyzed_incidents(archive_type: str, max_count: int = 150):
+    """Recupere les incidents non encore archives, tries par date, max 150."""
+    archived_ids = await _get_archived_incident_ids(archive_type)
+    
+    query = {}
+    if archived_ids:
+        query["id"] = {"$nin": list(archived_ids)}
+    
+    items = await db.presqu_accident_items.find(
+        query, {"_id": 0}
+    ).sort("date_incident", 1).to_list(length=max_count)
+    
+    return items, len(archived_ids)
+
+
+# ========================================================
 # Feature 3: Analyse IA des tendances globales
 # ========================================================
 
@@ -360,6 +391,7 @@ async def analyze_trends(
     """
     Analyse globale IA de tous les presqu'accidents pour détecter
     les tendances, zones à risque, et prédire les risques futurs.
+    N'analyse que les incidents non encore archives.
     """
     try:
         api_key = await _get_llm_key()
@@ -367,14 +399,12 @@ async def analyze_trends(
 
         days = data.get("days", 365)
 
-        # Limiter a 150 incidents (les plus recents) pour eviter depassement tokens
-        items = await db.presqu_accident_items.find(
-            {},
-            {"_id": 0}
-        ).sort("created_at", -1).to_list(length=150)
+        items, already_archived_count = await _get_unanalyzed_incidents("trend_analysis", 150)
 
         if len(items) < 2:
-            return {"success": False, "error": "Pas assez de données pour une analyse (minimum 2 incidents)"}
+            if already_archived_count > 0:
+                return {"success": False, "error": f"Tous les incidents ont deja ete analyses. {already_archived_count} incident(s) archives. Consultez les archives pour voir les rapports precedents."}
+            return {"success": False, "error": "Pas assez de donnees pour une analyse (minimum 2 incidents)"}
 
         # Preparer le contexte (format compact)
         incidents_detail = []
@@ -462,7 +492,7 @@ Format:
         cleaned = clean_json_response(response)
         analysis = json.loads(cleaned)
 
-        # Sauvegarder
+        # Sauvegarder dans l'historique
         record = {
             "id": str(uuid.uuid4()),
             "type": "pa_trend_analysis",
@@ -473,6 +503,24 @@ Format:
             "analysis": analysis
         }
         await db.ai_analysis_history.insert_one(record)
+
+        # Auto-archiver le resultat
+        incident_ids = [it.get("id") for it in items if it.get("id")]
+        dates = [it.get("date_incident", "") for it in items if it.get("date_incident")]
+        archive_record = {
+            "id": str(uuid.uuid4()),
+            "type": "trend_analysis",
+            "generated_by": current_user.get("id"),
+            "generated_by_name": f"{current_user.get('prenom', '')} {current_user.get('nom', '')}".strip(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "incident_ids": incident_ids,
+            "incident_count": len(items),
+            "date_range": {"from": min(dates) if dates else "", "to": max(dates) if dates else ""},
+            "analysis": analysis,
+            "provider_used": used_provider,
+            "model_used": used_model
+        }
+        await db.ai_pa_archives.insert_one(archive_record)
 
         # Alertes si patterns critiques
         notifications_sent = []
@@ -492,8 +540,9 @@ Format:
         return {
             "success": True,
             "data": analysis,
-            "stats": {"total_incidents": len(items), "period_days": days},
-            "notifications_sent": notifications_sent
+            "stats": {"total_incidents": len(items), "period_days": days, "already_archived": already_archived_count},
+            "notifications_sent": notifications_sent,
+            "archived": True
         }
 
     except json.JSONDecodeError:
@@ -597,14 +646,12 @@ async def generate_qhse_report(
 
         days = data.get("days", 365)
 
-        # Limiter a 150 incidents (les plus recents) pour eviter depassement tokens
-        items = await db.presqu_accident_items.find(
-            {},
-            {"_id": 0}
-        ).sort("created_at", -1).to_list(length=150)
+        items, already_archived_count = await _get_unanalyzed_incidents("qhse_report", 150)
 
         if not items:
-            return {"success": False, "error": "Aucun presqu'accident enregistré"}
+            if already_archived_count > 0:
+                return {"success": False, "error": f"Tous les incidents ont deja ete analyses. {already_archived_count} incident(s) archives. Consultez les archives pour voir les rapports precedents."}
+            return {"success": False, "error": "Aucun presqu'accident enregistre"}
 
         # Stats de base
         total = len(items)
@@ -703,7 +750,7 @@ DÉTAIL DES INCIDENTS:
         cleaned = clean_json_response(response)
         report = json.loads(cleaned)
 
-        # Sauvegarder
+        # Sauvegarder dans l'historique
         record = {
             "id": str(uuid.uuid4()),
             "type": "pa_qhse_report",
@@ -713,10 +760,103 @@ DÉTAIL DES INCIDENTS:
         }
         await db.ai_analysis_history.insert_one(record)
 
-        return {"success": True, "data": report}
+        # Auto-archiver le resultat
+        incident_ids = [it.get("id") for it in items if it.get("id")]
+        dates = [it.get("date_incident", "") for it in items if it.get("date_incident")]
+        archive_record = {
+            "id": str(uuid.uuid4()),
+            "type": "qhse_report",
+            "generated_by": current_user.get("id"),
+            "generated_by_name": f"{current_user.get('prenom', '')} {current_user.get('nom', '')}".strip(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "incident_ids": incident_ids,
+            "incident_count": len(items),
+            "date_range": {"from": min(dates) if dates else "", "to": max(dates) if dates else ""},
+            "analysis": report,
+            "provider_used": used_provider,
+            "model_used": used_model
+        }
+        await db.ai_pa_archives.insert_one(archive_record)
+
+        return {"success": True, "data": report, "archived": True}
 
     except json.JSONDecodeError:
         return {"success": False, "error": "L'IA a retourné un format invalide. Réessayez."}
     except Exception as e:
         logger.error(f"Erreur génération rapport QHSE: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ========================================================
+# Feature 5: Archives IA - CRUD
+# ========================================================
+
+@router.get("/archives")
+async def list_archives(
+    current_user: dict = Depends(get_current_user)
+):
+    """Liste toutes les archives IA de presqu'accidents."""
+    try:
+        archives = await db.ai_pa_archives.find(
+            {}, {"_id": 0}
+        ).sort("timestamp", -1).to_list(length=500)
+
+        # Stats globales
+        total_incidents_archived = set()
+        for a in archives:
+            total_incidents_archived.update(a.get("incident_ids", []))
+
+        total_incidents = await db.presqu_accident_items.count_documents({})
+        remaining = total_incidents - len(total_incidents_archived)
+
+        return {
+            "success": True,
+            "data": archives,
+            "stats": {
+                "total_archives": len(archives),
+                "total_incidents_archived": len(total_incidents_archived),
+                "total_incidents": total_incidents,
+                "remaining_to_analyze": max(0, remaining)
+            }
+        }
+    except Exception as e:
+        logger.error(f"Erreur listing archives: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/archives/{archive_id}")
+async def get_archive(
+    archive_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Recupere une archive specifique."""
+    try:
+        archive = await db.ai_pa_archives.find_one(
+            {"id": archive_id}, {"_id": 0}
+        )
+        if not archive:
+            raise HTTPException(status_code=404, detail="Archive non trouvee")
+        return {"success": True, "data": archive}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erreur get archive: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/archives/{archive_id}")
+async def delete_archive(
+    archive_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Supprime une archive (les incidents pourront etre re-analyses)."""
+    try:
+        result = await db.ai_pa_archives.delete_one({"id": archive_id})
+        if result.deleted_count == 0:
+            raise HTTPException(status_code=404, detail="Archive non trouvee")
+        return {"success": True, "message": "Archive supprimee. Les incidents pourront etre re-analyses."}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erreur suppression archive: {e}")
         raise HTTPException(status_code=500, detail=str(e))
