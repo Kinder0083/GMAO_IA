@@ -97,6 +97,7 @@ const QREquipmentPage = () => {
       'preventive-plan': () => loadPanel('preventive-plan', `/equipment/${equipmentId}/preventive`),
       'create-intervention': () => navigate(`/intervention-requests?equipment=${equipmentId}`),
       'report-breakdown': () => navigate(`/work-orders?createForEquipment=${equipmentId}`),
+      'create-presquaccident': () => navigate(`/presqu-accident?createForEquipment=${equipmentId}`),
     };
 
     const handler = actionHandlers[action.id];

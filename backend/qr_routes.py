@@ -28,18 +28,27 @@ DEFAULT_ACTIONS = [
     {"id": "create-intervention", "label": "Créer une demande d'intervention", "icon": "PlusCircle", "type": "action", "enabled": True, "order": 4, "requires_auth": True},
     {"id": "report-breakdown", "label": "Signaler une panne", "icon": "AlertTriangle", "type": "action", "enabled": True, "order": 5, "requires_auth": True},
     {"id": "preventive-plan", "label": "Plan de maintenance préventive", "icon": "Calendar", "type": "link", "enabled": True, "order": 6, "requires_auth": False},
+    {"id": "create-presquaccident", "label": "Signaler un presqu'accident", "icon": "AlertCircle", "type": "action", "enabled": True, "order": 7, "requires_auth": True},
 ]
 
 
 async def ensure_default_actions():
-    """S'assurer que les actions par défaut existent."""
-    count = await db[ACTIONS_COLLECTION].count_documents({})
-    if count == 0:
+    """S'assurer que les actions par défaut existent et que les nouvelles actions sont ajoutées."""
+    config = await db[ACTIONS_COLLECTION].find_one({"config_id": "default"})
+    if not config:
         await db[ACTIONS_COLLECTION].insert_one({
             "config_id": "default",
             "actions": DEFAULT_ACTIONS,
             "updated_at": datetime.now(timezone.utc).isoformat()
         })
+    else:
+        existing_ids = {a["id"] for a in config.get("actions", [])}
+        new_actions = [a for a in DEFAULT_ACTIONS if a["id"] not in existing_ids]
+        if new_actions:
+            await db[ACTIONS_COLLECTION].update_one(
+                {"config_id": "default"},
+                {"$push": {"actions": {"$each": new_actions}}}
+            )
 
 
 
