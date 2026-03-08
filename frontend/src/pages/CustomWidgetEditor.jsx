@@ -14,7 +14,7 @@ import {
   ArrowLeft, Save, Plus, Trash2, Play, Eye, RefreshCw,
   FileSpreadsheet, Database, Calculator, Settings,
   BarChart2, PieChart, TrendingUp, Gauge, Table2, Hash,
-  HelpCircle, Check, X, AlertCircle, Loader2
+  HelpCircle, Check, X, AlertCircle, Loader2, MousePointer
 } from 'lucide-react';
 import api from '../services/api';
 
@@ -707,6 +707,227 @@ const CustomWidgetEditor = () => {
   );
 };
 
+// Composant de pre-visualisation interactive Excel
+const ExcelPreviewTable = ({ fileId, sheets, excelConfig, onSelectCell, onSelectColumn }) => {
+  const [previewData, setPreviewData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [activeSheet, setActiveSheet] = useState(sheets?.[0] || '');
+  const [selectedCell, setSelectedCell] = useState(null); // {row, col, ref}
+  const [selectedCol, setSelectedCol] = useState(null); // col index
+  const [selectionMode, setSelectionMode] = useState('cell'); // 'cell' or 'column'
+
+  const loadPreview = async (sheetName) => {
+    if (!fileId) return;
+    setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (sheetName) params.append('sheet_name', sheetName);
+      params.append('max_rows', '30');
+      const res = await api.post(`/custom-widgets/preview/excel-local/${fileId}?${params.toString()}`);
+      if (res.data?.success) {
+        setPreviewData(res.data);
+        setActiveSheet(res.data.active_sheet || sheetName || sheets?.[0]);
+      }
+    } catch (err) {
+      console.error('Preview error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (fileId) loadPreview(activeSheet);
+  }, [fileId]);
+
+  const handleSheetChange = (sheet) => {
+    setActiveSheet(sheet);
+    setSelectedCell(null);
+    setSelectedCol(null);
+    loadPreview(sheet);
+  };
+
+  const handleCellClick = (rowIdx, colIdx) => {
+    if (!previewData) return;
+    const colLetter = previewData.col_letters?.[colIdx] || String.fromCharCode(65 + colIdx);
+    const cellRef = `${colLetter}${rowIdx + 1}`;
+    
+    if (selectionMode === 'column') {
+      setSelectedCol(colIdx);
+      setSelectedCell(null);
+      const headerValue = previewData.rows?.[0]?.[colIdx] || colLetter;
+      onSelectColumn?.(headerValue, colLetter, activeSheet);
+    } else {
+      setSelectedCell({ row: rowIdx, col: colIdx, ref: cellRef });
+      setSelectedCol(null);
+      const value = previewData.rows?.[rowIdx]?.[colIdx] || '';
+      onSelectCell?.(cellRef, value, activeSheet);
+    }
+  };
+
+  if (!fileId) return null;
+  if (loading && !previewData) {
+    return (
+      <div className="flex items-center justify-center py-6 border rounded-lg bg-gray-50">
+        <Loader2 className="h-5 w-5 animate-spin text-blue-600 mr-2" />
+        <span className="text-sm text-gray-600">Chargement de l'apercu...</span>
+      </div>
+    );
+  }
+  if (!previewData) return null;
+
+  const rows = previewData.rows || [];
+  const colLetters = previewData.col_letters || [];
+
+  return (
+    <div className="border rounded-lg overflow-hidden bg-white" data-testid="excel-preview-table">
+      {/* Header bar */}
+      <div className="flex items-center justify-between px-3 py-2 bg-gradient-to-r from-emerald-50 to-teal-50 border-b">
+        <div className="flex items-center gap-2">
+          <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
+          <span className="text-xs font-semibold text-emerald-800">Apercu interactif</span>
+          <span className="text-[10px] text-emerald-600 bg-emerald-100 px-1.5 py-0.5 rounded">
+            {previewData.preview_rows} / {previewData.total_rows} lignes
+          </span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="flex gap-0.5 p-0.5 bg-white/60 rounded-md border">
+            <button
+              type="button"
+              onClick={() => { setSelectionMode('cell'); setSelectedCol(null); }}
+              className={`px-2 py-1 text-[10px] font-medium rounded transition-all ${
+                selectionMode === 'cell' ? 'bg-emerald-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              }`}
+              data-testid="select-mode-cell"
+            >
+              Cellule
+            </button>
+            <button
+              type="button"
+              onClick={() => { setSelectionMode('column'); setSelectedCell(null); }}
+              className={`px-2 py-1 text-[10px] font-medium rounded transition-all ${
+                selectionMode === 'column' ? 'bg-emerald-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              }`}
+              data-testid="select-mode-column"
+            >
+              Colonne
+            </button>
+          </div>
+          {loading && <Loader2 className="h-3 w-3 animate-spin text-emerald-600" />}
+        </div>
+      </div>
+
+      {/* Sheet tabs */}
+      {sheets && sheets.length > 1 && (
+        <div className="flex gap-0 border-b bg-gray-50 px-1 pt-1">
+          {sheets.map(s => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => handleSheetChange(s)}
+              className={`px-3 py-1.5 text-[11px] font-medium rounded-t border border-b-0 transition-all ${
+                s === activeSheet
+                  ? 'bg-white text-emerald-700 border-gray-200 -mb-px z-10'
+                  : 'bg-transparent text-gray-400 border-transparent hover:text-gray-600'
+              }`}
+              data-testid={`sheet-tab-${s}`}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Selection indicator */}
+      {(selectedCell || selectedCol !== null) && (
+        <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 border-b text-xs">
+          <MousePointer className="h-3 w-3 text-blue-600" />
+          {selectedCell && (
+            <span className="text-blue-700">
+              Cellule <strong className="font-mono">{selectedCell.ref}</strong> selectionnee
+              {activeSheet && activeSheet !== 'CSV' && <span className="text-blue-500"> (feuille: {activeSheet})</span>}
+            </span>
+          )}
+          {selectedCol !== null && (
+            <span className="text-blue-700">
+              Colonne <strong className="font-mono">{colLetters[selectedCol]}</strong> selectionnee
+              {rows[0]?.[selectedCol] && (
+                <span className="text-blue-500"> - "{rows[0][selectedCol]}"</span>
+              )}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Spreadsheet table */}
+      <div className="overflow-auto max-h-[280px]">
+        <table className="w-full text-[11px] border-collapse" data-testid="excel-preview-grid">
+          <thead className="sticky top-0 z-10">
+            <tr>
+              <th className="w-10 bg-gray-100 border border-gray-200 text-gray-400 font-normal px-1 py-1 text-center sticky left-0 z-20">
+                
+              </th>
+              {colLetters.map((letter, ci) => (
+                <th
+                  key={ci}
+                  onClick={() => handleCellClick(0, ci)}
+                  className={`bg-gray-100 border border-gray-200 px-2 py-1 font-semibold text-center cursor-pointer whitespace-nowrap transition-colors ${
+                    selectedCol === ci
+                      ? 'bg-blue-200 text-blue-800 border-blue-300'
+                      : 'text-gray-500 hover:bg-gray-200'
+                  }`}
+                >
+                  {letter}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, ri) => (
+              <tr key={ri} className={ri === 0 ? 'font-semibold bg-amber-50/50' : ''}>
+                <td className="bg-gray-50 border border-gray-200 text-gray-400 font-normal px-1 py-0.5 text-center text-[10px] sticky left-0 z-10">
+                  {ri + 1}
+                </td>
+                {colLetters.map((_, ci) => {
+                  const isSelectedCell = selectedCell?.row === ri && selectedCell?.col === ci;
+                  const isSelectedColumn = selectedCol === ci;
+                  return (
+                    <td
+                      key={ci}
+                      onClick={() => handleCellClick(ri, ci)}
+                      className={`border border-gray-200 px-2 py-0.5 cursor-pointer whitespace-nowrap max-w-[150px] truncate transition-colors ${
+                        isSelectedCell
+                          ? 'bg-blue-100 ring-2 ring-blue-500 ring-inset text-blue-900 font-medium'
+                          : isSelectedColumn
+                            ? 'bg-blue-50 border-blue-200'
+                            : ri === 0
+                              ? 'hover:bg-amber-100/70'
+                              : 'hover:bg-gray-100'
+                      }`}
+                      title={row[ci] || ''}
+                      data-testid={`cell-${colLetters[ci]}${ri + 1}`}
+                    >
+                      {row[ci] || ''}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Hint */}
+      <div className="px-3 py-1.5 bg-gray-50 border-t text-[10px] text-gray-400 flex items-center gap-1">
+        <MousePointer className="h-3 w-3" />
+        {selectionMode === 'cell'
+          ? 'Cliquez sur une cellule pour remplir automatiquement la reference'
+          : 'Cliquez sur une colonne pour remplir automatiquement le nom de colonne'}
+      </div>
+    </div>
+  );
+};
+
+
 // Composant pour éditer une source de données
 const DataSourceEditor = ({
   source,
@@ -954,6 +1175,33 @@ const DataSourceEditor = ({
                   </div>
                 )}
               </div>
+
+              {/* Interactive Excel Preview */}
+              {source.excel_config?.uploaded_file_id && (
+                <ExcelPreviewTable
+                  fileId={source.excel_config.uploaded_file_id}
+                  sheets={source.excel_config._upload_sheets || []}
+                  excelConfig={source.excel_config}
+                  onSelectCell={(cellRef, value, sheetName) => {
+                    onUpdate({
+                      excel_config: {
+                        ...source.excel_config,
+                        cell_reference: cellRef,
+                        sheet_name: sheetName && sheetName !== 'CSV' ? sheetName : source.excel_config.sheet_name
+                      }
+                    });
+                  }}
+                  onSelectColumn={(headerName, colLetter, sheetName) => {
+                    onUpdate({
+                      excel_config: {
+                        ...source.excel_config,
+                        column_name: headerName,
+                        sheet_name: sheetName && sheetName !== 'CSV' ? sheetName : source.excel_config.sheet_name
+                      }
+                    });
+                  }}
+                />
+              )}
             </div>
           )}
 

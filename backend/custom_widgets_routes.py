@@ -1168,10 +1168,10 @@ async def upload_excel_file(
 async def preview_local_excel(
     file_id: str,
     sheet_name: Optional[str] = None,
-    max_rows: int = 10,
+    max_rows: int = 30,
     current_user: dict = Depends(get_current_user)
 ):
-    """Preview un fichier Excel uploade localement"""
+    """Preview un fichier Excel uploade localement avec references de cellules"""
     import openpyxl
     
     file_record = await db.uploaded_excel_files.find_one({"id": file_id}, {"_id": 0})
@@ -1182,39 +1182,60 @@ async def preview_local_excel(
     if not file_path or not FilePath(file_path).exists():
         raise HTTPException(status_code=404, detail="Fichier supprime du serveur")
     
+    def col_letter(col_idx):
+        """Convert 0-based column index to Excel column letter (A, B, ..., Z, AA, AB...)"""
+        result = ""
+        idx = col_idx
+        while True:
+            result = chr(65 + idx % 26) + result
+            idx = idx // 26 - 1
+            if idx < 0:
+                break
+        return result
+    
     try:
-        data = []
-        columns = []
+        rows = []
+        active_sheet = None
+        sheets = file_record.get("sheets", [])
+        total_row_count = 0
+        
         if file_path.endswith(('.xlsx', '.xls')):
             wb = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
-            ws = wb[sheet_name] if sheet_name and sheet_name in wb.sheetnames else wb[wb.sheetnames[0]]
+            sheets = wb.sheetnames
+            target_sheet = sheet_name if sheet_name and sheet_name in sheets else sheets[0]
+            active_sheet = target_sheet
+            ws = wb[target_sheet]
             for i, row in enumerate(ws.iter_rows(values_only=True)):
                 row_data = [str(c) if c is not None else '' for c in row]
-                if i == 0:
-                    columns = row_data
-                else:
-                    data.append(row_data)
+                rows.append(row_data)
                 if i >= max_rows:
                     break
+            total_row_count = ws.max_row or len(rows)
             wb.close()
         elif file_path.endswith('.csv'):
             import csv
+            sheets = ['CSV']
+            active_sheet = 'CSV'
             with open(file_path, 'r', encoding='utf-8', errors='replace') as cf:
                 reader = csv.reader(cf)
                 for i, row in enumerate(reader):
-                    if i == 0:
-                        columns = row
-                    else:
-                        data.append(row)
+                    rows.append(row)
+                    total_row_count += 1
                     if i >= max_rows:
                         break
         
+        # Build column letters
+        max_cols = max((len(r) for r in rows), default=0)
+        col_letters = [col_letter(i) for i in range(max_cols)]
+        
         return {
             "success": True,
-            "columns": columns,
-            "data": data,
-            "sheets": file_record.get("sheets", []),
-            "total_rows": len(data)
+            "rows": rows,
+            "col_letters": col_letters,
+            "sheets": sheets,
+            "active_sheet": active_sheet,
+            "total_rows": total_row_count,
+            "preview_rows": len(rows)
         }
     except Exception as e:
         return {"success": False, "error": str(e)}
