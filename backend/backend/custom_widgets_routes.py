@@ -2,6 +2,7 @@
 Routes API pour les Widgets Personnalisés
 """
 from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Path, UploadFile, File
+from pathlib import Path as FilePath
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone
 import uuid
@@ -1104,7 +1105,7 @@ async def upload_excel_file(
     
     try:
         # Sauvegarder le fichier
-        upload_dir = Path("/app/backend/uploads/excel")
+        upload_dir = FilePath("/app/backend/uploads/excel")
         upload_dir.mkdir(parents=True, exist_ok=True)
         
         file_id = str(uuid.uuid4())[:8]
@@ -1178,7 +1179,7 @@ async def preview_local_excel(
         raise HTTPException(status_code=404, detail="Fichier non trouve")
     
     file_path = file_record.get("stored_path")
-    if not file_path or not Path(file_path).exists():
+    if not file_path or not FilePath(file_path).exists():
         raise HTTPException(status_code=404, detail="Fichier supprime du serveur")
     
     try:
