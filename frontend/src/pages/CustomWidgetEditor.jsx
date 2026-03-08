@@ -251,13 +251,15 @@ const CustomWidgetEditor = () => {
       const testValues = {};
       widget.data_sources.forEach(s => {
         if (s.id !== source.id && s.name) {
-          testValues[s.name] = s.cached_value || s.manual_value || 0;
+          // Use underscore-based key for formula compatibility
+          const safeKey = s.name.replace(/\s+/g, '_');
+          testValues[safeKey] = s.cached_value || s.manual_value || 0;
         }
       });
 
-      const response = await api.post('/custom-widgets/test/formula', null, {
-        params: { formula: source.formula },
-        data: testValues
+      // Pass testValues as the body (second argument), params as the third
+      const response = await api.post('/custom-widgets/test/formula', testValues, {
+        params: { formula: source.formula }
       });
 
       setTestResult({
@@ -744,7 +746,58 @@ const FORMULA_OPERATORS = [
 
 const VisualFormulaBuilder = ({ formula, allSources, testResult, onFormulaChange, onTestFormula }) => {
   const textareaRef = React.useRef(null);
+  const debounceRef = React.useRef(null);
   const [showFunctions, setShowFunctions] = useState(false);
+  const [liveResult, setLiveResult] = useState(null); // { success, value, error, evaluating }
+
+  // Auto-evaluate formula with debounce
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+
+    const trimmed = (formula || '').trim();
+    if (!trimmed) {
+      setLiveResult(null);
+      return;
+    }
+
+    // Check if formula has at least one $source or number
+    const hasContent = /[\$\d]/.test(trimmed);
+    if (!hasContent) {
+      setLiveResult(null);
+      return;
+    }
+
+    setLiveResult(prev => ({ ...prev, evaluating: true }));
+
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const testValues = {};
+        allSources.forEach(s => {
+          if (s.name) {
+            // Use underscore-based key for formula compatibility
+            const safeKey = s.name.replace(/\s+/g, '_');
+            testValues[safeKey] = s.cached_value || s.manual_value || 10;
+          }
+        });
+        // Pass testValues as the body (second argument), params as the third
+        const res = await api.post('/custom-widgets/test/formula', testValues, {
+          params: { formula: trimmed }
+        });
+        if (res.data.success) {
+          setLiveResult({ success: true, value: res.data.result, evaluating: false });
+        } else {
+          setLiveResult({ success: false, error: res.data.error, evaluating: false });
+        }
+      } catch (err) {
+        // Extract error message safely - handle Pydantic validation errors which are objects
+        const detail = err.response?.data?.detail;
+        const errorMsg = typeof detail === 'string' ? detail : (detail?.msg || JSON.stringify(detail) || 'Erreur');
+        setLiveResult({ success: false, error: errorMsg, evaluating: false });
+      }
+    }, 600);
+
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [formula, allSources]);
 
   const insertAtCursor = (text) => {
     const el = textareaRef.current;
@@ -767,7 +820,9 @@ const VisualFormulaBuilder = ({ formula, allSources, testResult, onFormulaChange
   };
 
   const insertSource = (sourceName) => {
-    insertAtCursor(`$${sourceName}`);
+    // Replace spaces with underscores for formula compatibility
+    const safeSourceName = sourceName.replace(/\s+/g, '_');
+    insertAtCursor(`$${safeSourceName}`);
   };
 
   const insertOperator = (op) => {
@@ -808,7 +863,28 @@ const VisualFormulaBuilder = ({ formula, allSources, testResult, onFormulaChange
             <Calculator className="h-4 w-4 text-purple-600" />
             <span className="text-xs font-semibold text-purple-800">Constructeur de formule</span>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-2">
+            {/* Live result badge */}
+            {liveResult && (
+              <div
+                className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold transition-all ${
+                  liveResult.evaluating
+                    ? 'bg-gray-100 text-gray-500'
+                    : liveResult.success
+                      ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+                      : 'bg-red-50 text-red-600 border border-red-200'
+                }`}
+                data-testid="live-result-badge"
+              >
+                {liveResult.evaluating ? (
+                  <><Loader2 className="h-3 w-3 animate-spin" /> Calcul...</>
+                ) : liveResult.success ? (
+                  <><span className="text-emerald-500">=</span> {typeof liveResult.value === 'number' ? liveResult.value.toLocaleString('fr-FR', { maximumFractionDigits: 4 }) : liveResult.value}</>
+                ) : (
+                  <><AlertCircle className="h-3 w-3" /> Erreur</>
+                )}
+              </div>
+            )}
             <Button variant="ghost" size="sm" className="h-6 px-2 text-[10px]" onClick={clearFormula}>
               <Trash2 className="h-3 w-3 mr-1" />Effacer
             </Button>
@@ -923,18 +999,50 @@ const VisualFormulaBuilder = ({ formula, allSources, testResult, onFormulaChange
         )}
       </div>
 
-      {/* Test button + result */}
-      <div className="flex items-center gap-2 pt-1">
-        <Button variant="outline" size="sm" onClick={onTestFormula} data-testid="test-formula-btn">
-          <Play className="h-4 w-4 mr-1" />
-          Tester la formule
-        </Button>
-        {testResult && (
-          <div className={`flex items-center gap-1 text-sm ${testResult.success ? 'text-green-600' : 'text-red-600'}`}>
-            {testResult.success ? <Check className="h-4 w-4" /> : <X className="h-4 w-4" />}
-            {testResult.message}
+      {/* Live result detail + Test button */}
+      <div className="space-y-2 pt-1">
+        {/* Live result expanded */}
+        {liveResult && !liveResult.evaluating && (
+          <div
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs ${
+              liveResult.success
+                ? 'bg-emerald-50 border border-emerald-200'
+                : 'bg-red-50 border border-red-200'
+            }`}
+            data-testid="live-result-detail"
+          >
+            {liveResult.success ? (
+              <>
+                <Check className="h-4 w-4 text-emerald-600 flex-shrink-0" />
+                <span className="text-emerald-700">Resultat en temps reel :</span>
+                <span className="font-bold font-mono text-emerald-800 text-sm" data-testid="live-result-value">
+                  {typeof liveResult.value === 'number' ? liveResult.value.toLocaleString('fr-FR', { maximumFractionDigits: 4 }) : liveResult.value}
+                </span>
+                <span className="text-emerald-500 ml-auto text-[10px]">
+                  (valeurs test: {allSources.map(s => `${s.name}=${s.cached_value || s.manual_value || 10}`).join(', ') || 'aucune'})
+                </span>
+              </>
+            ) : (
+              <>
+                <AlertCircle className="h-4 w-4 text-red-500 flex-shrink-0" />
+                <span className="text-red-700">{liveResult.error}</span>
+              </>
+            )}
           </div>
         )}
+
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={onTestFormula} data-testid="test-formula-btn">
+            <Play className="h-4 w-4 mr-1" />
+            Tester la formule
+          </Button>
+          {testResult && (
+            <div className={`flex items-center gap-1 text-sm ${testResult.success ? 'text-green-600' : 'text-red-600'}`}>
+              {testResult.success ? <Check className="h-4 w-4" /> : <X className="h-4 w-4" />}
+              {testResult.message}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
