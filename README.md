@@ -2,7 +2,7 @@
 
 Application de Fonctionnement des Services Assistee par Ordinateur (FSAO) complete et auto-hebergee.
 
-**Version :** 1.8.0
+**Version :** 1.9.0
 **Concepteur :** Greg
 **Derniere mise a jour :** Mars 2026
 
@@ -156,6 +156,11 @@ FSAO Iris integre des fonctionnalites d'IA generative (Gemini Pro) pour automati
 ### Rapports et analytics
 - Tableaux de bord en temps reel
 - Dashboard personnalisable avec widgets custom
+- **Dashboard Service par onglets** : 9 onglets independants (ADV, LOGISTIQUE, PRODUCTION, QHSE, MAINTENANCE, LABO, INDUS, DIRECTION, AUTRE), chacun avec ses propres widgets personnalises, preference d'onglet sauvegardee par utilisateur
+- **Widgets connectes aux donnees reelles** : endpoint `/api/dashboard/widget-data` fournissant 10 metriques en temps reel (OT en cours, taux completion, MTTR, stock alerte, etc.)
+- **Widgets personnalises avec sources Excel** : upload de fichier Excel local (.xlsx, .xls, .csv) ou connexion a un serveur Samba/reseau
+- **Pre-visualisation interactive Excel** : apres upload, grille type tableur avec lettres de colonnes (A, B, C...) et numeros de lignes, modes de selection Cellule/Colonne pour remplir automatiquement les references, onglets pour fichiers multi-feuilles
+- **Constructeur visuel de formules** : interface drag-and-click remplacant la saisie manuelle, avec chips cliquables pour les sources ($Source1, $Source2), boutons operateurs (+, -, *, /, %), palette de fonctions par categorie (Math: SUM/AVG/MIN/MAX/ROUND, Logique: IF/IFERROR, Pourcentage: PERCENTAGE/GROWTH_RATE), apercu avec coloration syntaxique et evaluation en temps reel (debounce 600ms)
 - Statistiques detaillees et analyse des couts
 - Exports PDF, Excel, CSV (admin)
 - Rapports hebdomadaires automatiques par email
@@ -172,9 +177,11 @@ FSAO Iris integre des fonctionnalites d'IA generative (Gemini Pro) pour automati
 - Icone de statut dans le header (vert = backup recent)
 
 ### Gestion des utilisateurs et roles
-- 3 roles : Administrateur, Technicien, Visualiseur
-- Permissions granulaires par module (view, edit, delete)
+- 10+ roles preconfigures : Administrateur, Technicien, Responsable Maintenance, Chef de Production, Responsable QHSE, etc.
+- Permissions granulaires par module (view, edit, delete) - **48 modules** configurables
+- **Modules recents** : Consignations LOTO, Contrats, Dashboard Service, Formation, Autorisations Particulieres
 - **Modules IA** : Tableau de bord IA, Automatisations IA, Widgets IA (Adria) - configurables par role
+- **Migration automatique** : endpoint `/api/roles/migrate-permissions` pour ajouter les permissions manquantes aux roles existants
 - Gestion des equipes, services et responsables hierarchiques
 - Planning de disponibilite
 - Preferences utilisateur personnalisees
@@ -231,6 +238,8 @@ fsao-iris/
 │   ├── auth.py                 # Authentification JWT + bcrypt
 │   ├── dependencies.py         # Dependances FastAPI (auth guards)
 │   ├── *_routes.py             # 35+ modules de routes API
+│   ├── custom_widgets_routes.py # Widgets personnalises (templates, upload Excel, preview, formules)
+│   ├── formula_engine.py       # Moteur de formules (SUM, AVG, IF, PERCENTAGE, etc.)
 │   ├── ai_maintenance_routes.py # IA : checklists, maintenance, non-conformites
 │   ├── ai_presqu_accident_routes.py # IA : causes racines, incidents similaires, tendances, rapport QHSE
 │   ├── *_service.py            # 16 services metier
@@ -525,6 +534,16 @@ Pour utiliser Google Drive comme destination de sauvegarde :
 | POST | `/api/push-notifications/register` | Enregistrer un token push (mobile) |
 | DELETE | `/api/push-notifications/unregister` | Desactiver un token push |
 | POST | `/api/push-notifications/test` | Envoyer une notification push de test |
+| GET | `/api/dashboard/widget-data` | Donnees temps reel pour les widgets du dashboard principal |
+| GET | `/api/custom-widgets?service={name}` | Widgets personnalises filtres par service |
+| GET | `/api/custom-widgets/tpl/list` | Templates de widgets predefinis |
+| POST | `/api/custom-widgets/tpl/{id}/create` | Creer un widget depuis un template |
+| POST | `/api/custom-widgets/upload/excel` | Upload de fichier Excel local (.xlsx, .xls, .csv) |
+| POST | `/api/custom-widgets/preview/excel-local/{id}` | Pre-visualisation interactive d'un fichier Excel uploade |
+| POST | `/api/custom-widgets/test/formula` | Tester une formule avec des valeurs de test |
+| GET | `/api/roles/services/list` | Liste des services pour les onglets du Dashboard Service |
+| POST | `/api/roles/migrate-permissions` | Migration des permissions manquantes pour roles existants |
+| PATCH | `/api/users/me/preferences` | Sauvegarder les preferences utilisateur (onglet actif, etc.) |
 | WS | `/ws/chat/` | Chat temps reel |
 | WS | `/ws/whiteboard/` | Tableau d'affichage |
 | WS | `/api/ws/realtime/{entity}` | Notifications temps reel |
@@ -722,6 +741,9 @@ Si les notifications push ne fonctionnent pas :
 | `documentations` | Documents |
 | `sensors` | Capteurs IoT |
 | `ai_analysis_history` | Historique des analyses IA (causes racines, tendances, rapports) |
+| `ai_pa_archives` | Archives des analyses IA presqu'accidents |
+| `custom_widgets` | Widgets personnalises par service |
+| `uploaded_excel_files` | Fichiers Excel uploades pour les widgets |
 | `notifications` | Notifications in-app (inclut alertes IA critiques) |
 | `device_tokens` | Tokens push pour notifications mobiles (Expo) |
 | ... | Et 40+ autres collections |
@@ -763,4 +785,4 @@ Ce projet est sous licence Proprietaire.
 ---
 
 **Developpe par Greg**
-**Version 1.8.0 - Mars 2026**
+**Version 1.9.0 - Mars 2026**

@@ -72,6 +72,9 @@ class UserPermissions(BaseModel):
     autorisationsParticulieres: ModulePermission = ModulePermission(view=False, edit=False, delete=False)  # Autorisations Particulières - Gestion des autorisations spéciales
     training: ModulePermission = ModulePermission(view=False, edit=False, delete=False)  # Formation - Module de formation et questionnaire nouveaux arrivants
     contrats: ModulePermission = ModulePermission(view=False, edit=False, delete=False)  # Contrats - Gestion des contrats fournisseurs
+    aiDashboard: ModulePermission = ModulePermission(view=False, edit=False, delete=False)  # Tableau de bord IA - Vue unifiée des analyses IA
+    aiAutomations: ModulePermission = ModulePermission(view=False, edit=False, delete=False)  # Automatisations IA - Configuration des règles automatiques
+    aiWidgets: ModulePermission = ModulePermission(view=False, edit=False, delete=False)  # Widgets IA (Adria) - Création de widgets par l'assistant IA
 
 # Fonction helper pour obtenir les permissions par défaut selon le rôle
 def get_default_permissions_by_role(role: str) -> UserPermissions:
@@ -123,7 +126,10 @@ def get_default_permissions_by_role(role: str) -> UserPermissions:
             consignes=ModulePermission(view=True, edit=True, delete=True),
             autorisationsParticulieres=ModulePermission(view=True, edit=True, delete=True),
             training=ModulePermission(view=True, edit=True, delete=True),
-            contrats=ModulePermission(view=True, edit=True, delete=True)
+            contrats=ModulePermission(view=True, edit=True, delete=True),
+            aiDashboard=ModulePermission(view=True, edit=True, delete=True),
+            aiAutomations=ModulePermission(view=True, edit=True, delete=True),
+            aiWidgets=ModulePermission(view=True, edit=True, delete=True)
         )
     
     # Rôle spécial AFFICHAGE : Uniquement accès au tableau d'affichage
