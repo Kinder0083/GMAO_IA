@@ -888,55 +888,103 @@ async def import_presqu_accident_data(
     file: UploadFile = File(...),
     current_user: dict = Depends(get_current_admin_user)
 ):
-    """Importer des données depuis un fichier CSV/Excel"""
+    """Importer des donnees depuis un fichier CSV/Excel (compatible avec le format d'export)"""
     try:
         import pandas as pd
         from io import BytesIO
-        
+
         content = await file.read()
-        
-        # Lire le fichier selon l'extension
+
         if file.filename.endswith('.csv'):
             df = pd.read_csv(BytesIO(content))
         elif file.filename.endswith(('.xlsx', '.xls')):
             df = pd.read_excel(BytesIO(content))
         else:
-            raise HTTPException(status_code=400, detail="Format de fichier non supporté")
-        
-        # Mapper les colonnes
+            raise HTTPException(status_code=400, detail="Format non supporte (.csv, .xlsx, .xls)")
+
+        valid_services = {s.value for s in PresquAccidentService}
+        valid_statuses = {s.value for s in PresquAccidentStatus}
+        valid_severities = {s.value for s in PresquAccidentSeverity}
+
+        current_year = datetime.now().year
+        count = await db.presqu_accident_items.count_documents({
+            "numero": {"$regex": f"^{current_year}-"}
+        })
+
         imported_count = 0
         errors = []
-        
+
+        def clean(val):
+            """Nettoie une valeur pandas: NaN, 'nan', '[]', None -> None"""
+            if val is None:
+                return None
+            if isinstance(val, float) and pd.isna(val):
+                return None
+            s = str(val).strip()
+            if s in ('', 'nan', 'None', 'null', '[]', 'NaT'):
+                return None
+            return s
+
         for index, row in df.iterrows():
             try:
+                count += 1
+                numero = clean(row.get('numero')) or f"{current_year}-{str(count).zfill(3)}"
+
+                service = clean(row.get('service')) or 'AUTRE'
+                if service not in valid_services:
+                    service = 'AUTRE'
+
+                status_val = clean(row.get('status')) or 'A_TRAITER'
+                if status_val not in valid_statuses:
+                    status_val = 'A_TRAITER'
+
+                severite = clean(row.get('severite')) or 'MOYEN'
+                if severite not in valid_severities:
+                    severite = 'MOYEN'
+
                 item = PresquAccidentItem(
-                    titre=str(row.get('titre', '')),
-                    description=str(row.get('description', '')),
-                    date_incident=str(row.get('date_incident', '')),
-                    lieu=str(row.get('lieu', '')),
-                    service=str(row.get('service', 'AUTRE')),
-                    personnes_impliquees=str(row.get('personnes_impliquees', '')) if pd.notna(row.get('personnes_impliquees')) else None,
-                    declarant=str(row.get('declarant', '')) if pd.notna(row.get('declarant')) else None,
-                    contexte_cause=str(row.get('contexte_cause', '')) if pd.notna(row.get('contexte_cause')) else None,
-                    severite=str(row.get('severite', 'MOYEN')),
-                    actions_proposees=str(row.get('actions_proposees', '')) if pd.notna(row.get('actions_proposees')) else None,
-                    commentaire=str(row.get('commentaire', '')) if pd.notna(row.get('commentaire')) else None,
+                    numero=numero,
+                    titre=clean(row.get('titre')) or 'Sans titre',
+                    description=clean(row.get('description')) or '-',
+                    date_incident=clean(row.get('date_incident')) or datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+                    lieu=clean(row.get('lieu')) or '-',
+                    service=PresquAccidentService(service),
+                    categorie_incident=clean(row.get('categorie_incident')),
+                    severite=PresquAccidentSeverity(severite),
+                    status=PresquAccidentStatus(status_val),
+                    personnes_impliquees=clean(row.get('personnes_impliquees')),
+                    declarant=clean(row.get('declarant')),
+                    contexte_cause=clean(row.get('contexte_cause')),
+                    conditions_incident=clean(row.get('conditions_incident')),
+                    mesures_immediates=clean(row.get('mesures_immediates')),
+                    actions_proposees=clean(row.get('actions_proposees')),
+                    commentaire_traitement=clean(row.get('commentaire_traitement')),
+                    responsable_action=clean(row.get('responsable_action')),
+                    commentaire=clean(row.get('commentaire')),
+                    temoins=clean(row.get('temoins')),
+                    equipement_nom=clean(row.get('equipement_nom')),
+                    type_lesion_potentielle=clean(row.get('type_lesion_potentielle')),
                     created_by=current_user.get("id"),
                     updated_by=current_user.get("id")
                 )
-                
-                await db.presqu_accident_items.insert_one(item.model_dump())
+
+                item_dict = item.model_dump()
+                await db.presqu_accident_items.insert_one(item_dict)
+                if "_id" in item_dict:
+                    del item_dict["_id"]
                 imported_count += 1
             except Exception as e:
                 errors.append(f"Ligne {index + 2}: {str(e)}")
-        
+
         return {
             "success": True,
             "imported_count": imported_count,
-            "errors": errors[:10]  # Limiter à 10 erreurs
+            "errors": errors[:10]
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Erreur import données: {str(e)}")
+        logger.error(f"Erreur import donnees: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
