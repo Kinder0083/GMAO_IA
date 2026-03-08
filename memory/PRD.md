@@ -5,39 +5,47 @@ Application de GMAO complete (FastAPI + React + MongoDB).
 
 ## Fonctionnalites implementees
 
+### Dashboard Service avec onglets par service (8 mars 2026)
+- **9 onglets** : ADV, LOGISTIQUE, PRODUCTION, QHSE, MAINTENANCE, LABO, INDUS, DIRECTION, AUTRE
+- Chaque onglet est independant avec ses propres widgets
+- Preference d'onglet sauvegardee automatiquement (`service_dashboard_tab`)
+- Templates accessibles depuis chaque onglet, widgets crees lies au service actif
+- **Fichiers**: `ServiceDashboard.jsx` (reecrit), `custom_widgets_routes.py`, `models.py`
+
+### Permission 'contrats' ajoutee (8 mars 2026)
+- Ajoutee dans `UserPermissions` + `get_default_permissions_by_role()` pour 10 roles
+- Migration endpoint corrige (KeyError 'id' → fallback `_id`)
+- 13 roles existants migres
+- **Fichiers**: `models.py`, `roles_routes.py`
+
 ### Widgets dashboard connectes a de vraies donnees (8 mars 2026)
-- **Backend**: Nouvel endpoint `GET /api/dashboard/widget-data` retournant: low_stock, out_of_stock, recent_incidents_30d, total_incidents, upcoming_maintenance_7d, overdue_mprev, recent_status_changes_7d
-- **Frontend**: Widgets `Stock bas`, `Incidents recents`, `Maintenances a venir`, `Planning M.Prev`, `Changements statut`, `Taux completion OT`, `Charge de travail` connectes aux donnees reelles
-- **Templates**: 4 nouveaux templates dans Dashboard Service: MTTR, Maintenances a venir (7j), Charge equipe, Changements statut recents
-- **Fichiers**: `server.py`, `Dashboard.jsx`, `api.js`, `custom_widgets_routes.py`
+- Endpoint `GET /api/dashboard/widget-data`, 10 widgets avec donnees reelles
+- 4 nouveaux templates maintenance (MTTR, Maintenances a venir, Charge equipe, Changements statut)
 
 ### Bugfix: Dashboard vide apres personnalisation (8 mars 2026)
-- Fix `getStatConfig()` + reconciliation layout avec widgets actives
+- Fix `getStatConfig()` + reconciliation layout
 
 ### Systeme d'archivage IA presqu'accidents (8 mars 2026)
-- Collection `ai_pa_archives`, archivage auto, exclusion des incidents deja analyses
+- Collection `ai_pa_archives`, archivage auto par lots de 150
 
 ### Fix systeme de mise a jour v7.1 (8 mars 2026)
 - Auto-exit processus + supervisor restart garanti
 
-### Bugfix: NoneType dans generate-report (8 mars 2026)
-- Fix `(it.get('contexte_cause') or '')[:80]`
-
 ## Architecture
 ```
 Backend:
-  server.py                      # + endpoint dashboard/widget-data
+  server.py                      # endpoint dashboard/widget-data
   update_service.py              # v7.1
   ai_presqu_accident_routes.py   # IA + archivage
-  custom_widgets_routes.py       # + 4 nouveaux templates
-  presqu_accident_routes.py
+  custom_widgets_routes.py       # templates + service param
+  roles_routes.py                # migration permissions + services list
+  models.py                      # contrats permission + service_dashboard_tab
 
 Frontend:
-  pages/Dashboard.jsx            # Widgets avec donnees reelles
+  pages/Dashboard.jsx            # Widgets donnees reelles
+  pages/ServiceDashboard.jsx     # REECRIT - onglets par service
   pages/PresquAccidentArchivesIA.jsx
-  pages/PresquAccidentRapport.jsx
-  components/Personnalisation/DashboardSection.jsx
-  services/api.js                # + dashboardAPI
+  services/api.js
   App.js
 ```
 

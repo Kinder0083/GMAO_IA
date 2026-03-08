@@ -425,7 +425,8 @@ async def migrate_role_permissions(current_user: dict = Depends(get_current_user
     
     NEW_PERMISSION_KEYS = [
         "mes", "mesReports", "serviceDashboard", "weeklyReports",
-        "demandesArret", "consignes", "autorisationsParticulieres"
+        "demandesArret", "consignes", "autorisationsParticulieres", "training",
+        "contrats"
     ]
     
     roles = await db.roles.find({}).to_list(length=None)
@@ -443,8 +444,9 @@ async def migrate_role_permissions(current_user: dict = Depends(get_current_user
                 perms[key] = default_dict.get(key, {"view": False, "edit": False, "delete": False})
         
         if needs_update:
+            role_filter = {"id": role["id"]} if "id" in role else {"_id": role["_id"]}
             await db.roles.update_one(
-                {"id": role["id"]},
+                role_filter,
                 {"$set": {"permissions": perms}}
             )
             updated_count += 1
