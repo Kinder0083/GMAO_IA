@@ -5,34 +5,30 @@ Application de GMAO complete (FastAPI + React + MongoDB).
 
 ## Fonctionnalites implementees
 
+### Mise a jour permissions + README (9 mars 2026)
+- 48 modules de permissions synchronises entre backend et frontend
+- Ajouts frontend: consignationsLoto, contrats
+- Ajouts backend: aiDashboard, aiAutomations, aiWidgets
+- Migration des 13 roles existants avec les nouvelles permissions
+- README.md mis a jour: Dashboard Service, Excel upload/preview, formules, nouveaux endpoints, collections MongoDB
+- Version passee a 1.9.0
+
 ### Evaluation en temps reel des formules (9 mars 2026)
-- Auto-evaluation avec debounce 600ms a chaque modification de la formule
-- Badge live dans le header (= valeur en vert, ou Erreur en rouge)
-- Panneau detail avec resultat numerique et valeurs de test utilisees
-- Noms de sources convertis en underscore pour compatibilite backend ($Source_1)
-- Corrections : appel API, gestion des espaces dans les noms, erreurs Pydantic
-- **Fichiers**: `CustomWidgetEditor.jsx` (VisualFormulaBuilder)
+- Auto-evaluation avec debounce 600ms, badge live, panneau detail
 
 ### Constructeur visuel de formules (9 mars 2026)
-- Chips cliquables pour les sources, boutons operateurs, palette de fonctions
-- Apercu avec coloration syntaxique, textarea editable en mode hybride
-- **Fichiers**: `CustomWidgetEditor.jsx` (VisualFormulaBuilder)
+- Chips sources, boutons operateurs, palette fonctions, coloration syntaxique
 
 ### Pre-visualisation interactive Excel (9 mars 2026)
-- Grille interactive type tableur, modes Cellule/Colonne, onglets multi-feuilles
-- **Fichiers**: `CustomWidgetEditor.jsx` (ExcelPreviewTable), `custom_widgets_routes.py`
+- Grille interactive, modes Cellule/Colonne, onglets multi-feuilles
 
 ### Nettoyage repertoire duplique (9 mars 2026)
 - Suppression de /app/backend/backend/
 
-### Dashboard Service avec onglets par service (8 mars 2026)
-- 9 onglets, preference sauvegardee, design style classeur
-- **Fichiers**: `ServiceDashboard.jsx`, `custom_widgets_routes.py`
+### Dashboard Service avec onglets (8 mars 2026)
+- 9 onglets, preference sauvegardee, design classeur
 
 ### Upload Excel local (8-9 mars 2026)
-- Endpoint POST /api/custom-widgets/upload/excel, toggle Samba/Local
-- **Fichiers**: `CustomWidgetEditor.jsx`, `custom_widgets_routes.py`
-
 ### Permission 'contrats' + Migration (8 mars 2026)
 ### Widgets dashboard donnees reelles (8 mars 2026)
 ### Bugfix: Dashboard vide (8 mars 2026)
@@ -43,10 +39,8 @@ Application de GMAO complete (FastAPI + React + MongoDB).
 
 ## Architecture
 ```
-Backend:
-  server.py, custom_widgets_routes.py, formula_engine.py, roles_routes.py
-Frontend:
-  pages/ServiceDashboard.jsx, pages/CustomWidgetEditor.jsx, pages/Dashboard.jsx
+Backend: server.py, models.py (48 permissions), custom_widgets_routes.py, formula_engine.py, roles_routes.py
+Frontend: RolesManagement.jsx (48 modules), ServiceDashboard.jsx, CustomWidgetEditor.jsx, Dashboard.jsx
 ```
 
 ## Credentials
@@ -56,5 +50,5 @@ Frontend:
 - Gemini, OpenAI, Claude (via emergentintegrations + Emergent LLM Key)
 
 ## Backlog
-1. **P0 (Differe)**: Systeme de mise a jour
+1. **P0 (Differe)**: Systeme de mise a jour - ne fonctionne pas sur serveur de production
 2. Ameliorations futures selon besoins utilisateur
