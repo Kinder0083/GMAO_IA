@@ -707,6 +707,240 @@ const CustomWidgetEditor = () => {
   );
 };
 
+// Constructeur visuel de formules
+const FORMULA_FUNCTIONS = [
+  { cat: 'Math', items: [
+    { name: 'SUM', tpl: 'SUM(, )', desc: 'Somme' },
+    { name: 'AVG', tpl: 'AVG(, )', desc: 'Moyenne' },
+    { name: 'MIN', tpl: 'MIN(, )', desc: 'Minimum' },
+    { name: 'MAX', tpl: 'MAX(, )', desc: 'Maximum' },
+    { name: 'ABS', tpl: 'ABS()', desc: 'Valeur absolue' },
+    { name: 'ROUND', tpl: 'ROUND(, 2)', desc: 'Arrondi' },
+    { name: 'SQRT', tpl: 'SQRT()', desc: 'Racine carree' },
+    { name: 'POW', tpl: 'POW(, 2)', desc: 'Puissance' },
+  ]},
+  { cat: 'Logique', items: [
+    { name: 'IF', tpl: 'IF(, , )', desc: 'Condition SI' },
+    { name: 'IFERROR', tpl: 'IFERROR(, 0)', desc: 'Si erreur' },
+  ]},
+  { cat: 'Pourcentage', items: [
+    { name: 'PERCENTAGE', tpl: 'PERCENTAGE(, )', desc: 'Pourcentage (part, total)' },
+    { name: 'GROWTH_RATE', tpl: 'GROWTH_RATE(, )', desc: 'Taux de croissance' },
+  ]},
+  { cat: 'Comptage', items: [
+    { name: 'COUNT', tpl: 'COUNT()', desc: 'Nombre d\'elements' },
+  ]},
+];
+
+const FORMULA_OPERATORS = [
+  { symbol: '+', label: '+', desc: 'Addition' },
+  { symbol: '-', label: '-', desc: 'Soustraction' },
+  { symbol: '*', label: '*', desc: 'Multiplication' },
+  { symbol: '/', label: '/', desc: 'Division' },
+  { symbol: '%', label: '%', desc: 'Modulo' },
+  { symbol: '(', label: '(', desc: 'Parenthese ouvrante' },
+  { symbol: ')', label: ')', desc: 'Parenthese fermante' },
+];
+
+const VisualFormulaBuilder = ({ formula, allSources, testResult, onFormulaChange, onTestFormula }) => {
+  const textareaRef = React.useRef(null);
+  const [showFunctions, setShowFunctions] = useState(false);
+
+  const insertAtCursor = (text) => {
+    const el = textareaRef.current;
+    if (!el) {
+      onFormulaChange((formula || '') + text);
+      return;
+    }
+    const start = el.selectionStart;
+    const end = el.selectionEnd;
+    const before = (formula || '').substring(0, start);
+    const after = (formula || '').substring(end);
+    const newFormula = before + text + after;
+    onFormulaChange(newFormula);
+    // Place cursor after inserted text
+    setTimeout(() => {
+      el.focus();
+      const pos = start + text.length;
+      el.setSelectionRange(pos, pos);
+    }, 0);
+  };
+
+  const insertSource = (sourceName) => {
+    insertAtCursor(`$${sourceName}`);
+  };
+
+  const insertOperator = (op) => {
+    insertAtCursor(` ${op} `);
+  };
+
+  const insertFunction = (fn) => {
+    insertAtCursor(fn.tpl);
+    setShowFunctions(false);
+  };
+
+  const clearFormula = () => {
+    onFormulaChange('');
+    textareaRef.current?.focus();
+  };
+
+  // Syntax highlight for display
+  const renderHighlightedFormula = () => {
+    if (!formula) return <span className="text-gray-400 italic">Formule vide - utilisez les blocs ci-dessous</span>;
+    const parts = formula.split(/(\$\w+|SUM|AVG|MIN|MAX|COUNT|ABS|ROUND|SQRT|POW|IF|IFERROR|PERCENTAGE|GROWTH_RATE|CONCAT|VS_PREV_MONTH|VS_PREV_YEAR)/g);
+    return parts.map((part, i) => {
+      if (part.startsWith('$')) {
+        return <span key={i} className="inline-block bg-blue-100 text-blue-700 px-1 rounded text-xs font-semibold">{part}</span>;
+      }
+      if (/^(SUM|AVG|MIN|MAX|COUNT|ABS|ROUND|SQRT|POW|IF|IFERROR|PERCENTAGE|GROWTH_RATE|CONCAT|VS_PREV_MONTH|VS_PREV_YEAR)$/.test(part)) {
+        return <span key={i} className="inline-block bg-purple-100 text-purple-700 px-1 rounded text-xs font-semibold">{part}</span>;
+      }
+      return <span key={i} className="text-xs">{part}</span>;
+    });
+  };
+
+  return (
+    <div className="space-y-3" data-testid="visual-formula-builder">
+      {/* Formula preview with syntax highlighting */}
+      <div className="border rounded-lg overflow-hidden">
+        <div className="flex items-center justify-between px-3 py-1.5 bg-gradient-to-r from-violet-50 to-purple-50 border-b">
+          <div className="flex items-center gap-2">
+            <Calculator className="h-4 w-4 text-purple-600" />
+            <span className="text-xs font-semibold text-purple-800">Constructeur de formule</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <Button variant="ghost" size="sm" className="h-6 px-2 text-[10px]" onClick={clearFormula}>
+              <Trash2 className="h-3 w-3 mr-1" />Effacer
+            </Button>
+          </div>
+        </div>
+
+        {/* Highlighted preview */}
+        <div className="px-3 py-2 bg-white min-h-[28px] flex flex-wrap items-center gap-0.5 border-b" data-testid="formula-preview">
+          {renderHighlightedFormula()}
+        </div>
+
+        {/* Raw textarea */}
+        <textarea
+          ref={textareaRef}
+          value={formula}
+          onChange={(e) => onFormulaChange(e.target.value)}
+          placeholder="Tapez directement ou utilisez les blocs ci-dessous..."
+          rows={2}
+          className="w-full px-3 py-2 text-xs font-mono bg-gray-50 border-0 focus:ring-0 focus:outline-none resize-none"
+          data-testid="formula-textarea"
+        />
+      </div>
+
+      {/* Sources - clickable chips */}
+      {allSources.length > 0 && (
+        <div data-testid="formula-sources">
+          <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Sources disponibles</p>
+          <div className="flex flex-wrap gap-1.5">
+            {allSources.map(s => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => insertSource(s.name)}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 text-xs font-medium hover:bg-blue-100 hover:border-blue-300 hover:shadow-sm transition-all active:scale-95"
+                data-testid={`source-chip-${s.name}`}
+              >
+                <Database className="h-3 w-3" />
+                ${s.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Operators */}
+      <div data-testid="formula-operators">
+        <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Operateurs</p>
+        <div className="flex flex-wrap gap-1">
+          {FORMULA_OPERATORS.map(op => (
+            <button
+              key={op.symbol}
+              type="button"
+              onClick={() => insertOperator(op.symbol)}
+              title={op.desc}
+              className="w-9 h-9 flex items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-700 text-sm font-bold hover:bg-gray-100 hover:border-gray-300 hover:shadow-sm transition-all active:scale-95"
+              data-testid={`op-${op.symbol === '(' ? 'paren-open' : op.symbol === ')' ? 'paren-close' : op.label}`}
+            >
+              {op.label}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => insertAtCursor(' 0 ')}
+            title="Inserer zero"
+            className="w-9 h-9 flex items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 text-xs font-bold hover:bg-gray-100 transition-all active:scale-95"
+          >
+            0
+          </button>
+          <button
+            type="button"
+            onClick={() => insertAtCursor(' 100 ')}
+            title="Inserer 100"
+            className="px-3 h-9 flex items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-500 text-xs font-bold hover:bg-gray-100 transition-all active:scale-95"
+          >
+            100
+          </button>
+        </div>
+      </div>
+
+      {/* Functions palette */}
+      <div data-testid="formula-functions">
+        <button
+          type="button"
+          onClick={() => setShowFunctions(!showFunctions)}
+          className="flex items-center gap-1.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5 hover:text-purple-600 transition-colors"
+        >
+          <Calculator className="h-3 w-3" />
+          Fonctions {showFunctions ? '(masquer)' : '(afficher)'}
+        </button>
+        {showFunctions && (
+          <div className="grid grid-cols-2 gap-2 p-3 bg-gray-50 rounded-lg border" data-testid="functions-palette">
+            {FORMULA_FUNCTIONS.map(cat => (
+              <div key={cat.cat}>
+                <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">{cat.cat}</p>
+                <div className="space-y-0.5">
+                  {cat.items.map(fn => (
+                    <button
+                      key={fn.name}
+                      type="button"
+                      onClick={() => insertFunction(fn)}
+                      className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-left hover:bg-purple-50 hover:text-purple-700 transition-colors group"
+                      data-testid={`fn-${fn.name}`}
+                    >
+                      <code className="text-[11px] font-bold text-purple-600 group-hover:text-purple-800 min-w-[80px]">{fn.name}()</code>
+                      <span className="text-[10px] text-gray-500 group-hover:text-purple-600">{fn.desc}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Test button + result */}
+      <div className="flex items-center gap-2 pt-1">
+        <Button variant="outline" size="sm" onClick={onTestFormula} data-testid="test-formula-btn">
+          <Play className="h-4 w-4 mr-1" />
+          Tester la formule
+        </Button>
+        {testResult && (
+          <div className={`flex items-center gap-1 text-sm ${testResult.success ? 'text-green-600' : 'text-red-600'}`}>
+            {testResult.success ? <Check className="h-4 w-4" /> : <X className="h-4 w-4" />}
+            {testResult.message}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+
 // Composant de pre-visualisation interactive Excel
 const ExcelPreviewTable = ({ fileId, sheets, excelConfig, onSelectCell, onSelectColumn }) => {
   const [previewData, setPreviewData] = useState(null);
@@ -1421,56 +1655,13 @@ const DataSourceEditor = ({
       )}
 
       {source.type === 'formula' && (
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label>Formule</Label>
-            <div className="flex gap-2">
-              <Textarea
-                value={source.formula || ''}
-                onChange={(e) => onUpdate({ formula: e.target.value })}
-                placeholder="Ex: ($source1 + $source2) / 2 * 100"
-                rows={3}
-                className="font-mono text-sm"
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={onTestFormula}>
-                <Play className="h-4 w-4 mr-1" />
-                Tester
-              </Button>
-              {testResult && (
-                <span className={`text-sm ${testResult.success ? 'text-green-600' : 'text-red-600'}`}>
-                  {testResult.message}
-                </span>
-              )}
-            </div>
-          </div>
-
-          <div className="bg-gray-50 rounded-lg p-3 text-sm">
-            <div className="flex items-center gap-2 mb-2">
-              <HelpCircle className="h-4 w-4 text-gray-500" />
-              <span className="font-medium">Aide formule</span>
-            </div>
-            <ul className="text-gray-600 space-y-1 text-xs">
-              <li><code className="bg-gray-200 px-1 rounded">$nom_source</code> - Référence une autre source</li>
-              <li><code className="bg-gray-200 px-1 rounded">+ - * / %</code> - Opérations de base</li>
-              <li><code className="bg-gray-200 px-1 rounded">SUM(), AVG(), MIN(), MAX()</code> - Fonctions</li>
-              <li><code className="bg-gray-200 px-1 rounded">IF(condition, alors, sinon)</code> - Condition</li>
-              <li><code className="bg-gray-200 px-1 rounded">PERCENTAGE(part, total)</code> - Pourcentage</li>
-              <li><code className="bg-gray-200 px-1 rounded">GROWTH_RATE(actuel, précédent)</code> - Taux de croissance</li>
-            </ul>
-            {allSources.filter(s => s.id !== source.id && s.name).length > 0 && (
-              <div className="mt-2 pt-2 border-t">
-                <span className="font-medium">Sources disponibles: </span>
-                {allSources.filter(s => s.id !== source.id && s.name).map(s => (
-                  <code key={s.id} className="bg-blue-100 text-blue-700 px-1 rounded mx-1">
-                    ${s.name}
-                  </code>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
+        <VisualFormulaBuilder
+          formula={source.formula || ''}
+          allSources={allSources.filter(s => s.id !== source.id && s.name)}
+          testResult={testResult}
+          onFormulaChange={(formula) => onUpdate({ formula })}
+          onTestFormula={onTestFormula}
+        />
       )}
 
       {/* Valeur en cache */}
