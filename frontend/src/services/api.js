@@ -646,6 +646,10 @@ export const presquAccidentAPI = {
   
   exportTemplate: () => api.get('/presqu-accident/export/template', {
     responseType: 'blob'
+  }).then(res => res.data),
+
+  export: () => api.get('/presqu-accident/export', {
+    responseType: 'blob'
   }).then(res => res.data)
 };
 

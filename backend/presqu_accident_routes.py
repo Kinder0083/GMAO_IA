@@ -981,6 +981,51 @@ async def export_template(current_user: dict = Depends(get_current_user)):
         logger.error(f"Erreur export template: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/export")
+async def export_presqu_accidents(current_user: dict = Depends(get_current_user)):
+    """Exporter tous les presqu'accidents en fichier Excel (.xlsx)"""
+    try:
+        import pandas as pd
+        from io import BytesIO
+        from fastapi.responses import StreamingResponse
+
+        items = await db.presqu_accident_items.find(
+            {}, {"_id": 0}
+        ).sort("created_at", -1).to_list(length=10000)
+
+        if not items:
+            items = [{"titre": "Aucun presqu'accident"}]
+
+        df = pd.DataFrame(items)
+
+        col_order = [
+            "numero", "titre", "description", "date_incident", "lieu",
+            "service", "categorie_incident", "severite", "status",
+            "personnes_impliquees", "declarant", "contexte_cause",
+            "conditions_incident", "mesures_immediates", "actions_proposees",
+            "commentaire_traitement", "responsable_action", "created_at"
+        ]
+        existing_cols = [c for c in col_order if c in df.columns]
+        other_cols = [c for c in df.columns if c not in col_order]
+        df = df[existing_cols + other_cols]
+
+        buffer = BytesIO()
+        df.to_excel(buffer, index=False, engine='openpyxl', sheet_name='Presqu-accidents')
+        buffer.seek(0)
+
+        return StreamingResponse(
+            buffer,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={
+                "Content-Disposition": "attachment; filename=presqu_accidents.xlsx"
+            }
+        )
+    except Exception as e:
+        logger.error(f"Erreur export presqu'accidents: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+
 
 
 async def _extract_with_gemini(content: bytes, filename: str) -> list:
