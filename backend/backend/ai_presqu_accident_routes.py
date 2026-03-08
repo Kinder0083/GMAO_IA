@@ -411,10 +411,10 @@ async def analyze_trends(
         for it in items:
             incidents_detail.append(
                 f"N°:{it.get('numero')} | Date:{it.get('date_incident')} | "
-                f"Titre:{it.get('titre')} | Desc:{it.get('description','')[:100]} | "
+                f"Titre:{it.get('titre')} | Desc:{(it.get('description') or '')[:100]} | "
                 f"Lieu:{it.get('lieu','')} | Service:{it.get('service','')} | "
                 f"Cat:{it.get('categorie_incident','')} | Sévérité:{it.get('severite','')} | "
-                f"Statut:{it.get('status','')} | Cause:{it.get('contexte_cause','')[:80]}"
+                f"Statut:{it.get('status','')} | Cause:{(it.get('contexte_cause') or '')[:80]}"
             )
 
         system_msg = """Tu es un expert QHSE en analyse de données de sécurité industrielle.
@@ -667,7 +667,7 @@ async def generate_qhse_report(
                 f"Titre:{it.get('titre')} | Lieu:{it.get('lieu','')} | "
                 f"Service:{it.get('service','')} | Cat:{it.get('categorie_incident','')} | "
                 f"Sévérité:{it.get('severite','')} | Statut:{it.get('status','')} | "
-                f"Cause:{it.get('contexte_cause','')[:80]}"
+                f"Cause:{(it.get('contexte_cause') or '')[:80]}"
             )
 
         system_msg = """Tu es un expert QHSE. Génère un rapport de synthèse structuré et professionnel
