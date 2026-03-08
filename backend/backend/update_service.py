@@ -702,9 +702,14 @@ class UpdateService:
 
     async def apply_update(self, version: str) -> Dict:
         """
-        Applique une mise a jour IN-PROCESS (pas de worker externe).
-        Chaque etape est sauvegardee dans MongoDB en temps reel via motor (async).
-        A la fin, un script bash detache redemarre les services.
+        Applique une mise a jour IN-PROCESS.
+        Reproduit exactement les commandes manuelles qui fonctionnent:
+          1. Sauvegarde .env
+          2. rm -rf .git && git init && git fetch && git reset --hard
+          3. Restauration .env
+          4. source venv/bin/activate && pip install -r requirements.txt
+          5. cd frontend && yarn install && yarn build
+          6. Redemarrage services
         """
         import subprocess as sp
         import tempfile
@@ -721,12 +726,22 @@ class UpdateService:
             full_log += line + "\n"
             logger.info(f"[MAJ] {msg}")
 
+        async def run_cmd(cmd_str, cwd=None, timeout=120):
+            """Execute une commande shell et retourne (returncode, stdout, stderr)."""
+            proc = await asyncio.create_subprocess_shell(
+                cmd_str,
+                cwd=cwd or str(self.app_root),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+            return proc.returncode, stdout.decode(errors='replace'), stderr.decode(errors='replace')
+
         log("=" * 60)
-        log(f"MISE A JOUR FSAO IRIS (in-process v5.0)")
+        log(f"MISE A JOUR FSAO IRIS v6.0")
         log(f"Version cible: {version}")
         log(f"APP_ROOT: {self.app_root}")
         log(f"GitHub: {self.github_user}/{self.github_repo}:{self.github_branch}")
-        log(f"Update ID: {update_id}")
         log("=" * 60)
 
         await self._save_update_log(update_id, "Demarrage", full_log, errors, version=version)
@@ -743,6 +758,8 @@ class UpdateService:
             "created_at": datetime.now(timezone.utc).isoformat()
         }
 
+        github_url = f"https://github.com/{self.github_user}/{self.github_repo}.git"
+
         try:
             # === ETAPE 1/6: Sauvegarde .env ===
             log("\n=== ETAPE 1/6: Sauvegarde .env ===")
@@ -751,110 +768,45 @@ class UpdateService:
                 dst = f"/tmp/{f.replace('/', '_')}"
                 if os.path.exists(src):
                     shutil.copy2(src, dst)
-                    log(f"  {src} -> {dst}")
+                    log(f"  OK: {f}")
             await self._save_update_log(update_id, "1/6 Sauvegarde .env", full_log, errors, version=version)
 
-            # === ETAPE 2/6: Git - Recuperer le code ===
-            log("\n=== ETAPE 2/6: Recuperation du code depuis GitHub ===")
-            git_dir = self.app_root
-            git_available = False
+            # === ETAPE 2/6: Git - rm -rf .git + git init + fetch + reset --hard ===
+            log("\n=== ETAPE 2/6: Recuperation code (methode clean) ===")
 
-            try:
-                git_v = subprocess.run(["git", "--version"], capture_output=True, text=True, timeout=5)
-                git_available = (git_v.returncode == 0)
-                log(f"  Git disponible: {git_available}")
-            except Exception:
-                log("  Git non disponible")
+            # Supprimer le .git corrompu
+            git_dir_path = self.app_root / ".git"
+            if git_dir_path.exists():
+                shutil.rmtree(str(git_dir_path), ignore_errors=True)
+                log("  rm -rf .git OK")
 
-            if git_available:
-                post_merge_hook = git_dir / ".git" / "hooks" / "post-merge"
-                post_merge_disabled = git_dir / ".git" / "hooks" / "post-merge.disabled"
-                hook_was_disabled = False
-                if post_merge_hook.exists():
-                    try:
-                        os.rename(str(post_merge_hook), str(post_merge_disabled))
-                        hook_was_disabled = True
-                        log("  Hook post-merge desactive temporairement")
-                    except Exception as e:
-                        log(f"  Impossible de desactiver le hook: {e}")
+            # git init
+            rc, out, err = await run_cmd("git init")
+            log(f"  git init: rc={rc}")
 
-                if (git_dir / ".git").exists():
-                    log("  Methode: git pull (depot existant)")
-                    stash_proc = await asyncio.create_subprocess_exec(
-                        "git", "stash", cwd=str(git_dir),
-                        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-                    )
-                    await stash_proc.communicate()
+            # git remote add origin
+            rc, out, err = await run_cmd(f"git remote add origin {github_url}")
+            log(f"  git remote add: rc={rc}")
 
-                    pull_proc = await asyncio.create_subprocess_exec(
-                        "git", "pull", "origin", self.github_branch, cwd=str(git_dir),
-                        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-                    )
-                    pull_stdout, pull_stderr = await asyncio.wait_for(pull_proc.communicate(), timeout=120)
+            # git fetch origin main
+            log("  git fetch origin main ...")
+            rc, out, err = await run_cmd(f"git fetch origin {self.github_branch}", timeout=180)
+            if rc == 0:
+                log(f"  git fetch OK")
+            else:
+                log(f"  git fetch ERREUR: {err[:300]}")
+                errors.append(f"git fetch echoue: {err[:200]}")
 
-                    if pull_proc.returncode == 0:
-                        log(f"  git pull OK: {pull_stdout.decode(errors='replace')[:300]}")
-                        code_updated = True
-                    else:
-                        pull_err = pull_stderr.decode(errors='replace')
-                        log(f"  git pull echoue: {pull_err[:300]}")
-                        log("  Fallback: git fetch + reset --hard")
-                        fetch_proc = await asyncio.create_subprocess_exec(
-                            "git", "fetch", "origin", self.github_branch, cwd=str(git_dir),
-                            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-                        )
-                        await asyncio.wait_for(fetch_proc.communicate(), timeout=120)
-                        if fetch_proc.returncode == 0:
-                            reset_proc = await asyncio.create_subprocess_exec(
-                                "git", "reset", "--hard", f"origin/{self.github_branch}", cwd=str(git_dir),
-                                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-                            )
-                            await asyncio.wait_for(reset_proc.communicate(), timeout=60)
-                            if reset_proc.returncode == 0:
-                                log("  git reset --hard OK")
-                                code_updated = True
-                            else:
-                                errors.append("git reset echoue")
-                        else:
-                            errors.append("git fetch echoue")
+            # git reset --hard origin/main
+            if rc == 0:
+                rc, out, err = await run_cmd(f"git reset --hard origin/{self.github_branch}")
+                if rc == 0:
+                    log(f"  git reset --hard OK: {out[:200]}")
+                    code_updated = True
                 else:
-                    log("  Methode: git init (pas de depot existant)")
-                    await (await asyncio.create_subprocess_exec(
-                        "git", "init", cwd=str(git_dir),
-                        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-                    )).communicate()
-                    github_url = f"https://github.com/{self.github_user}/{self.github_repo}.git"
-                    await (await asyncio.create_subprocess_exec(
-                        "git", "remote", "add", "origin", github_url, cwd=str(git_dir),
-                        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-                    )).communicate()
-                    fetch_proc = await asyncio.create_subprocess_exec(
-                        "git", "fetch", "origin", self.github_branch, cwd=str(git_dir),
-                        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-                    )
-                    await asyncio.wait_for(fetch_proc.communicate(), timeout=120)
-                    if fetch_proc.returncode == 0:
-                        reset_proc = await asyncio.create_subprocess_exec(
-                            "git", "reset", "--hard", f"origin/{self.github_branch}", cwd=str(git_dir),
-                            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-                        )
-                        await asyncio.wait_for(reset_proc.communicate(), timeout=60)
-                        if reset_proc.returncode == 0:
-                            log("  git init + fetch + reset OK")
-                            code_updated = True
-                        else:
-                            errors.append("git reset echoue (init)")
-                    else:
-                        errors.append("git fetch echoue (init)")
+                    log(f"  git reset ERREUR: {err[:300]}")
+                    errors.append(f"git reset echoue: {err[:200]}")
 
-                if hook_was_disabled and post_merge_disabled.exists():
-                    try:
-                        os.rename(str(post_merge_disabled), str(post_merge_hook))
-                    except Exception:
-                        pass
-
-            if not code_updated:
-                log("  AVERTISSEMENT: Code non mis a jour via Git")
             await self._save_update_log(update_id, "2/6 Git", full_log, errors, version=version)
 
             # === ETAPE 3/6: Restauration .env ===
@@ -864,42 +816,45 @@ class UpdateService:
                 dst = os.path.join(str(self.app_root), f)
                 if os.path.exists(src):
                     shutil.copy2(src, dst)
-                    log(f"  {src} -> {dst}")
+                    log(f"  OK: {f}")
             await self._save_update_log(update_id, "3/6 Restauration .env", full_log, errors, version=version)
 
-            # === ETAPE 4/6: Dependances backend (pip) ===
+            # === ETAPE 4/6: pip install via venv ===
             log("\n=== ETAPE 4/6: Installation dependances backend ===")
+            venv_activate = self.app_root / "venv" / "bin" / "activate"
             backend_req = self.backend_dir / "requirements.txt"
-            if backend_req.exists():
-                venv_pip = None
-                for pip_path in [
-                    self.app_root / "venv" / "bin" / "pip",
-                    self.app_root / "venv" / "bin" / "pip3",
-                    self.backend_dir / "venv" / "bin" / "pip",
-                    self.backend_dir / "venv" / "bin" / "pip3",
-                ]:
-                    if pip_path.exists():
-                        venv_pip = str(pip_path)
-                        break
-                pip_cmd = venv_pip if venv_pip else "pip3"
-                extra_index = "https://d33sy5i8bnduwe.cloudfront.net/simple/"
-                log(f"  pip: {pip_cmd}")
-                pip_proc = await asyncio.create_subprocess_exec(
-                    pip_cmd, "install", "-r", str(backend_req),
-                    "--extra-index-url", extra_index,
-                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-                )
-                pip_stdout, pip_stderr = await asyncio.wait_for(pip_proc.communicate(), timeout=300)
-                if pip_proc.returncode == 0:
+            extra_index = "https://d33sy5i8bnduwe.cloudfront.net/simple/"
+
+            if venv_activate.exists() and backend_req.exists():
+                # Reproduit exactement: source venv/bin/activate && pip install -r backend/requirements.txt
+                pip_cmd = f"source {venv_activate} && pip install -r {backend_req} --extra-index-url {extra_index}"
+                log(f"  Commande: {pip_cmd}")
+                rc, out, err = await run_cmd(f"bash -c '{pip_cmd}'", timeout=300)
+                if rc == 0:
                     log("  pip install OK")
                 else:
-                    log(f"  pip install AVERTISSEMENT: {pip_stderr.decode(errors='replace')[:500]}")
+                    log(f"  pip install ERREUR (rc={rc}): {err[:500]}")
+                    # Non bloquant
+            elif backend_req.exists():
+                # Fallback: pip3 direct
+                venv_pip = None
+                for p in [self.app_root / "venv" / "bin" / "pip3", self.app_root / "venv" / "bin" / "pip"]:
+                    if p.exists():
+                        venv_pip = str(p)
+                        break
+                pip_bin = venv_pip or "pip3"
+                rc, out, err = await run_cmd(f"{pip_bin} install -r {backend_req} --extra-index-url {extra_index}", timeout=300)
+                log(f"  pip install (fallback): rc={rc}")
+                if rc != 0:
+                    log(f"  pip ERREUR: {err[:500]}")
+
             await self._save_update_log(update_id, "4/6 pip install", full_log, errors, version=version)
 
-            # === ETAPE 5/6: Dependances frontend (yarn) ===
-            log("\n=== ETAPE 5/6: Installation dependances frontend ===")
-            frontend_package = self.frontend_dir / "package.json"
-            if frontend_package.exists() and self.frontend_dir.is_dir():
+            # === ETAPE 5/6: Frontend - yarn install + yarn build ===
+            log("\n=== ETAPE 5/6: Frontend (yarn install + build) ===")
+            frontend_dir = str(self.frontend_dir)
+            if (self.frontend_dir / "package.json").exists():
+                # Backup du build existant
                 build_dir = self.frontend_dir / "build"
                 build_backup = self.frontend_dir / "build_backup"
                 if build_dir.exists():
@@ -907,52 +862,59 @@ class UpdateService:
                         if build_backup.exists():
                             shutil.rmtree(str(build_backup))
                         shutil.copytree(str(build_dir), str(build_backup))
-                        log("  Backup du build frontend cree")
+                        log("  Backup build/ cree")
                     except Exception as e:
-                        log(f"  Impossible de backup build/: {e}")
-                build_env = os.environ.copy()
-                build_env["CI"] = "false"
-                build_env["NODE_OPTIONS"] = "--max_old_space_size=1024"
-                yarn_proc = await asyncio.create_subprocess_exec(
-                    "yarn", "install", cwd=str(self.frontend_dir),
-                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, env=build_env
-                )
-                await asyncio.wait_for(yarn_proc.communicate(), timeout=300)
-                if yarn_proc.returncode == 0:
+                        log(f"  Backup build/ impossible: {e}")
+
+                # yarn install
+                rc, out, err = await run_cmd("yarn install", cwd=frontend_dir, timeout=300)
+                if rc == 0:
                     log("  yarn install OK")
                 else:
-                    log("  yarn install AVERTISSEMENT")
+                    log(f"  yarn install AVERTISSEMENT: {err[:300]}")
+
                 await self._save_update_log(update_id, "5/6 yarn install", full_log, errors, version=version)
-                log("  Compilation frontend (yarn build)...")
-                build_proc = await asyncio.create_subprocess_exec(
-                    "yarn", "build", cwd=str(self.frontend_dir),
-                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, env=build_env
-                )
-                build_stdout, build_stderr = await asyncio.wait_for(build_proc.communicate(), timeout=600)
-                if build_proc.returncode == 0:
-                    log("  yarn build OK")
+
+                # yarn build
+                log("  yarn build ...")
+                build_env_str = "CI=false NODE_OPTIONS=--max_old_space_size=1024"
+                rc, out, err = await run_cmd(f"{build_env_str} yarn build", cwd=frontend_dir, timeout=600)
+                if rc == 0:
+                    index_html = build_dir / "index.html"
+                    if index_html.exists():
+                        log("  yarn build OK (index.html present)")
+                    else:
+                        log("  yarn build OK mais index.html absent!")
+                        errors.append("yarn build: index.html absent")
                 else:
-                    log(f"  yarn build echoue: {build_stderr.decode(errors='replace')[:300]}")
+                    log(f"  yarn build ERREUR: {err[:500]}")
+                    errors.append("yarn build echoue")
+                    # Restaurer le backup
                     if build_backup.exists():
                         try:
                             if build_dir.exists():
                                 shutil.rmtree(str(build_dir))
                             shutil.copytree(str(build_backup), str(build_dir))
-                            log("  Build frontend restaure depuis le backup")
+                            log("  Build restaure depuis le backup")
+                            errors.pop()  # Retirer l'erreur car on a un fallback
                         except Exception:
                             pass
+
+                # Nettoyer backup
                 if build_backup.exists():
                     try:
                         shutil.rmtree(str(build_backup))
                     except Exception:
                         pass
+
             await self._save_update_log(update_id, "5/6 Frontend", full_log, errors, version=version)
 
-            # === ETAPE 6/6: Redemarrage des services ===
-            log("\n=== ETAPE 6/6: Planification du redemarrage ===")
-            success = len(errors) == 0
+            # === ETAPE 6/6: Redemarrage ===
+            log("\n=== ETAPE 6/6: Redemarrage des services ===")
+            success = code_updated and len(errors) == 0
             status = "success" if success else "failed"
             completed_at = datetime.now(timezone.utc).isoformat()
+
             update_history["completed_at"] = completed_at
             update_history["status"] = status
             update_history["success"] = success
@@ -969,10 +931,12 @@ class UpdateService:
                 await self.db.system_update_history.insert_one(update_history)
             except Exception as e:
                 log(f"  Erreur sauvegarde historique: {e}")
+
             if success:
                 log("MISE A JOUR REUSSIE")
             else:
                 log(f"MISE A JOUR AVEC ERREURS: {errors}")
+
             await self.db.system_settings.update_one(
                 {"key": "last_update_result"},
                 {"$set": {
@@ -991,6 +955,8 @@ class UpdateService:
                 }},
                 upsert=True
             )
+
+            # Script de redemarrage detache
             try:
                 restart_script = tempfile.NamedTemporaryFile(
                     mode='w', suffix='.sh', prefix='gmao_restart_', dir='/tmp', delete=False
@@ -1008,6 +974,7 @@ rm -f {restart_script.name}
                 log("  Redemarrage planifie dans 3 secondes")
             except Exception as e:
                 log(f"  Impossible de planifier le redemarrage: {e}")
+
             log("=" * 60)
             return {
                 "success": True,
