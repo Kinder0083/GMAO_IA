@@ -9650,18 +9650,14 @@ async def broadcast_update_warning(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@api_router.post("/updates/apply", status_code=202)
+@api_router.post("/updates/apply")
 async def apply_update_endpoint(
     version: str,
     current_user: dict = Depends(get_current_admin_user)
 ):
-    """
-    Lance une mise à jour en arrière-plan (Admin uniquement).
-    Génère un script bash autonome et retourne immédiatement (HTTP 202).
-    """
+    """Lance une mise a jour in-process (Admin uniquement)."""
     try:
-        logger.info(f"[MAJ] Demande de mise à jour vers {version} par {current_user.get('email')}")
-        
+        logger.info(f"[MAJ] Demande MAJ vers {version} par {current_user.get('email')}")
         await audit_service.log_action(
             user_id=current_user.get("id"),
             user_name=f"{current_user.get('prenom')} {current_user.get('nom')}",
@@ -9669,11 +9665,9 @@ async def apply_update_endpoint(
             action=ActionType.UPDATE,
             entity_type=EntityType.SETTINGS,
             entity_id="system_update",
-            entity_name=f"Mise à jour vers {version}"
+            entity_name=f"Mise a jour vers {version}"
         )
-        
         result = await update_service.apply_update(version)
-        
         if result.get("accepted") or result.get("success"):
             return {
                 "accepted": True,
@@ -9681,12 +9675,12 @@ async def apply_update_endpoint(
                 "message": result.get("message", "Mise a jour lancee"),
                 "update_id": result.get("update_id"),
                 "version": version,
-                "pid": result.get("pid"),
+                "code_updated": result.get("code_updated", False),
+                "errors": result.get("errors", []),
                 "diagnostic": result.get("diagnostic", {})
             }
         else:
-            raise HTTPException(status_code=500, detail=result.get("message", "Erreur lors du lancement"))
-            
+            raise HTTPException(status_code=500, detail=result.get("message", "Erreur"))
     except HTTPException:
         raise
     except Exception as e:

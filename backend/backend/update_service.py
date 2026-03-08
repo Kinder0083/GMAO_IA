@@ -13,6 +13,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional, Dict
 import shutil
+import sys
 import uuid
 
 logger = logging.getLogger(__name__)
@@ -675,246 +676,386 @@ class UpdateService:
             )
             return (False, "", str(e))
 
-    async def apply_update(self, version: str) -> Dict:
-        """
-        Applique une mise à jour via un script bash autonome.
-        Le script reproduit EXACTEMENT les commandes SSH manuelles de l'administrateur.
-        """
-        import subprocess as sp
-        
-        update_id = str(uuid.uuid4())
-        result_file = f"/tmp/gmao_update_result_{update_id}.json"
-        script_path = f"/tmp/gmao_update_{update_id}.sh"
-        log_path = f"/tmp/gmao_update_{update_id}.log"
-        
-        # Log les chemins pour diagnostic
-        logger.info(f"[MAJ] === DIAGNOSTIC CHEMINS ===")
-        logger.info(f"[MAJ] APP_ROOT: {self.app_root} (exists: {self.app_root.exists()})")
-        logger.info(f"[MAJ] BACKEND_DIR: {self.backend_dir} (exists: {self.backend_dir.exists()})")
-        logger.info(f"[MAJ] FRONTEND_DIR: {self.frontend_dir} (exists: {self.frontend_dir.exists()})")
-        logger.info(f"[MAJ] Version: {self.current_version} -> {version}")
-        logger.info(f"[MAJ] GitHub: {self.github_user}/{self.github_repo} branch:{self.github_branch}")
-        logger.info(f"[MAJ] Script: {script_path}")
-        logger.info(f"[MAJ] Log: {log_path}")
-        logger.info(f"[MAJ] Result: {result_file}")
-        
-        # Sauvegarder le statut in_progress dans la DB
-        # IMPORTANT: log_path dans /var/log/ car git reset écrase APP_ROOT
+    async def _save_update_log(self, update_id, step, log_output, errors,
+                               status="in_progress", success=False, version=""):
+        """Sauvegarde le log de mise a jour dans MongoDB (fiable, in-process)."""
         try:
             await self.db.system_settings.update_one(
                 {"key": "last_update_result"},
                 {"$set": {
                     "key": "last_update_result",
-                    "in_progress": True,
-                    "success": False,
-                    "code_updated": False,
-                    "version_before": self.current_version,
-                    "version_after": version,
+                    "in_progress": status == "in_progress",
+                    "success": success,
+                    "code_updated": success,
                     "history_id": update_id,
-                    "started_at": datetime.now(timezone.utc).isoformat(),
-                    "log_path": persistent_log,
-                    "errors": [],
-                    "warnings": [],
-                    "completed_at": None
+                    "current_step": step,
+                    "log_output": log_output[-10000:],
+                    "errors": errors,
+                    "status": status,
+                    "version_after": version,
+                    "updated_at": datetime.now(timezone.utc).isoformat()
                 }},
                 upsert=True
             )
         except Exception as e:
-            logger.error(f"[MAJ] Erreur sauvegarde statut: {e}")
-        
-        # NE PAS activer la maintenance - elle modifie la config NGINX
-        # et peut bloquer l'utilisateur apres le reboot
-        # Les commandes SSH de l'admin ne le font pas non plus
-        logger.info("[MAJ] Maintenance non activee (commandes SSH identiques)")
-        
-        # Détecter le venv
-        venv_activate = ""
-        for venv_path in [self.app_root / "venv" / "bin" / "activate", self.backend_dir / "venv" / "bin" / "activate"]:
-            if venv_path.exists():
-                venv_activate = str(venv_path)
-                break
-        logger.info(f"[MAJ] venv: {venv_activate if venv_activate else 'NON TROUVÉ'}")
-        
-        mongo_url = os.environ.get('MONGO_URL', 'mongodb://localhost:27017/cmms')
-        
-        # ============================================================
-        # SCRIPT BASH - COPIE EXACTE des commandes SSH de l'administrateur
-        # ============================================================
-        log_dir = str(self.app_root.parent / "gmao-iris-logs")
-        persistent_log = f"{log_dir}/update.log"
-        persistent_result = f"{log_dir}/update-result.json"
-        
-        script_content = f"""#!/bin/bash
-#
-# FSAO Iris - Mise a jour v5.0
-# Commandes IDENTIQUES a celles executees manuellement en SSH
-#
+            logger.error(f"[MAJ] Erreur sauvegarde log MongoDB: {e}")
 
-APP_ROOT="{self.app_root}"
-GITHUB_URL="https://github.com/{self.github_user}/{self.github_repo}.git"
+    async def apply_update(self, version: str) -> Dict:
+        """
+        Applique une mise a jour IN-PROCESS (pas de worker externe).
+        Chaque etape est sauvegardee dans MongoDB en temps reel via motor (async).
+        A la fin, un script bash detache redemarre les services.
+        """
+        import subprocess as sp
+        import tempfile
 
-# Log dans un repertoire HORS du depot git (survit a git reset + reboot)
-LOG_DIR="{log_dir}"
-mkdir -p "$LOG_DIR" 2>/dev/null || LOG_DIR="/tmp"
-LOG_FILE="$LOG_DIR/update.log"
-RESULT_FILE="$LOG_DIR/update-result.json"
-touch "$LOG_FILE" 2>/dev/null || LOG_FILE="/tmp/gmao-iris-update.log"
-touch "$RESULT_FILE" 2>/dev/null || RESULT_FILE="/tmp/gmao-iris-update-result.json"
+        update_id = str(uuid.uuid4())
+        full_log = ""
+        errors = []
+        code_updated = False
 
-echo "" > "$LOG_FILE"
-exec > >(tee "$LOG_FILE") 2>&1
+        def log(msg):
+            nonlocal full_log
+            ts = datetime.now().strftime("%H:%M:%S")
+            line = f"[{ts}] {msg}"
+            full_log += line + "\n"
+            logger.info(f"[MAJ] {msg}")
 
-echo "========================================================"
-echo "MISE A JOUR FSAO IRIS"
-echo "Date: $(date)"
-echo "========================================================"
+        log("=" * 60)
+        log(f"MISE A JOUR FSAO IRIS (in-process v5.0)")
+        log(f"Version cible: {version}")
+        log(f"APP_ROOT: {self.app_root}")
+        log(f"GitHub: {self.github_user}/{self.github_repo}:{self.github_branch}")
+        log(f"Update ID: {update_id}")
+        log("=" * 60)
 
-START_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-SUCCESS=false
+        await self._save_update_log(update_id, "Demarrage", full_log, errors, version=version)
 
-# === COMMANDES SSH IDENTIQUES ===
+        update_history = {
+            "id": update_id,
+            "version_before": self.current_version,
+            "version_after": version,
+            "started_at": datetime.now(timezone.utc).isoformat(),
+            "status": "in_progress",
+            "success": False,
+            "logs": [],
+            "triggered_by": "manual",
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
 
-cd "$APP_ROOT" || {{ echo "ERREUR: impossible de cd $APP_ROOT"; exit 1; }}
-echo "[1/8] cd $APP_ROOT OK"
-
-cp backend/.env /tmp/backend.env 2>/dev/null
-cp frontend/.env /tmp/frontend.env 2>/dev/null
-echo "[2/8] Sauvegarde .env OK"
-
-rm -rf .git
-echo "[3/8] rm -rf .git OK"
-
-git init
-git remote add origin "$GITHUB_URL"
-echo "[4/8] git init + remote OK"
-
-git fetch origin main
-echo "[5/8] git fetch OK"
-
-git reset --hard origin/main
-echo "[6/8] git reset --hard OK"
-
-cp /tmp/backend.env backend/.env 2>/dev/null
-cp /tmp/frontend.env frontend/.env 2>/dev/null
-echo "[7/8] Restauration .env OK"
-
-source venv/bin/activate
-pip install -r backend/requirements.txt 2>&1
-deactivate
-echo "[8/8] pip install OK"
-
-cd frontend && yarn install 2>&1 && yarn build 2>&1 && cd ..
-echo "Build frontend OK"
-
-SUCCESS=true
-END_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-
-# Sauvegarder le resultat
-LOG_CONTENT=$(tail -100 "$LOG_FILE" 2>/dev/null | sed 's/\\\\/\\\\\\\\/g; s/"/\\\\"/g; s/$/\\\\n/' | tr -d '\\n')
-cat > "$RESULT_FILE" << EOFRESULT
-{{
-  "update_id": "{update_id}",
-  "success": $SUCCESS,
-  "version_before": "{self.current_version}",
-  "version_after": "{version}",
-  "started_at": "$START_TIME",
-  "completed_at": "$END_TIME",
-  "log_path": "$LOG_FILE",
-  "log_content": "$LOG_CONTENT"
-}}
-EOFRESULT
-
-cp "$RESULT_FILE" "/var/log/gmao-iris-update-result.json" 2>/dev/null
-cp "$LOG_FILE" "/var/log/gmao-iris-update.log" 2>/dev/null
-
-echo ""
-echo "========================================================"
-echo "MISE A JOUR TERMINEE - Reboot dans 5 secondes"
-echo "========================================================"
-
-sleep 5
-
-# CRITIQUE: Restaurer la config NGINX AVANT le reboot
-# Sinon l'utilisateur sera bloque sur la page de maintenance
-echo "Restauration de la configuration NGINX..."
-for conf in /etc/nginx/sites-enabled/gmao-iris /etc/nginx/sites-enabled/fsao-iris /etc/nginx/sites-enabled/default /etc/nginx/sites-available/gmao-iris /etc/nginx/sites-available/default /etc/nginx/conf.d/gmao-iris.conf /etc/nginx/conf.d/default.conf; do
-    backup="${{conf}}.backup_pre_maintenance"
-    if [ -f "$backup" ]; then
-        real_conf=$(readlink -f "$conf" 2>/dev/null || echo "$conf")
-        real_backup="${{real_conf}}.backup_pre_maintenance"
-        if [ -f "$real_backup" ]; then
-            cp "$real_backup" "$real_conf"
-            echo "Config NGINX restauree: $real_backup -> $real_conf"
-        elif [ -f "$backup" ]; then
-            cp "$backup" "$real_conf"
-            echo "Config NGINX restauree: $backup -> $real_conf"
-        fi
-        break
-    fi
-    # Aussi chercher le backup sur le chemin reel (symlink)
-    real_conf=$(readlink -f "$conf" 2>/dev/null || echo "$conf")
-    real_backup="${{real_conf}}.backup_pre_maintenance"
-    if [ -f "$real_backup" ]; then
-        cp "$real_backup" "$real_conf"
-        echo "Config NGINX restauree: $real_backup -> $real_conf"
-        break
-    fi
-done
-rm -f "$APP_ROOT/maintenance.flag" 2>/dev/null
-nginx -t 2>/dev/null && nginx -s reload 2>/dev/null
-echo "NGINX restaure."
-
-reboot 2>/dev/null || sudo reboot 2>/dev/null || shutdown -r now 2>/dev/null || echo "ERREUR: reboot impossible"
-"""
-        
-        # Écrire et lancer le script
         try:
-            with open(script_path, 'w') as f:
-                f.write(script_content)
-            os.chmod(script_path, 0o755)
-            
-            logger.info(f"[MAJ] Script écrit: {script_path} ({os.path.getsize(script_path)} octets)")
-            
-            # Lancer avec nohup, complètement détaché
-            process = sp.Popen(
-                ['nohup', '/bin/bash', script_path],
-                stdout=open(log_path, 'a'),
-                stderr=sp.STDOUT,
-                start_new_session=True,
-                close_fds=True
+            # === ETAPE 1/6: Sauvegarde .env ===
+            log("\n=== ETAPE 1/6: Sauvegarde .env ===")
+            for f in ["backend/.env", "frontend/.env"]:
+                src = os.path.join(str(self.app_root), f)
+                dst = f"/tmp/{f.replace('/', '_')}"
+                if os.path.exists(src):
+                    shutil.copy2(src, dst)
+                    log(f"  {src} -> {dst}")
+            await self._save_update_log(update_id, "1/6 Sauvegarde .env", full_log, errors, version=version)
+
+            # === ETAPE 2/6: Git - Recuperer le code ===
+            log("\n=== ETAPE 2/6: Recuperation du code depuis GitHub ===")
+            git_dir = self.app_root
+            git_available = False
+
+            try:
+                git_v = subprocess.run(["git", "--version"], capture_output=True, text=True, timeout=5)
+                git_available = (git_v.returncode == 0)
+                log(f"  Git disponible: {git_available}")
+            except Exception:
+                log("  Git non disponible")
+
+            if git_available:
+                post_merge_hook = git_dir / ".git" / "hooks" / "post-merge"
+                post_merge_disabled = git_dir / ".git" / "hooks" / "post-merge.disabled"
+                hook_was_disabled = False
+                if post_merge_hook.exists():
+                    try:
+                        os.rename(str(post_merge_hook), str(post_merge_disabled))
+                        hook_was_disabled = True
+                        log("  Hook post-merge desactive temporairement")
+                    except Exception as e:
+                        log(f"  Impossible de desactiver le hook: {e}")
+
+                if (git_dir / ".git").exists():
+                    log("  Methode: git pull (depot existant)")
+                    stash_proc = await asyncio.create_subprocess_exec(
+                        "git", "stash", cwd=str(git_dir),
+                        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+                    )
+                    await stash_proc.communicate()
+
+                    pull_proc = await asyncio.create_subprocess_exec(
+                        "git", "pull", "origin", self.github_branch, cwd=str(git_dir),
+                        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+                    )
+                    pull_stdout, pull_stderr = await asyncio.wait_for(pull_proc.communicate(), timeout=120)
+
+                    if pull_proc.returncode == 0:
+                        log(f"  git pull OK: {pull_stdout.decode(errors='replace')[:300]}")
+                        code_updated = True
+                    else:
+                        pull_err = pull_stderr.decode(errors='replace')
+                        log(f"  git pull echoue: {pull_err[:300]}")
+                        log("  Fallback: git fetch + reset --hard")
+                        fetch_proc = await asyncio.create_subprocess_exec(
+                            "git", "fetch", "origin", self.github_branch, cwd=str(git_dir),
+                            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+                        )
+                        await asyncio.wait_for(fetch_proc.communicate(), timeout=120)
+                        if fetch_proc.returncode == 0:
+                            reset_proc = await asyncio.create_subprocess_exec(
+                                "git", "reset", "--hard", f"origin/{self.github_branch}", cwd=str(git_dir),
+                                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+                            )
+                            await asyncio.wait_for(reset_proc.communicate(), timeout=60)
+                            if reset_proc.returncode == 0:
+                                log("  git reset --hard OK")
+                                code_updated = True
+                            else:
+                                errors.append("git reset echoue")
+                        else:
+                            errors.append("git fetch echoue")
+                else:
+                    log("  Methode: git init (pas de depot existant)")
+                    await (await asyncio.create_subprocess_exec(
+                        "git", "init", cwd=str(git_dir),
+                        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+                    )).communicate()
+                    github_url = f"https://github.com/{self.github_user}/{self.github_repo}.git"
+                    await (await asyncio.create_subprocess_exec(
+                        "git", "remote", "add", "origin", github_url, cwd=str(git_dir),
+                        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+                    )).communicate()
+                    fetch_proc = await asyncio.create_subprocess_exec(
+                        "git", "fetch", "origin", self.github_branch, cwd=str(git_dir),
+                        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+                    )
+                    await asyncio.wait_for(fetch_proc.communicate(), timeout=120)
+                    if fetch_proc.returncode == 0:
+                        reset_proc = await asyncio.create_subprocess_exec(
+                            "git", "reset", "--hard", f"origin/{self.github_branch}", cwd=str(git_dir),
+                            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+                        )
+                        await asyncio.wait_for(reset_proc.communicate(), timeout=60)
+                        if reset_proc.returncode == 0:
+                            log("  git init + fetch + reset OK")
+                            code_updated = True
+                        else:
+                            errors.append("git reset echoue (init)")
+                    else:
+                        errors.append("git fetch echoue (init)")
+
+                if hook_was_disabled and post_merge_disabled.exists():
+                    try:
+                        os.rename(str(post_merge_disabled), str(post_merge_hook))
+                    except Exception:
+                        pass
+
+            if not code_updated:
+                log("  AVERTISSEMENT: Code non mis a jour via Git")
+            await self._save_update_log(update_id, "2/6 Git", full_log, errors, version=version)
+
+            # === ETAPE 3/6: Restauration .env ===
+            log("\n=== ETAPE 3/6: Restauration .env ===")
+            for f in ["backend/.env", "frontend/.env"]:
+                src = f"/tmp/{f.replace('/', '_')}"
+                dst = os.path.join(str(self.app_root), f)
+                if os.path.exists(src):
+                    shutil.copy2(src, dst)
+                    log(f"  {src} -> {dst}")
+            await self._save_update_log(update_id, "3/6 Restauration .env", full_log, errors, version=version)
+
+            # === ETAPE 4/6: Dependances backend (pip) ===
+            log("\n=== ETAPE 4/6: Installation dependances backend ===")
+            backend_req = self.backend_dir / "requirements.txt"
+            if backend_req.exists():
+                venv_pip = None
+                for pip_path in [
+                    self.app_root / "venv" / "bin" / "pip",
+                    self.app_root / "venv" / "bin" / "pip3",
+                    self.backend_dir / "venv" / "bin" / "pip",
+                    self.backend_dir / "venv" / "bin" / "pip3",
+                ]:
+                    if pip_path.exists():
+                        venv_pip = str(pip_path)
+                        break
+                pip_cmd = venv_pip if venv_pip else "pip3"
+                extra_index = "https://d33sy5i8bnduwe.cloudfront.net/simple/"
+                log(f"  pip: {pip_cmd}")
+                pip_proc = await asyncio.create_subprocess_exec(
+                    pip_cmd, "install", "-r", str(backend_req),
+                    "--extra-index-url", extra_index,
+                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+                )
+                pip_stdout, pip_stderr = await asyncio.wait_for(pip_proc.communicate(), timeout=300)
+                if pip_proc.returncode == 0:
+                    log("  pip install OK")
+                else:
+                    log(f"  pip install AVERTISSEMENT: {pip_stderr.decode(errors='replace')[:500]}")
+            await self._save_update_log(update_id, "4/6 pip install", full_log, errors, version=version)
+
+            # === ETAPE 5/6: Dependances frontend (yarn) ===
+            log("\n=== ETAPE 5/6: Installation dependances frontend ===")
+            frontend_package = self.frontend_dir / "package.json"
+            if frontend_package.exists() and self.frontend_dir.is_dir():
+                build_dir = self.frontend_dir / "build"
+                build_backup = self.frontend_dir / "build_backup"
+                if build_dir.exists():
+                    try:
+                        if build_backup.exists():
+                            shutil.rmtree(str(build_backup))
+                        shutil.copytree(str(build_dir), str(build_backup))
+                        log("  Backup du build frontend cree")
+                    except Exception as e:
+                        log(f"  Impossible de backup build/: {e}")
+                build_env = os.environ.copy()
+                build_env["CI"] = "false"
+                build_env["NODE_OPTIONS"] = "--max_old_space_size=1024"
+                yarn_proc = await asyncio.create_subprocess_exec(
+                    "yarn", "install", cwd=str(self.frontend_dir),
+                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, env=build_env
+                )
+                await asyncio.wait_for(yarn_proc.communicate(), timeout=300)
+                if yarn_proc.returncode == 0:
+                    log("  yarn install OK")
+                else:
+                    log("  yarn install AVERTISSEMENT")
+                await self._save_update_log(update_id, "5/6 yarn install", full_log, errors, version=version)
+                log("  Compilation frontend (yarn build)...")
+                build_proc = await asyncio.create_subprocess_exec(
+                    "yarn", "build", cwd=str(self.frontend_dir),
+                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, env=build_env
+                )
+                build_stdout, build_stderr = await asyncio.wait_for(build_proc.communicate(), timeout=600)
+                if build_proc.returncode == 0:
+                    log("  yarn build OK")
+                else:
+                    log(f"  yarn build echoue: {build_stderr.decode(errors='replace')[:300]}")
+                    if build_backup.exists():
+                        try:
+                            if build_dir.exists():
+                                shutil.rmtree(str(build_dir))
+                            shutil.copytree(str(build_backup), str(build_dir))
+                            log("  Build frontend restaure depuis le backup")
+                        except Exception:
+                            pass
+                if build_backup.exists():
+                    try:
+                        shutil.rmtree(str(build_backup))
+                    except Exception:
+                        pass
+            await self._save_update_log(update_id, "5/6 Frontend", full_log, errors, version=version)
+
+            # === ETAPE 6/6: Redemarrage des services ===
+            log("\n=== ETAPE 6/6: Planification du redemarrage ===")
+            success = len(errors) == 0
+            status = "success" if success else "failed"
+            completed_at = datetime.now(timezone.utc).isoformat()
+            update_history["completed_at"] = completed_at
+            update_history["status"] = status
+            update_history["success"] = success
+            update_history["code_updated"] = code_updated
+            update_history["errors"] = errors
+            update_history["logs"] = [{"step": "Log complet", "stdout": full_log, "status": status}]
+            try:
+                start = datetime.fromisoformat(update_history["started_at"])
+                end = datetime.fromisoformat(completed_at)
+                update_history["duration_seconds"] = (end - start).total_seconds()
+            except Exception:
+                update_history["duration_seconds"] = 0
+            try:
+                await self.db.system_update_history.insert_one(update_history)
+            except Exception as e:
+                log(f"  Erreur sauvegarde historique: {e}")
+            if success:
+                log("MISE A JOUR REUSSIE")
+            else:
+                log(f"MISE A JOUR AVEC ERREURS: {errors}")
+            await self.db.system_settings.update_one(
+                {"key": "last_update_result"},
+                {"$set": {
+                    "key": "last_update_result",
+                    "in_progress": False,
+                    "success": success,
+                    "code_updated": code_updated,
+                    "history_id": update_id,
+                    "current_step": "Termine",
+                    "log_output": full_log[-10000:],
+                    "errors": errors,
+                    "status": status,
+                    "version_after": version,
+                    "completed_at": completed_at,
+                    "updated_at": completed_at
+                }},
+                upsert=True
             )
-            
-            logger.info(f"[MAJ] Script lancé avec PID: {process.pid}")
-            
+            try:
+                restart_script = tempfile.NamedTemporaryFile(
+                    mode='w', suffix='.sh', prefix='gmao_restart_', dir='/tmp', delete=False
+                )
+                restart_script.write(f"""#!/bin/bash
+sleep 3
+supervisorctl restart gmao-iris-backend 2>/dev/null || sudo supervisorctl restart gmao-iris-backend 2>/dev/null || supervisorctl restart all 2>/dev/null || sudo supervisorctl restart all 2>/dev/null
+sleep 5
+nginx -s reload 2>/dev/null || sudo nginx -s reload 2>/dev/null || sudo systemctl reload nginx 2>/dev/null
+rm -f {restart_script.name}
+""")
+                restart_script.close()
+                os.chmod(restart_script.name, 0o755)
+                sp.Popen(['/bin/bash', restart_script.name], stdout=sp.DEVNULL, stderr=sp.DEVNULL, start_new_session=True)
+                log("  Redemarrage planifie dans 3 secondes")
+            except Exception as e:
+                log(f"  Impossible de planifier le redemarrage: {e}")
+            log("=" * 60)
             return {
                 "success": True,
                 "accepted": True,
-                "message": f"Mise à jour vers {version} lancée en arrière-plan. Consultez les logs pour suivre la progression.",
+                "message": f"Mise a jour vers {version} {'reussie' if success else 'terminee avec erreurs'}. Redemarrage en cours...",
                 "update_id": update_id,
-                "log_path": log_path,
-                "result_file": result_file,
-                "script_path": script_path,
                 "version": version,
-                "pid": process.pid,
+                "code_updated": code_updated,
+                "errors": errors,
                 "diagnostic": {
                     "app_root": str(self.app_root),
-                    "backend_dir": str(self.backend_dir),
-                    "frontend_dir": str(self.frontend_dir),
-                    "venv": venv_activate or "NON TROUVÉ",
                     "github": f"{self.github_user}/{self.github_repo}:{self.github_branch}"
                 }
             }
+
         except Exception as e:
-            logger.error(f"[MAJ] ERREUR lancement script: {e}")
+            logger.error(f"[MAJ] ERREUR: {e}")
             import traceback
             logger.error(traceback.format_exc())
-            self.maintenance.deactivate()
+            log(f"\nERREUR CRITIQUE: {e}")
+            errors.append(str(e))
+            try:
+                await self.db.system_settings.update_one(
+                    {"key": "last_update_result"},
+                    {"$set": {
+                        "key": "last_update_result",
+                        "in_progress": False,
+                        "success": False,
+                        "code_updated": False,
+                        "history_id": update_id,
+                        "current_step": "Erreur",
+                        "log_output": full_log[-10000:],
+                        "errors": errors,
+                        "status": "failed",
+                        "version_after": version,
+                        "updated_at": datetime.now(timezone.utc).isoformat()
+                    }},
+                    upsert=True
+                )
+            except Exception:
+                pass
             return {
                 "success": False,
-                "message": f"Impossible de lancer le script: {str(e)}",
-                "error": str(e)
+                "message": f"Erreur lors de la mise a jour: {str(e)}",
+                "error": str(e),
+                "update_id": update_id
             }
-    
+
     async def check_and_save_update_result(self):
         """
         Vérifie s'il existe un fichier de résultat de mise à jour

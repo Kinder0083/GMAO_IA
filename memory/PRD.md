@@ -5,44 +5,33 @@ Application de GMAO complete (FastAPI + React + MongoDB).
 
 ## Fonctionnalites implementees
 
-### Correction import presqu'accidents (8 mars 2026)
-- BUGFIX: L'import des presqu'accidents extraits du fichier Excel ne sauvegardait pas tous les champs
-- Cause racine: l'ancien code utilisait `createItem` qui forcait `status=A_TRAITER` et ne passait pas `commentaire_traitement`, `responsable_action`, `status`
-- Solution: Nouvel endpoint `POST /api/presqu-accident/import-bulk` qui accepte TOUS les champs
-- Frontend modifie pour utiliser le nouvel endpoint et envoyer toutes les donnees extraites
-- Resultat: 169 items correctement importes avec TERMINE:113, EN_COURS:17, A_TRAITER:39
+### Corrections systeme de mise a jour (8 mars 2026)
+**3 bugs critiques corriges:**
+1. **Backend (update_service.py)**: Approche "worker externe" remplacee par "in-process" - logs MongoDB temps reel, support --extra-index-url, detection venv pip
+2. **Frontend (UpdateWarningOverlay.jsx)**: L'admin qui lance la mise a jour se faisait deconnecter par sa propre notification WebSocket AVANT que la MAJ ne demarre. Fix: flag sessionStorage `admin_updating`
+3. **Frontend (Updates.jsx + UpdateNotificationBadge.jsx)**: Token sauvegarde avant broadcast, timeout 180s, flag admin_updating
 
-### Correction systeme de mise a jour v5.0 (8 mars 2026)
-- BUGFIX CRITIQUE (P0): Remplacement de l'approche "worker externe" par une approche "in-process"
-- Cause racine: le worker externe ne demarrait pas sur le serveur de production, aucun log enregistre
-- Solution: mise a jour in-process dans le process FastAPI avec logs MongoDB temps reel
-- Support `--extra-index-url` pour le package prive `emergentintegrations`
-- Detection automatique du venv pip, git pull avec fallback, sauvegarde/restauration .env
-
-### Extraction IA Presqu'accidents
-- Parse fichiers Excel .xls (xlrd) et .xlsx (openpyxl)
-- Support PDF et Images via Gemini LLM
-- Mapping intelligent des en-tetes Excel vers les champs de l'application
-- Mapping services (PRODUCTION, MAINTENANCE, QUALITE->QHSE, LABORATOIRE->LABO, etc.)
-- Mapping statuts (SOLDEE->TERMINE, EN COURS->EN_COURS, SUPPRIMEE->TERMINE, etc.)
+### Import en masse presqu'accidents (8 mars 2026)
+- Nouvel endpoint POST /api/presqu-accident/import-bulk
+- Sauvegarde TOUS les champs: status, commentaire_traitement, responsable_action
+- Frontend utilise le nouvel endpoint au lieu de createItem individuel
 
 ## Architecture
 ```
-/app/backend/
-  presqu_accident_routes.py   # Endpoints: ai/extract, import-bulk, CRUD
-  update_service.py           # Systeme de mise a jour v5.0 (in-process)
-  server.py                   # Routes principales
+Backend:
+  update_service.py           # v5.0 in-process (MODIFIE)
+  server.py                   # endpoint /updates/apply (MODIFIE)
+  presqu_accident_routes.py   # endpoint /import-bulk (NOUVEAU)
 
-/app/frontend/src/
-  pages/PresquAccidentList.jsx # Extraction IA + import en masse
-  pages/Updates.jsx            # Page admin mise a jour
+Frontend:
+  components/Common/UpdateWarningOverlay.jsx    # Fix deconnexion admin (MODIFIE)
+  components/Common/UpdateNotificationBadge.jsx # Fix deconnexion admin (MODIFIE)
+  pages/Updates.jsx                             # Fix token + timeout (MODIFIE)
+  pages/PresquAccidentList.jsx                  # Import via import-bulk (MODIFIE)
 ```
 
-## Backlog
-- Aucune tache en attente
+## IMPORTANT: Doublon backend/backend/
+Les fichiers sont dupliques dans /app/backend/backend/. Toute modification doit etre copiee dans les DEUX emplacements.
 
 ## Credentials
 - Admin: buenogy@gmail.com / Admin2024!
-
-## 3rd Party Integrations
-- Gemini (via emergentintegrations + EMERGENT_LLM_KEY) pour extraction PDF/images

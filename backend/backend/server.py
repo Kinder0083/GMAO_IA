@@ -9650,18 +9650,14 @@ async def broadcast_update_warning(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@api_router.post("/updates/apply", status_code=202)
+@api_router.post("/updates/apply")
 async def apply_update_endpoint(
     version: str,
     current_user: dict = Depends(get_current_admin_user)
 ):
-    """
-    Lance une mise à jour en arrière-plan (Admin uniquement).
-    Génère un script bash autonome et retourne immédiatement (HTTP 202).
-    """
+    """Lance une mise a jour in-process (Admin uniquement)."""
     try:
-        logger.info(f"[MAJ] Demande de mise à jour vers {version} par {current_user.get('email')}")
-        
+        logger.info(f"[MAJ] Demande MAJ vers {version} par {current_user.get('email')}")
         await audit_service.log_action(
             user_id=current_user.get("id"),
             user_name=f"{current_user.get('prenom')} {current_user.get('nom')}",
@@ -9669,22 +9665,22 @@ async def apply_update_endpoint(
             action=ActionType.UPDATE,
             entity_type=EntityType.SETTINGS,
             entity_id="system_update",
-            entity_name=f"Mise à jour vers {version}"
+            entity_name=f"Mise a jour vers {version}"
         )
-        
         result = await update_service.apply_update(version)
-        
         if result.get("accepted") or result.get("success"):
             return {
                 "accepted": True,
                 "success": True,
-                "message": result.get("message", "Mise à jour lancée en arrière-plan"),
+                "message": result.get("message", "Mise a jour lancee"),
                 "update_id": result.get("update_id"),
-                "version": version
+                "version": version,
+                "code_updated": result.get("code_updated", False),
+                "errors": result.get("errors", []),
+                "diagnostic": result.get("diagnostic", {})
             }
         else:
-            raise HTTPException(status_code=500, detail=result.get("message", "Erreur lors du lancement"))
-            
+            raise HTTPException(status_code=500, detail=result.get("message", "Erreur"))
     except HTTPException:
         raise
     except Exception as e:
@@ -9695,31 +9691,26 @@ async def apply_update_endpoint(
 @api_router.get("/updates/log")
 async def get_update_log(current_user: dict = Depends(get_current_admin_user)):
     """
-    Lit et retourne le contenu du dernier fichier de log de mise à jour.
-    Cherche dans /var/log/ (principal), puis APP_ROOT, puis DB, puis /tmp.
+    Retourne le log de la derniere mise a jour.
+    Source PRINCIPALE: MongoDB (fiable, survit au reboot).
     """
-    import glob as glob_mod
     try:
-        # Liste ordonnée des emplacements à chercher (JAMAIS update_log.txt car il est ecrase par git)
-        log_candidates = [
-            "/var/log/gmao-iris-update.log",
-            "/tmp/gmao-iris-update.log",
-        ]
-        
-        # Ajouter le repertoire dedie hors du depot git
-        app_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        dedicated_log_dir = os.path.join(os.path.dirname(app_root), "gmao-iris-logs")
-        dedicated_log = os.path.join(dedicated_log_dir, "update.log")
-        if dedicated_log not in log_candidates:
-            log_candidates.insert(0, dedicated_log)
-
-        # Chercher dans la DB
         last_result = await db.system_settings.find_one({"key": "last_update_result"}, {"_id": 0})
-        db_log_path = last_result.get("log_path") if last_result else None
-        if db_log_path and db_log_path not in log_candidates:
-            log_candidates.insert(1, db_log_path)
-
-        # Chercher le premier fichier existant avec du contenu
+        if last_result and last_result.get("log_output"):
+            return {
+                "found": True,
+                "path": "MongoDB",
+                "content": last_result["log_output"],
+                "in_progress": last_result.get("in_progress", False),
+                "current_step": last_result.get("current_step", ""),
+                "errors": last_result.get("errors", []),
+                "status": last_result.get("status", ""),
+                "success": last_result.get("success", False)
+            }
+        
+        import glob as glob_mod
+        log_candidates = ["/var/log/gmao-iris-update.log", "/var/log/gmao-iris-worker.log",
+                          "/tmp/gmao-iris-update.log", "/tmp/gmao-iris-worker.log"]
         for path in log_candidates:
             if path and os.path.exists(path) and os.path.getsize(path) > 10:
                 with open(path, 'r', errors='replace') as f:
@@ -9728,31 +9719,13 @@ async def get_update_log(current_user: dict = Depends(get_current_admin_user)):
                     "found": True,
                     "path": path,
                     "content": content[-50000:],
-                    "size": os.path.getsize(path),
                     "in_progress": last_result.get("in_progress", False) if last_result else False
                 }
-
-        # Fallback: fichier le plus récent dans /tmp
-        tmp_logs = sorted(
-            glob_mod.glob("/tmp/gmao_update_*.log"),
-            key=lambda f: os.path.getmtime(f),
-            reverse=True
-        )
-        if tmp_logs:
-            with open(tmp_logs[0], 'r', errors='replace') as f:
-                content = f.read()
-            return {
-                "found": True,
-                "path": tmp_logs[0],
-                "content": content[-50000:],
-                "size": os.path.getsize(tmp_logs[0]),
-                "in_progress": last_result.get("in_progress", False) if last_result else False
-            }
 
         return {
             "found": False,
             "content": "",
-            "message": "Aucun fichier de log trouve. Lancez une mise a jour pour generer des logs."
+            "message": "Aucun log disponible."
         }
     except Exception as e:
         logger.error(f"[MAJ] Erreur lecture log: {e}")
@@ -10438,6 +10411,12 @@ from notifications import router as push_notifications_router, set_db as set_not
 set_notifications_db(db)
 api_router.include_router(push_notifications_router)
 
+# Routes Formation (Training)
+from training_routes import router as training_router, init_training_routes
+init_training_routes(db)
+api_router.include_router(training_router)
+
+
 # WebSocket pour le tableau d'affichage
 from fastapi import WebSocket, WebSocketDisconnect
 
@@ -10704,6 +10683,7 @@ RESET_COLLECTIONS = {
     "chat_messages": "Messages Chat Live",
     "users": "Utilisateurs",
     "surveillance_items": "Plan de surveillance",
+    "presqu_accident_items": "Presqu'accidents",
 }
 
 @api_router.delete("/admin/reset/{section}",
