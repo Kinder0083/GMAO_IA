@@ -5,57 +5,41 @@ Application de GMAO complete (FastAPI + React + MongoDB).
 
 ## Fonctionnalites implementees
 
+### Correction import presqu'accidents (8 mars 2026)
+- BUGFIX: L'import des presqu'accidents extraits du fichier Excel ne sauvegardait pas tous les champs
+- Cause racine: l'ancien code utilisait `createItem` qui forcait `status=A_TRAITER` et ne passait pas `commentaire_traitement`, `responsable_action`, `status`
+- Solution: Nouvel endpoint `POST /api/presqu-accident/import-bulk` qui accepte TOUS les champs
+- Frontend modifie pour utiliser le nouvel endpoint et envoyer toutes les donnees extraites
+- Resultat: 169 items correctement importes avec TERMINE:113, EN_COURS:17, A_TRAITER:39
+
 ### Correction systeme de mise a jour v5.0 (8 mars 2026)
-- BUGFIX CRITIQUE (P0): Remplacement de l'approche "worker externe" (update_worker.py) par une approche "in-process"
-- Cause racine: le worker externe (processus Python separe) ne demarrait pas correctement sur le serveur de production, aucun log n'etait enregistre
-- Solution: la mise a jour s'execute maintenant directement dans le process FastAPI (comme l'ancienne version fonctionnelle)
-- Logs sauvegardes dans MongoDB en temps reel a chaque etape via motor (async)
+- BUGFIX CRITIQUE (P0): Remplacement de l'approche "worker externe" par une approche "in-process"
+- Cause racine: le worker externe ne demarrait pas sur le serveur de production, aucun log enregistre
+- Solution: mise a jour in-process dans le process FastAPI avec logs MongoDB temps reel
 - Support `--extra-index-url` pour le package prive `emergentintegrations`
-- Detection automatique du venv pip (`/opt/gmao-iris/venv/bin/pip`)
-- Git pull avec fallback vers git fetch + reset --hard
-- Sauvegarde/restauration des fichiers .env avant/apres git pull
-- Redemarrage planifie via script bash detache (3 secondes apres la fin)
-- Backup du build frontend avant yarn build, avec restauration en cas d'echec
+- Detection automatique du venv pip, git pull avec fallback, sauvegarde/restauration .env
 
-### Extraction IA Presqu'accidents (8 mars 2026)
-- Bouton "Extraction IA" dans la section Presqu'accident
+### Extraction IA Presqu'accidents
 - Parse fichiers Excel .xls (xlrd) et .xlsx (openpyxl)
-- Support PDF et Images (PNG, JPG, JPEG, WEBP) via Gemini LLM
-- Extraction automatique: numero, service, date, lieu, categorie, description, mesures immediates
-- Conversion dates Excel (format numerique) en YYYY-MM-DD
-- Mapping automatique des services (PRODUCTION, MAINTENANCE, QUALITE, etc.)
-- Dialog de selection avec checkboxes pour choisir les items a importer
-- Import en masse via l'API existante createItem
-- Nettoyage automatique des valeurs "None"/"null" dans les reponses Gemini
-- Generation automatique de titre si absent (fallback: "PA X - description")
-
-### Module Formation et Questionnaire (7 mars 2026)
-- Sessions de formation avec slides editables et questionnaire QCM (20 questions)
-- Envoi de liens ephemeres par email
-- Page publique sans authentification pour les nouveaux arrivants
-- Historique des reponses, calcul automatique du score
-- Integration au systeme de permissions
+- Support PDF et Images via Gemini LLM
+- Mapping intelligent des en-tetes Excel vers les champs de l'application
+- Mapping services (PRODUCTION, MAINTENANCE, QUALITE->QHSE, LABORATOIRE->LABO, etc.)
+- Mapping statuts (SOLDEE->TERMINE, EN COURS->EN_COURS, SUPPRIMEE->TERMINE, etc.)
 
 ## Architecture
 ```
 /app/backend/
+  presqu_accident_routes.py   # Endpoints: ai/extract, import-bulk, CRUD
   update_service.py           # Systeme de mise a jour v5.0 (in-process)
-  update_worker.py            # OBSOLETE (conserve pour compatibilite)
-  update_manager.py           # Gestionnaire de versions
-  presqu_accident_routes.py   # Endpoint /ai/extract (Excel + PDF/Images via Gemini)
-  training_routes.py          # Module formation
-  server.py                   # Routes + endpoints
+  server.py                   # Routes principales
 
 /app/frontend/src/
-  pages/Updates.jsx           # Page admin mise a jour
-  pages/PresquAccidentList.jsx # Bouton Extraction IA + dialog multi-format
-  pages/TrainingPage.jsx       # Page admin formation
-  pages/TrainingPublicPage.jsx # Page publique nouveaux arrivants
+  pages/PresquAccidentList.jsx # Extraction IA + import en masse
+  pages/Updates.jsx            # Page admin mise a jour
 ```
 
 ## Backlog
-- (P2) Scanner QR integre (via camera) - DEJA FAIT dans une session precedente
-- (P2) Mode inventaire rapide (scan successif) - DEJA FAIT dans une session precedente
+- Aucune tache en attente
 
 ## Credentials
 - Admin: buenogy@gmail.com / Admin2024!
