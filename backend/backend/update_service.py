@@ -1,7 +1,7 @@
 """
 Service de gestion des mises à jour FSAO Iris
 VERSION CORRIGÉE - Détection automatique des chemins
-UPDATE_SYSTEM_VERSION: v7.0 (reboot post-MAJ comme methode manuelle)
+UPDATE_SYSTEM_VERSION: v7.1 (auto-exit + supervisor restart garanti)
 """
 import os
 import json
@@ -738,7 +738,7 @@ class UpdateService:
             return proc.returncode, stdout.decode(errors='replace'), stderr.decode(errors='replace')
 
         log("=" * 60)
-        log(f"MISE A JOUR FSAO IRIS v6.0")
+        log(f"MISE A JOUR FSAO IRIS v7.1")
         log(f"Version cible: {version}")
         log(f"APP_ROOT: {self.app_root}")
         log(f"GitHub: {self.github_user}/{self.github_repo}:{self.github_branch}")
@@ -955,48 +955,58 @@ class UpdateService:
                 upsert=True
             )
 
-            # Redemarrage: utiliser reboot comme la methode manuelle qui fonctionne
-            # Le supervisorctl restart seul est insuffisant car:
-            # 1. Le nom du processus peut ne pas correspondre
-            # 2. Le processus Python garde l'ancien code en memoire si le restart echoue
-            # La methode manuelle de l'utilisateur utilise toujours 'reboot' et ca marche.
+            # Redemarrage: 2 strategies en parallele
+            # A) Forcer le processus backend a s'arreter -> supervisor le redemarre avec le nouveau code
+            # B) Tenter un reboot complet (comme la methode manuelle SSH)
+            #
+            # Le probleme precedent: le script detache faisait supervisorctl/reboot
+            # mais le processus backend n'a pas les droits root, donc TOUT echouait silencieusement.
+            # Solution: le processus s'arrete lui-meme, supervisor s'occupe du reste.
+
+            import threading
+
+            def _delayed_exit():
+                """Force l'arret du processus backend apres 5 secondes.
+                Supervisor le redemarrera automatiquement avec le nouveau code."""
+                try:
+                    logger.info("[MAJ] Auto-arret du processus backend pour charger le nouveau code...")
+                    os._exit(0)
+                except Exception:
+                    os.kill(os.getpid(), 9)  # SIGKILL en dernier recours
+
+            # Programmer l'arret dans 5 secondes (laisse le temps d'envoyer la reponse HTTP)
+            exit_timer = threading.Timer(5.0, _delayed_exit)
+            exit_timer.daemon = True
+            exit_timer.start()
+            log("  Backend va s'arreter dans 5 secondes (supervisor le redemarrera avec le nouveau code)")
+
+            # En parallele, tenter un reboot complet pour aussi redemarrer le frontend/nginx
             try:
                 restart_script = tempfile.NamedTemporaryFile(
                     mode='w', suffix='.sh', prefix='gmao_restart_', dir='/tmp', delete=False
                 )
                 restart_script.write(f"""#!/bin/bash
 LOG="/var/log/gmao-iris-restart.log"
-echo "$(date) - Debut redemarrage post-MAJ v7.0" >> $LOG
+echo "$(date) - Post-MAJ v7.0 - tentative reboot" >> $LOG 2>/dev/null || LOG="/tmp/gmao-iris-restart.log" && echo "$(date) - Post-MAJ v7.0 - tentative reboot" >> $LOG
 
-sleep 3
+sleep 8
 
-# D'abord recharger NGINX pour servir le nouveau frontend immediatement
+# Recharger NGINX
 nginx -s reload >> $LOG 2>&1 || sudo nginx -s reload >> $LOG 2>&1 || sudo systemctl reload nginx >> $LOG 2>&1
-echo "$(date) - NGINX reloaded" >> $LOG
+echo "$(date) - NGINX reload tente" >> $LOG
 
-# Attendre puis reboot propre (methode qui fonctionne a 100%)
-echo "$(date) - Reboot dans 5 secondes..." >> $LOG
-sleep 5
-reboot >> $LOG 2>&1 || sudo reboot >> $LOG 2>&1
-# Fallback si reboot ne marche pas
+# Tenter le reboot complet (peut echouer si pas root - c'est OK, le backend a deja redemarre via supervisor)
 sleep 2
-shutdown -r now >> $LOG 2>&1 || sudo shutdown -r now >> $LOG 2>&1
+reboot >> $LOG 2>&1 || sudo reboot >> $LOG 2>&1 || shutdown -r now >> $LOG 2>&1 || sudo shutdown -r now >> $LOG 2>&1 || echo "$(date) - Reboot impossible (pas root) - le backend a ete redemarre par supervisor" >> $LOG
 
 rm -f {restart_script.name}
 """)
                 restart_script.close()
                 os.chmod(restart_script.name, 0o755)
                 sp.Popen(['/bin/bash', restart_script.name], stdout=sp.DEVNULL, stderr=sp.DEVNULL, start_new_session=True)
-                log("  Reboot programme dans ~8 secondes (methode manuelle eprouvee)")
+                log("  Script reboot lance en parallele (tentative)")
             except Exception as e:
-                log(f"  Impossible de planifier le reboot: {e}")
-                # Fallback ultime
-                try:
-                    sp.Popen(['bash', '-c', 'sleep 5 && (reboot || sudo reboot)'], 
-                             stdout=sp.DEVNULL, stderr=sp.DEVNULL, start_new_session=True)
-                    log("  Fallback: reboot programme dans 5 secondes")
-                except Exception as e2:
-                    log(f"  Fallback reboot impossible: {e2}")
+                log(f"  Script reboot impossible: {e} (pas grave, supervisor gere le backend)")
 
             log("=" * 60)
             return {
