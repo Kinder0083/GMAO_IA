@@ -36,6 +36,14 @@ def clean_json_response(text: str) -> str:
     return t.strip()
 
 
+# Providers supportes par emergentintegrations avec fallback
+FALLBACK_CHAIN = [
+    ("gemini", "gemini-2.5-flash"),
+    ("openai", "gpt-4o-mini"),
+    ("anthropic", "claude-sonnet-4-5"),
+]
+
+
 async def _get_llm_key():
     """Recupere la cle LLM depuis l'env ou la DB global_settings."""
     key = os.environ.get("EMERGENT_LLM_KEY")
@@ -46,6 +54,59 @@ async def _get_llm_key():
     if not key:
         raise HTTPException(status_code=500, detail="Cle LLM non configuree")
     return key
+
+
+async def _get_user_ai_config(user_id: str):
+    """Recupere le provider/model prefere de l'utilisateur depuis ses preferences."""
+    try:
+        prefs = await db.user_preferences.find_one({"user_id": user_id}, {"_id": 0})
+        if prefs:
+            provider = prefs.get("ai_llm_provider")
+            model = prefs.get("ai_llm_model")
+            if provider and model:
+                return provider, model
+    except Exception:
+        pass
+    return "gemini", "gemini-2.5-flash"
+
+
+async def _call_llm_with_fallback(api_key: str, session_id: str, system_message: str,
+                                   user_text: str, preferred_provider: str, preferred_model: str):
+    """Appelle le LLM avec fallback automatique si le provider prefere echoue."""
+    from emergentintegrations.llm.chat import LlmChat, UserMessage
+    import asyncio as _asyncio
+
+    # Construire la chaine: provider prefere en premier, puis les fallbacks
+    chain = [(preferred_provider, preferred_model)]
+    for prov, mod in FALLBACK_CHAIN:
+        if prov != preferred_provider:
+            chain.append((prov, mod))
+
+    last_error = None
+    for provider, model in chain:
+        try:
+            logger.info(f"[IA PA] Essai {provider}/{model}...")
+            chat = LlmChat(
+                api_key=api_key,
+                session_id=f"{session_id}_{provider}",
+                system_message=system_message
+            ).with_model(provider, model)
+
+            response = await _asyncio.wait_for(
+                chat.send_message(UserMessage(text=user_text)),
+                timeout=90
+            )
+            logger.info(f"[IA PA] Succes avec {provider}/{model}")
+            return response, provider, model
+
+        except _asyncio.TimeoutError:
+            last_error = f"Timeout avec {provider}/{model}"
+            logger.warning(f"[IA PA] {last_error}")
+        except Exception as e:
+            last_error = f"{provider}/{model}: {str(e)}"
+            logger.warning(f"[IA PA] Echec {last_error}")
+
+    raise Exception(f"Tous les providers IA ont echoue. Derniere erreur: {last_error}")
 
 
 # ========================================================
@@ -301,44 +362,32 @@ async def analyze_trends(
     les tendances, zones à risque, et prédire les risques futurs.
     """
     try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
-
         api_key = await _get_llm_key()
+        pref_provider, pref_model = await _get_user_ai_config(current_user.get("id"))
 
         days = data.get("days", 365)
-        cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
 
-        # Récupérer tous les incidents
+        # Limiter a 150 incidents (les plus recents) pour eviter depassement tokens
         items = await db.presqu_accident_items.find(
             {},
             {"_id": 0}
-        ).to_list(length=500)
+        ).sort("created_at", -1).to_list(length=150)
 
         if len(items) < 2:
             return {"success": False, "error": "Pas assez de données pour une analyse (minimum 2 incidents)"}
 
-        # Préparer le contexte
+        # Preparer le contexte (format compact)
         incidents_detail = []
         for it in items:
             incidents_detail.append(
                 f"N°:{it.get('numero')} | Date:{it.get('date_incident')} | "
-                f"Titre:{it.get('titre')} | Desc:{it.get('description','')} | "
+                f"Titre:{it.get('titre')} | Desc:{it.get('description','')[:100]} | "
                 f"Lieu:{it.get('lieu','')} | Service:{it.get('service','')} | "
                 f"Cat:{it.get('categorie_incident','')} | Sévérité:{it.get('severite','')} | "
-                f"Lésion:{it.get('type_lesion_potentielle','')} | "
-                f"Facteurs:{','.join(it.get('facteurs_contributifs',[]))} | "
-                f"Conditions:{it.get('conditions_incident','')} | "
-                f"Équipement:{it.get('equipement_nom','')} | "
-                f"Statut:{it.get('status','')} | "
-                f"Cause:{it.get('contexte_cause','')} | "
-                f"Sév.trait.:{it.get('severite_traitement','')} | Récurrence:{it.get('recurrence','')} | "
-                f"Actions:{it.get('actions_preventions','')}"
+                f"Statut:{it.get('status','')} | Cause:{it.get('contexte_cause','')[:80]}"
             )
 
-        chat = LlmChat(
-            api_key=api_key,
-            session_id=f"trends_{uuid.uuid4().hex[:8]}",
-            system_message="""Tu es un expert QHSE en analyse de données de sécurité industrielle.
+        system_msg = """Tu es un expert QHSE en analyse de données de sécurité industrielle.
 Analyse l'ensemble des presqu'accidents pour identifier les tendances, patterns récurrents,
 zones à risque et prédire les risques futurs.
 
@@ -399,12 +448,16 @@ Format:
     }
   ]
 }"""
-        ).with_model("gemini", "gemini-2.5-flash")
 
-        response = await chat.send_message(UserMessage(
-            text=f"Analyse ces {len(items)} presqu'accidents et identifie les tendances:\n\n" +
-                 "\n".join(incidents_detail)
-        ))
+        response, used_provider, used_model = await _call_llm_with_fallback(
+            api_key=api_key,
+            session_id=f"trends_{uuid.uuid4().hex[:8]}",
+            system_message=system_msg,
+            user_text=f"Analyse ces {len(items)} presqu'accidents et identifie les tendances:\n\n" +
+                       "\n".join(incidents_detail),
+            preferred_provider=pref_provider,
+            preferred_model=pref_model
+        )
 
         cleaned = clean_json_response(response)
         analysis = json.loads(cleaned)
@@ -539,16 +592,16 @@ async def generate_qhse_report(
     Génère un rapport de synthèse QHSE structuré prêt pour présentation en réunion.
     """
     try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
-
         api_key = await _get_llm_key()
+        pref_provider, pref_model = await _get_user_ai_config(current_user.get("id"))
 
         days = data.get("days", 365)
 
+        # Limiter a 150 incidents (les plus recents) pour eviter depassement tokens
         items = await db.presqu_accident_items.find(
             {},
             {"_id": 0}
-        ).to_list(length=500)
+        ).sort("created_at", -1).to_list(length=150)
 
         if not items:
             return {"success": False, "error": "Aucun presqu'accident enregistré"}
@@ -567,17 +620,10 @@ async def generate_qhse_report(
                 f"Titre:{it.get('titre')} | Lieu:{it.get('lieu','')} | "
                 f"Service:{it.get('service','')} | Cat:{it.get('categorie_incident','')} | "
                 f"Sévérité:{it.get('severite','')} | Statut:{it.get('status','')} | "
-                f"Lésion:{it.get('type_lesion_potentielle','')} | "
-                f"Facteurs:{','.join(it.get('facteurs_contributifs',[]))} | "
-                f"Conditions:{it.get('conditions_incident','')} | "
-                f"Équipement:{it.get('equipement_nom','')} | "
-                f"Actions prises:{it.get('actions_preventions','')}"
+                f"Cause:{it.get('contexte_cause','')[:80]}"
             )
 
-        chat = LlmChat(
-            api_key=api_key,
-            session_id=f"report_{uuid.uuid4().hex[:8]}",
-            system_message="""Tu es un expert QHSE. Génère un rapport de synthèse structuré et professionnel
+        system_msg = """Tu es un expert QHSE. Génère un rapport de synthèse structuré et professionnel
 pour une réunion de comité QHSE. Le rapport doit être clair, factuel et orienté actions.
 
 Réponds UNIQUEMENT avec un JSON valide, sans texte autour ni backticks.
@@ -638,15 +684,21 @@ Format:
   "conclusion": "string - conclusion et message pour le prochain mois",
   "points_de_vigilance": ["string - points à surveiller particulièrement"]
 }"""
-        ).with_model("gemini", "gemini-2.5-flash")
 
-        response = await chat.send_message(UserMessage(
-            text=f"""Génère le rapport de synthèse QHSE pour ces {total} presqu'accidents.
+        user_text = f"""Génère le rapport de synthèse QHSE pour ces {total} presqu'accidents.
 Statistiques: {traites} traités, {en_cours} en cours, {a_traiter} à traiter, {en_retard} en retard.
 
 DÉTAIL DES INCIDENTS:
 {chr(10).join(incidents_detail)}"""
-        ))
+
+        response, used_provider, used_model = await _call_llm_with_fallback(
+            api_key=api_key,
+            session_id=f"report_{uuid.uuid4().hex[:8]}",
+            system_message=system_msg,
+            user_text=user_text,
+            preferred_provider=pref_provider,
+            preferred_model=pref_model
+        )
 
         cleaned = clean_json_response(response)
         report = json.loads(cleaned)
