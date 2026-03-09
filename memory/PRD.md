@@ -44,6 +44,7 @@ Plateforme integree avec gestion des equipements, ordres de travail, consignatio
 - **Frontend** : Dialogues: Partager par FSAO (email SMTP), Inserer dans OT/Amelioration/M.Prev, Renommer, Nouveau dossier, Envoyer vers
 - **Frontend** : Icones de permissions (cadenas = masque ext, buste = masque utilisateurs)
 - **Frontend** : Drag & drop pour deplacer fichiers/dossiers
+- **Frontend** : Upload de fichiers : bouton "+ Ajouter un fichier" et glisser-deposer depuis le bureau
 - **Frontend** : Integration WebSocket pour synchronisation temps reel
 - **Frontend** : Journal d'Audit mis a jour avec nouveaux types d'actions et d'entites
 - **Testing** : 23/23 backend tests PASS, 14/14 frontend verifications PASS

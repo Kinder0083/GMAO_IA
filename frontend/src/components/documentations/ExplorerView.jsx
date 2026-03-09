@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Folder, FileText, FileSpreadsheet, FileImage, FileVideo, File,
-  ChevronRight, FolderPlus, Edit, Trash2, Download,
+  ChevronRight, FolderPlus, Edit, Trash2, Download, Upload,
   Eye, ArrowLeft, Home, Printer, Copy, Scissors, ClipboardPaste,
   Send, Mail, Lock, UserX, Plus, ArrowUpDown, Link2, EyeOff, X
 } from 'lucide-react';
@@ -65,6 +65,11 @@ export default function ExplorerView({ poles, onRefresh }) {
 
   // Form templates for "Nouveau..."
   const [formTemplates, setFormTemplates] = useState([]);
+
+  // Upload
+  const [uploading, setUploading] = useState(false);
+  const [dragOverFiles, setDragOverFiles] = useState(false);
+  const fileInputRef = useRef(null);
 
   const [currentUser, setCurrentUser] = useState(null);
 
@@ -341,6 +346,48 @@ export default function ExplorerView({ poles, onRefresh }) {
     }
   };
 
+  // ==================== UPLOAD DE FICHIERS ====================
+
+  const handleFileUpload = async (fileList) => {
+    if (!fileList || fileList.length === 0 || !currentPoleId) return;
+    setUploading(true);
+    try {
+      const files = Array.from(fileList);
+      await documentationsAPI.uploadFiles(currentPoleId, currentFolderId, files);
+      loadExplorerContents(currentPoleId, currentFolderId);
+      toast({ title: 'Fichier(s) ajouté(s)', description: `${files.length} fichier(s) importé(s)` });
+    } catch {
+      toast({ title: 'Erreur', description: "Impossible d'importer les fichiers", variant: 'destructive' });
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleFileDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverFiles(false);
+    // Vérifier que ce sont des fichiers du système (pas des éléments internes)
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleFileUpload(e.dataTransfer.files);
+    }
+  };
+
+  const handleFileDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // Fichiers du système uniquement
+    if (e.dataTransfer.types.includes('Files')) {
+      setDragOverFiles(true);
+    }
+  };
+
+  const handleFileDragLeave = (e) => {
+    e.preventDefault();
+    setDragOverFiles(false);
+  };
+
   const handleSort = (newSort) => {
     setSortBy(newSort);
     if (currentPoleId) loadExplorerContents(currentPoleId, currentFolderId, newSort);
@@ -438,20 +485,45 @@ export default function ExplorerView({ poles, onRefresh }) {
           data-testid="explorer-new-folder-btn">
           <FolderPlus className="h-4 w-4 mr-1" /> Nouveau dossier
         </Button>
+        <Button variant="default" size="sm" onClick={() => fileInputRef.current?.click()} disabled={uploading}
+          data-testid="explorer-upload-btn">
+          <Upload className="h-4 w-4 mr-1" /> {uploading ? 'Import...' : 'Ajouter un fichier'}
+        </Button>
+        <input ref={fileInputRef} type="file" multiple className="hidden"
+          onChange={(e) => handleFileUpload(e.target.files)} data-testid="explorer-file-input" />
       </div>
 
       {/* Content */}
-      <div className="p-4 min-h-[400px]" onContextMenu={handleBgContextMenu}
-        onClick={() => setSelectedItems([])} data-explorer-bg="true">
+      <div className={`p-4 min-h-[400px] transition-colors ${dragOverFiles ? 'bg-blue-50 ring-2 ring-blue-400 ring-dashed' : ''}`}
+        onContextMenu={handleBgContextMenu}
+        onClick={() => setSelectedItems([])}
+        onDrop={handleFileDrop}
+        onDragOver={handleFileDragOver}
+        onDragLeave={handleFileDragLeave}
+        data-explorer-bg="true">
+        {dragOverFiles && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
+            <div className="bg-blue-500/90 text-white rounded-xl px-8 py-6 shadow-xl flex flex-col items-center gap-2">
+              <Upload className="h-10 w-10" />
+              <span className="font-semibold text-lg">Déposez vos fichiers ici</span>
+            </div>
+          </div>
+        )}
         {loading ? (
           <div className="flex items-center justify-center py-20 text-gray-400"><p>Chargement...</p></div>
         ) : isEmpty ? (
           <div className="flex flex-col items-center justify-center py-20 text-gray-400" data-explorer-bg="true">
-            <Folder className="h-16 w-16 mb-4" /><p>Ce dossier est vide</p>
-            <Button variant="outline" size="sm" className="mt-3"
-              onClick={() => { setNewFolderName('Nouveau dossier'); setNewFolderDialog(true); }}>
-              <FolderPlus className="h-4 w-4 mr-1" /> Créer un dossier
-            </Button>
+            <Upload className="h-16 w-16 mb-4" /><p>Ce dossier est vide</p>
+            <p className="text-sm mt-1">Glissez-déposez des fichiers ici ou utilisez les boutons ci-dessus</p>
+            <div className="flex gap-2 mt-4">
+              <Button variant="outline" size="sm"
+                onClick={() => { setNewFolderName('Nouveau dossier'); setNewFolderDialog(true); }}>
+                <FolderPlus className="h-4 w-4 mr-1" /> Nouveau dossier
+              </Button>
+              <Button size="sm" onClick={() => fileInputRef.current?.click()}>
+                <Upload className="h-4 w-4 mr-1" /> Ajouter un fichier
+              </Button>
+            </div>
           </div>
         ) : (
           <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2">

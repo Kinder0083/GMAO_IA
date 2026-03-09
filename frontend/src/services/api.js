@@ -722,6 +722,17 @@ export const documentationsAPI = {
 
   // Form Templates
   getFormTemplates: () => api.get('/documentations/form-templates').then(res => res.data),
+
+  // Upload direct de fichiers
+  uploadFiles: (poleId, folderId, files) => {
+    const formData = new FormData();
+    formData.append('pole_id', poleId);
+    formData.append('folder_id', folderId || 'null');
+    files.forEach(file => formData.append('files', file));
+    return api.post('/documentations/upload-files', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    }).then(res => res.data);
+  },
 };
 
 // ==================== AUTORISATIONS PARTICULIÈRES ====================

@@ -1,7 +1,7 @@
 """
 Routes API pour le module Documentations - Pôles de Service et Documents
 """
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import HTMLResponse
 from fastapi.responses import StreamingResponse
 from typing import List, Optional
@@ -525,6 +525,78 @@ async def upload_document_file(
         raise
     except Exception as e:
         logger.error(f"Erreur upload fichier: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/upload-files")
+async def upload_files_direct(
+    files: List[UploadFile] = File(...),
+    pole_id: str = Form(...),
+    folder_id: Optional[str] = Form(None),
+    current_user: dict = Depends(get_current_user)
+):
+    """Upload direct de fichiers dans un dossier - crée automatiquement les documents"""
+    try:
+        upload_dir = Path("uploads/documents")
+        upload_dir.mkdir(parents=True, exist_ok=True)
+
+        created_docs = []
+        for file in files:
+            doc_id = str(uuid.uuid4())
+            file_ext = Path(file.filename).suffix
+            unique_filename = f"{doc_id}_{uuid.uuid4()}{file_ext}"
+            file_path = upload_dir / unique_filename
+
+            content = await file.read()
+            with open(file_path, "wb") as f:
+                f.write(content)
+
+            mime_type, _ = mimetypes.guess_type(file.filename)
+            file_url = f"/uploads/documents/{unique_filename}"
+
+            # Créer le document dans la base
+            doc_dict = {
+                "id": doc_id,
+                "pole_id": pole_id,
+                "folder_id": folder_id if folder_id and folder_id != "null" else None,
+                "titre": Path(file.filename).stem,
+                "type_document": "fichier",
+                "fichier_url": file_url,
+                "fichier_nom": file.filename,
+                "fichier_type": mime_type or "application/octet-stream",
+                "fichier_taille": len(content),
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+                "created_by": current_user.get("id"),
+                "updated_by": current_user.get("id"),
+                "hidden_for_external": False,
+                "hidden_for_users": False
+            }
+            await db.documents.insert_one(doc_dict)
+            doc_dict.pop("_id", None)
+            created_docs.append(doc_dict)
+
+            # WebSocket
+            if realtime_manager:
+                await realtime_manager.emit_event("documentations", "created", doc_dict, user_id=current_user["id"])
+
+            # Audit
+            await audit_service.log_action(
+                user_id=current_user["id"],
+                user_name=f"{current_user.get('prenom', '')} {current_user.get('nom', '')}",
+                user_email=current_user.get("email", ""),
+                action=ActionType.CREATE,
+                entity_type=EntityType.DOCUMENTATION,
+                entity_id=doc_id,
+                entity_name=file.filename,
+                details=f"a ajouté le fichier \"{file.filename}\""
+            )
+
+        return {"success": True, "count": len(created_docs), "documents": created_docs}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erreur upload fichiers: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
