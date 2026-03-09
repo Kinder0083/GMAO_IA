@@ -1,44 +1,97 @@
 # FSAO Iris - GMAO
 
-## Description
-Application de GMAO complete (FastAPI + React + MongoDB).
+## Problem Statement
+Application GMAO (Gestion de Maintenance Assistee par Ordinateur) pour la gestion de maintenance industrielle.
+Plateforme integree avec gestion des equipements, ordres de travail, consignations LOTO, documentations, surveillance temps reel, IA, chat live, planning et rapports hebdomadaires.
 
-## Fonctionnalites implementees
+## Core Modules
+1. **Dashboard Service** : Vue d'ensemble par pole de service avec statistiques
+2. **Ordres de Travail (OT)** : CRUD complet, workflow, impressions, etats
+3. **Equipements** : Gestion, QR codes, historique, criticite
+4. **Consignations LOTO** : Procedures de securite electrique avec etapes detaillees
+5. **Documentations** : Explorateur de fichiers avec gestion avancee (copier, couper, coller, permissions, partage, etc.)
+6. **Maintenance Preventive** : Planification, execution, historique
+7. **Ameliorations** : Suivi des demandes d'amelioration
+8. **Inventaire** : Gestion des pieces de rechange par service
+9. **Surveillance** : Surveillance en temps reel des equipements
+10. **IA** : Historique et tendances IA (Adria), chat contextuel
+11. **Chat Live** : Communication temps reel entre utilisateurs
+12. **Planning** : Gestion du planning equipe
+13. **Rapports Hebdomadaires** : Generation automatique
+14. **Presqu'accidents** : Signalement avec capture photo/camera
+15. **Contrats** : Gestion des contrats de maintenance
+16. **Demandes d'Achat** : Processus de demande d'achat
 
-### Manuel - Chapitres PWA et Notifications Push (9 mars 2026)
-- **Chapitre "Application Mobile (PWA)"** avec 5 sections :
-  - Qu'est-ce qu'une PWA ? (avantages, navigateurs compatibles)
-  - Installer sur Android (Chrome, Samsung Internet)
-  - Installer sur iPhone / iPad (Safari uniquement, iOS 16.4+)
-  - Installer sur PC (Windows / Mac / Linux)
-  - Interface mobile et fonctionnalites (QR code, camera, hors ligne)
-- **Chapitre "Notifications Push"** avec 4 sections :
-  - Presentation (types, compatibilite par plateforme)
-  - Activer les notifications (etapes, plusieurs appareils)
-  - Gerer et desactiver
-  - Depannage (iOS specifique, batterie, Service Worker)
-- Inseres dans la bonne base MongoDB (gmao_iris, pas gmao_db)
+## Tech Stack
+- **Frontend**: React 18, Tailwind CSS, Shadcn/UI, react-winbox, react-contexify, Lucide icons
+- **Backend**: FastAPI, Python 3.11
+- **Database**: MongoDB (motor async)
+- **Auth**: JWT tokens
+- **Realtime**: WebSocket via RealtimeManager
+- **AI**: Gemini, OpenAI, Claude (via emergentintegrations + Emergent LLM Key)
+- **Email**: SMTP configurable (Parametres Speciaux)
+- **PWA**: Service Worker, notifications push VAPID
 
-### Capture photo camera + preview Presqu'accident (9 mars 2026)
-### Action QR "Signaler un presqu'accident" (9 mars 2026)
-### Mise a jour permissions 48 modules (9 mars 2026)
-### Evaluation temps reel formules (9 mars 2026)
-### Constructeur visuel formules (9 mars 2026)
-### Pre-visualisation interactive Excel (9 mars 2026)
-### Nettoyage repertoire duplique (9 mars 2026)
-### Dashboard Service onglets (8 mars 2026)
-### Upload Excel local (8-9 mars 2026)
-### Permission contrats + Migration (8 mars 2026)
-### Widgets dashboard donnees reelles (8 mars 2026)
-### Bugfix Dashboard vide (8 mars 2026)
-### Archivage IA presqu'accidents (8 mars 2026)
+## What's been implemented (latest)
+### Session 9 Mars 2026 - Refonte Module Documentations
+- **Backend** : 7 nouveaux endpoints (copy, move, permissions, send-to, share-email, insert-targets, insert-into)
+- **Backend** : Endpoint explorer ameliore avec tri (name/date/type) et filtrage par permissions (hidden_for_external, hidden_for_users)
+- **Frontend** : ExplorerView refait avec menu contextuel complet (clic droit fichier/dossier/espace vide)
+- **Frontend** : Presse-papiers interne (Copier/Couper/Coller)
+- **Frontend** : Visionneuse integree (PDF, images, texte)
+- **Frontend** : Dialogues: Partager par FSAO (email SMTP), Inserer dans OT/Amelioration/M.Prev, Renommer, Nouveau dossier, Envoyer vers
+- **Frontend** : Icones de permissions (cadenas = masque ext, buste = masque utilisateurs)
+- **Frontend** : Drag & drop pour deplacer fichiers/dossiers
+- **Frontend** : Integration WebSocket pour synchronisation temps reel
+- **Testing** : 23/23 backend tests PASS, 14/14 frontend verifications PASS
 
-### Systeme mise a jour v7.1 - **NON FONCTIONNEL** (Differe)
+### Sessions precedentes
+- Editeur de widgets personnalises avec preview Excel et constructeur formules
+- Synchronisation permissions frontend/backend
+- Documentation README et chapitres PWA
+- Bouton "Presqu'accident" dans QR Code + capture camera/photo
+- Reorganisation menus Parametres/Personnalisations
+- Harmonisation interface Inventaire avec onglets de service
+
+## Prioritized Backlog
+### P0 (Critical)
+- Systeme de mise a jour (/api/updates/apply) - EN PAUSE par l'utilisateur
+
+### P1 (Upcoming)
+- Aucune tache planifiee - attente instructions utilisateur
+
+### P2 (Future)
+- Templates de widgets additionnels
+- Ameliorations futures suggereees par l'utilisateur
+
+## Architecture
+```
+/app
+├── backend/
+│   ├── server.py               # FastAPI main app (11K+ lines)
+│   ├── documentations_routes.py # Module Documentations (1800+ lines)
+│   ├── realtime_manager.py     # WebSocket manager
+│   ├── email_service.py        # Service SMTP
+│   ├── routes/                 # Routes additionnelles
+│   └── models.py               # Modeles Pydantic
+└── frontend/
+    └── src/
+        ├── components/
+        │   ├── documentations/
+        │   │   └── ExplorerView.jsx  # Explorateur de fichiers complet
+        │   ├── ui/               # Shadcn components
+        │   └── Common/           # Composants partages
+        ├── pages/
+        │   ├── Documentations.jsx # Page principale
+        │   └── ...
+        ├── hooks/
+        │   ├── useDocumentations.js # Hook avec WebSocket
+        │   └── useRealtimeData.js   # Hook generique WebSocket
+        ├── contexts/
+        │   └── AIContextMenuContext.jsx
+        └── services/
+            └── api.js            # API client
+```
 
 ## Credentials
 - Admin: buenogy@gmail.com / Admin2024!
-- DB: MongoDB gmao_iris sur localhost:27017
-
-## Backlog
-1. **P0 (Differe)**: Systeme de mise a jour
-2. Ameliorations futures

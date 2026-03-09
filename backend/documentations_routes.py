@@ -1764,6 +1764,10 @@ async def get_insert_targets(
                 {"statut": {"$in": ["OUVERT", "EN_COURS", "EN_ATTENTE"]}},
                 {"_id": 0, "id": 1, "numero": 1, "titre": 1, "statut": 1}
             ).to_list(500)
+            # S'assurer que chaque item a un champ 'id'
+            for item in items:
+                if not item.get("id"):
+                    item["id"] = str(item.get("numero", ""))
             return items
         elif target_type == "improvement":
             items = await db.improvements.find(
