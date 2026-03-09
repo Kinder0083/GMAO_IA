@@ -183,7 +183,7 @@ function BonDeTravailForm() {
         toast({ title: 'Succès', description: 'Bon de travail créé' });
       }
       setShowEntrepriseDialog(false);
-      navigate(`/documentations/${poleId}`);
+      navigate(-1);
     } catch (error) {
       toast({
         title: 'Erreur',
@@ -242,9 +242,9 @@ function BonDeTravailForm() {
     <div className="space-y-6 p-6 max-w-5xl mx-auto">
       {/* Header */}
       <div>
-        <Button variant="ghost" onClick={() => navigate(`/documentations/${poleId}`)} className="mb-4">
+        <Button variant="ghost" onClick={() => navigate(-1)} className="mb-4">
           <ArrowLeft className="mr-2 h-4 w-4" />
-          Retour au pôle
+          Retour
         </Button>
         <div className="flex justify-between items-start">
           <div>
@@ -546,7 +546,7 @@ function BonDeTravailForm() {
           <Button
             type="button"
             variant="outline"
-            onClick={() => navigate(`/documentations/${poleId}`)}
+            onClick={() => navigate(-1)}
           >
             Annuler
           </Button>

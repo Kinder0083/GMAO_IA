@@ -179,11 +179,7 @@ const AutorisationParticuliereForm = () => {
         });
       }
       // Retourner au pôle ou à la liste des autorisations
-      if (fromPoleId) {
-        navigate(`/documentations/${fromPoleId}`);
-      } else {
-        navigate('/autorisations-particulieres');
-      }
+      navigate(-1);
     } catch (error) {
       toast({
         title: 'Erreur',
@@ -208,11 +204,7 @@ const AutorisationParticuliereForm = () => {
         description: 'Autorisation supprimée'
       });
       // Retourner au pôle ou à la page documentations
-      if (fromPoleId) {
-        navigate(`/documentations/${fromPoleId}`);
-      } else {
-        navigate('/documentations');
-      }
+      navigate(-1);
     } catch (error) {
       toast({
         title: 'Erreur',
@@ -230,7 +222,7 @@ const AutorisationParticuliereForm = () => {
         <div className="flex items-center gap-4">
           <Button 
             variant="ghost" 
-            onClick={() => fromPoleId ? navigate(`/documentations/${fromPoleId}`) : navigate('/documentations')}
+            onClick={() => navigate(-1)}
           >
             <ArrowLeft className="h-4 w-4" />
           </Button>
@@ -664,7 +656,7 @@ const AutorisationParticuliereForm = () => {
             <Button 
               type="button" 
               variant="outline" 
-              onClick={() => fromPoleId ? navigate(`/documentations/${fromPoleId}`) : navigate('/documentations')}
+              onClick={() => navigate(-1)}
             >
               Annuler
             </Button>
