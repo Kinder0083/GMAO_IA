@@ -186,9 +186,12 @@ def send_email_with_attachment(
             attachment = MIMEBase('application', 'octet-stream')
             attachment.set_payload(attachment_data)
             encoders.encode_base64(attachment)
+            # Utiliser RFC 2231 pour les noms avec caractères spéciaux
+            from email.utils import encode_rfc2231
             attachment.add_header(
                 'Content-Disposition',
-                f'attachment; filename= {attachment_filename}'
+                'attachment',
+                filename=attachment_filename
             )
             msg.attach(attachment)
         
