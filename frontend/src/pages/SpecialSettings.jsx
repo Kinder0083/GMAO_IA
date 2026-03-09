@@ -11,6 +11,7 @@ import {
   DataResetSettings,
   QRActionsAdmin
 } from '../components/Settings';
+import FormAIModelSettings from '../components/Settings/FormAIModelSettings';
 
 /**
  * Page de paramètres spéciaux / système
@@ -60,6 +61,9 @@ const SpecialSettings = () => {
 
           {/* Clés API LLM */}
           <LlmKeysSettings />
+
+          {/* Modèle IA pour Formulaires */}
+          <FormAIModelSettings />
 
           {/* Fuseau horaire et NTP */}
           <TimezoneSettings />

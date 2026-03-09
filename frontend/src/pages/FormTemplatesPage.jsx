@@ -26,13 +26,18 @@ import {
   PenTool,
   Upload,
   Image,
-  X
+  X,
+  Sparkles,
+  Loader2
 } from 'lucide-react';
 import { useToast } from '../hooks/use-toast';
 import { useConfirmDialog } from '../components/ui/confirm-dialog';
-import api from '../services/api';
+import api, { documentationsAPI } from '../services/api';
 import FormBuilderDialog from '../components/FormBuilderDialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
+import { Label } from '../components/ui/label';
+import { Textarea } from '../components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 
 // Types de formulaires disponibles (système)
 const SYSTEM_FORM_TYPES = [
@@ -106,14 +111,6 @@ function FormTemplatesPage() {
   };
 
   const handleEdit = (template) => {
-    if (template.is_system) {
-      toast({
-        title: 'Action non autorisée',
-        description: 'Les modèles système ne peuvent pas être modifiés',
-        variant: 'destructive'
-      });
-      return;
-    }
     setSelectedTemplate(template);
     setShowFormBuilder(true);
   };
@@ -121,8 +118,70 @@ function FormTemplatesPage() {
   // View state
   const [viewTemplate, setViewTemplate] = useState(null);
 
+  // AI generation state
+  const [showAIDialog, setShowAIDialog] = useState(false);
+  const [aiMode, setAIMode] = useState('description'); // 'description' | 'json' | 'file'
+  const [aiDescription, setAIDescription] = useState('');
+  const [aiJsonPrompt, setAIJsonPrompt] = useState('');
+  const [aiFile, setAIFile] = useState(null);
+  const [aiGenerating, setAIGenerating] = useState(false);
+  const [aiResult, setAIResult] = useState(null);
+
   const handleViewTemplate = (template) => {
     setViewTemplate(template);
+  };
+
+  const handleGenerateAI = async () => {
+    setAIGenerating(true);
+    setAIResult(null);
+    try {
+      const formData = new FormData();
+      if (aiMode === 'description' && aiDescription.trim()) {
+        formData.append('description', aiDescription.trim());
+      } else if (aiMode === 'json' && aiJsonPrompt.trim()) {
+        formData.append('json_prompt', aiJsonPrompt.trim());
+      } else if (aiMode === 'file' && aiFile) {
+        formData.append('file', aiFile);
+        if (aiDescription.trim()) formData.append('description', aiDescription.trim());
+      } else {
+        toast({ title: 'Erreur', description: 'Veuillez fournir une entrée', variant: 'destructive' });
+        setAIGenerating(false);
+        return;
+      }
+
+      const result = await documentationsAPI.generateFormAI(formData);
+      if (result.success && result.template) {
+        setAIResult(result.template);
+        toast({ title: 'Formulaire généré', description: `${result.template.fields?.length || 0} champ(s) détecté(s)` });
+      }
+    } catch (err) {
+      toast({ title: 'Erreur IA', description: err?.response?.data?.detail || "Échec de la génération", variant: 'destructive' });
+    } finally {
+      setAIGenerating(false);
+    }
+  };
+
+  const handleSaveAIResult = async () => {
+    if (!aiResult) return;
+    try {
+      const templateData = {
+        nom: aiResult.nom || 'Formulaire IA',
+        description: aiResult.description || 'Généré par IA',
+        type: 'CUSTOM',
+        fields: aiResult.fields || [],
+        actif: true
+      };
+      await api.post('/documentations/form-templates', templateData);
+      toast({ title: 'Succès', description: 'Modèle créé avec succès' });
+      setShowAIDialog(false);
+      setAIResult(null);
+      setAIDescription('');
+      setAIJsonPrompt('');
+      setAIFile(null);
+      loadTemplates();
+    } catch (err) {
+      toast({ title: 'Erreur', description: 'Impossible de sauvegarder', variant: 'destructive' });
+    }
   };
 
   const handleDelete = (template) => {
@@ -235,10 +294,16 @@ function FormTemplatesPage() {
               Gérez les modèles de formulaires disponibles dans les pôles
             </p>
           </div>
-          <Button onClick={handleCreate} className="bg-blue-600 hover:bg-blue-700">
-            <Plus className="mr-2 h-4 w-4" />
-            Nouveau modèle personnalisé
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={() => setShowAIDialog(true)} variant="outline" className="border-purple-300 text-purple-700 hover:bg-purple-50">
+              <Sparkles className="mr-2 h-4 w-4" />
+              Création IA
+            </Button>
+            <Button onClick={handleCreate} className="bg-blue-600 hover:bg-blue-700">
+              <Plus className="mr-2 h-4 w-4" />
+              Nouveau modèle
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -525,6 +590,135 @@ function FormTemplatesPage() {
                   </Button>
                 </DialogFooter>
               )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* AI Generation Dialog */}
+      <Dialog open={showAIDialog} onOpenChange={(open) => { setShowAIDialog(open); if (!open) { setAIResult(null); setAIDescription(''); setAIJsonPrompt(''); setAIFile(null); } }}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-purple-600" />
+              Création de formulaire par IA
+            </DialogTitle>
+          </DialogHeader>
+
+          {!aiResult ? (
+            <div className="space-y-4">
+              <div>
+                <Label className="text-sm font-medium">Mode de création</Label>
+                <div className="grid grid-cols-3 gap-2 mt-2">
+                  {[
+                    { value: 'description', label: 'Description texte', icon: AlignLeft },
+                    { value: 'file', label: 'Fichier (Excel/Image)', icon: Upload },
+                    { value: 'json', label: 'Prompt JSON', icon: Settings }
+                  ].map(({ value, label, icon: Icon }) => (
+                    <button key={value}
+                      className={`p-3 rounded-lg border text-sm flex flex-col items-center gap-2 transition-colors
+                        ${aiMode === value ? 'border-purple-400 bg-purple-50 text-purple-700' : 'border-gray-200 hover:border-gray-300'}`}
+                      onClick={() => setAIMode(value)}>
+                      <Icon className="h-5 w-5" />{label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {aiMode === 'description' && (
+                <div>
+                  <Label>Description du formulaire souhaité</Label>
+                  <Textarea rows={5} value={aiDescription} onChange={(e) => setAIDescription(e.target.value)}
+                    placeholder="Ex: Un formulaire de demande d'intervention avec les champs : nom du demandeur, date, urgence (haute/moyenne/basse), description du problème, localisation, équipement concerné, signature..."
+                    data-testid="ai-description-input" />
+                </div>
+              )}
+
+              {aiMode === 'file' && (
+                <div className="space-y-3">
+                  <div>
+                    <Label>Fichier (Excel, CSV, ou Image de formulaire)</Label>
+                    <Input type="file" accept=".xlsx,.xls,.csv,.png,.jpg,.jpeg,.webp"
+                      onChange={(e) => setAIFile(e.target.files?.[0])}
+                      data-testid="ai-file-input" />
+                    <p className="text-xs text-gray-500 mt-1">Formats acceptés : Excel (.xlsx, .xls, .csv), Images (.png, .jpg)</p>
+                  </div>
+                  <div>
+                    <Label>Description complémentaire (optionnel)</Label>
+                    <Textarea rows={3} value={aiDescription} onChange={(e) => setAIDescription(e.target.value)}
+                      placeholder="Précisions supplémentaires pour aider l'IA..." />
+                  </div>
+                </div>
+              )}
+
+              {aiMode === 'json' && (
+                <div>
+                  <Label>Prompt JSON</Label>
+                  <Textarea rows={8} value={aiJsonPrompt} onChange={(e) => setAIJsonPrompt(e.target.value)}
+                    className="font-mono text-sm"
+                    placeholder={'{\n  "nom": "Mon formulaire",\n  "fields": [\n    {"label": "Nom", "type": "text", "required": true},\n    {"label": "Date", "type": "date"},\n    {"label": "Priorité", "type": "select", "options": ["Haute", "Moyenne", "Basse"]}\n  ]\n}'}
+                    data-testid="ai-json-input" />
+                </div>
+              )}
+
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setShowAIDialog(false)}>Annuler</Button>
+                <Button onClick={handleGenerateAI} disabled={aiGenerating}
+                  className="bg-purple-600 hover:bg-purple-700" data-testid="ai-generate-btn">
+                  {aiGenerating ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Génération en cours...</>
+                    : <><Sparkles className="h-4 w-4 mr-2" /> Générer</>}
+                </Button>
+              </DialogFooter>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                <h3 className="font-semibold text-green-800">{aiResult.nom}</h3>
+                {aiResult.description && <p className="text-sm text-green-700 mt-1">{aiResult.description}</p>}
+                <p className="text-sm text-green-600 mt-2">{aiResult.fields?.length || 0} champ(s) détecté(s)</p>
+              </div>
+
+              <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                {(aiResult.fields || []).map((field, idx) => {
+                  const FieldIcon = FIELD_TYPE_ICONS[field.type] || Type;
+                  return (
+                    <div key={idx} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border">
+                      <div className="p-1.5 bg-white rounded border">
+                        <FieldIcon className="h-4 w-4 text-gray-500" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">{field.label}</p>
+                        <p className="text-xs text-gray-400">{field.type}{field.required ? ' - Obligatoire' : ''}</p>
+                      </div>
+                      {field.options && (
+                        <div className="flex flex-wrap gap-1">
+                          {field.options.slice(0, 3).map((opt, i) => (
+                            <Badge key={i} variant="outline" className="text-[10px]">{opt}</Badge>
+                          ))}
+                          {field.options.length > 3 && <Badge variant="outline" className="text-[10px]">+{field.options.length - 3}</Badge>}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <DialogFooter className="flex gap-2">
+                <Button variant="outline" onClick={() => setAIResult(null)}>
+                  Regénérer
+                </Button>
+                <Button variant="outline" onClick={() => {
+                  setSelectedTemplate({ ...aiResult, type: 'CUSTOM', actif: true, fields: aiResult.fields });
+                  setShowFormBuilder(true);
+                  setShowAIDialog(false);
+                  setAIResult(null);
+                }}>
+                  <Edit className="h-4 w-4 mr-1" /> Modifier avant de sauvegarder
+                </Button>
+                <Button onClick={handleSaveAIResult} className="bg-green-600 hover:bg-green-700">
+                  <Plus className="h-4 w-4 mr-1" /> Sauvegarder le modèle
+                </Button>
+              </DialogFooter>
             </div>
           )}
         </DialogContent>

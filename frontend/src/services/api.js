@@ -733,6 +733,16 @@ export const documentationsAPI = {
       headers: { 'Content-Type': 'multipart/form-data' }
     }).then(res => res.data);
   },
+
+  // IA - Génération de formulaires
+  generateFormAI: (formData) => api.post('/documentations/form-templates/generate-ai', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 120000
+  }).then(res => res.data),
+
+  // Config modèle IA
+  getAIModelConfig: () => api.get('/documentations/ai-model-config').then(res => res.data),
+  updateAIModelConfig: (data) => api.put('/documentations/ai-model-config', data).then(res => res.data),
 };
 
 // ==================== AUTORISATIONS PARTICULIÈRES ====================

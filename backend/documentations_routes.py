@@ -10,6 +10,8 @@ from pathlib import Path
 import uuid
 import logging
 import mimetypes
+import json
+import os
 from io import BytesIO
 
 from models import (
@@ -902,7 +904,35 @@ async def get_form_templates(current_user: dict = Depends(get_current_user)):
     try:
         templates = await db.form_templates.find({}, {"_id": 0}).to_list(length=None)
         
-        # Si aucun template, retourner les templates système par défaut
+        # Templates système par défaut avec leurs champs
+        BON_TRAVAIL_FIELDS = [
+            {"label": "Localisation / Ligne", "type": "text", "required": True},
+            {"label": "Description des travaux", "type": "textarea", "required": True},
+            {"label": "Nom des intervenants", "type": "text", "required": True},
+            {"label": "Type de travaux", "type": "select", "options": ["Mécanique", "Électrique", "Automatisme", "Plomberie", "Autre"]},
+            {"label": "Risques identifiés", "type": "textarea"},
+            {"label": "Consignations nécessaires", "type": "checkbox_group", "options": ["Consignation", "Déconsignation"]},
+            {"label": "Précautions matérielles", "type": "checkbox_group", "options": ["Échafaudage", "Harnais", "Nacelle", "Ligne vie"]},
+            {"label": "Équipements de Protection (EPI)", "type": "checkbox_group", "options": ["Casque", "Gants", "Lunettes", "Masque", "Chaussures S3", "Gilet HV", "Bouchons oreilles"]},
+            {"label": "Précautions environnementales", "type": "checkbox_group", "options": ["Balisage", "Signalisation", "Permis feu", "Ventilation"]},
+            {"label": "Date d'engagement", "type": "date", "required": True},
+            {"label": "Nom agent de maîtrise", "type": "text", "required": True},
+            {"label": "Nom du représentant", "type": "text", "required": True}
+        ]
+        
+        AUTORISATION_FIELDS = [
+            {"label": "Type d'autorisation", "type": "select", "options": ["Travail en hauteur", "Permis de feu", "Espace confiné", "Travail sur toiture", "Autre"], "required": True},
+            {"label": "Lieu des travaux", "type": "text", "required": True},
+            {"label": "Nature des travaux", "type": "textarea", "required": True},
+            {"label": "Date de début", "type": "date", "required": True},
+            {"label": "Date de fin", "type": "date", "required": True},
+            {"label": "Entreprise intervenante", "type": "text"},
+            {"label": "Nom du responsable", "type": "text", "required": True},
+            {"label": "Mesures de prévention", "type": "textarea"},
+            {"label": "Signature responsable", "type": "text", "required": True}
+        ]
+        
+        # Si aucun template, créer les templates par défaut
         if not templates:
             default_templates = [
                 {
@@ -910,6 +940,7 @@ async def get_form_templates(current_user: dict = Depends(get_current_user)):
                     "nom": "Bon de travail",
                     "type": "BON_TRAVAIL",
                     "description": "Formulaire standard pour les bons de travail de maintenance",
+                    "fields": BON_TRAVAIL_FIELDS,
                     "actif": True,
                     "is_system": True,
                     "created_at": datetime.now(timezone.utc).isoformat()
@@ -919,15 +950,25 @@ async def get_form_templates(current_user: dict = Depends(get_current_user)):
                     "nom": "Autorisation particulière",
                     "type": "AUTORISATION",
                     "description": "Formulaire standard pour les autorisations de travail spéciales",
+                    "fields": AUTORISATION_FIELDS,
                     "actif": True,
                     "is_system": True,
                     "created_at": datetime.now(timezone.utc).isoformat()
                 }
             ]
-            # Insérer les templates par défaut
             for tpl in default_templates:
                 await db.form_templates.insert_one(tpl)
             return default_templates
+        
+        # S'assurer que les templates système ont leurs champs
+        for tpl in templates:
+            if tpl.get("is_system") and not tpl.get("fields"):
+                if tpl.get("type") == "BON_TRAVAIL":
+                    tpl["fields"] = BON_TRAVAIL_FIELDS
+                    await db.form_templates.update_one({"id": tpl["id"]}, {"$set": {"fields": BON_TRAVAIL_FIELDS}})
+                elif tpl.get("type") == "AUTORISATION":
+                    tpl["fields"] = AUTORISATION_FIELDS
+                    await db.form_templates.update_one({"id": tpl["id"]}, {"$set": {"fields": AUTORISATION_FIELDS}})
         
         return templates
     except Exception as e:
@@ -990,18 +1031,17 @@ async def update_form_template(
         if not existing:
             raise HTTPException(status_code=404, detail="Modèle non trouvé")
         
-        if existing.get("is_system"):
-            raise HTTPException(status_code=400, detail="Les modèles système ne peuvent pas être modifiés")
-        
         update_data = {
             "nom": template_data.get("nom", existing.get("nom")),
-            "type": template_data.get("type", existing.get("type")),
             "description": template_data.get("description", existing.get("description")),
             "fields": template_data.get("fields", existing.get("fields", [])),
             "actif": template_data.get("actif", existing.get("actif")),
             "updated_at": datetime.now(timezone.utc).isoformat(),
             "updated_by": current_user.get("id")
         }
+        # Ne pas changer le type pour les templates système
+        if not existing.get("is_system"):
+            update_data["type"] = template_data.get("type", existing.get("type"))
         
         await db.form_templates.update_one({"id": template_id}, {"$set": update_data})
         
@@ -1035,6 +1075,212 @@ async def delete_form_template(
         raise
     except Exception as e:
         logger.error(f"Erreur suppression template: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== GÉNÉRATION IA DE FORMULAIRES ====================
+
+FORM_AI_PROMPT = """Tu es un expert en création de formulaires pour une application GMAO (Gestion de Maintenance Assistée par Ordinateur) appelée FSAO Iris.
+
+L'utilisateur te fournit une description, une image de formulaire papier, un fichier Excel, ou un prompt JSON. Tu dois analyser l'entrée et générer la structure JSON d'un modèle de formulaire.
+
+=== TYPES DE CHAMPS DISPONIBLES ===
+- "text" : Champ texte simple (une ligne)
+- "textarea" : Zone de texte multiligne
+- "number" : Champ numérique
+- "date" : Sélecteur de date
+- "select" : Liste déroulante (nécessite un tableau "options")
+- "checkbox" : Case à cocher unique (oui/non)
+- "checkbox_group" : Groupe de cases à cocher (nécessite un tableau "options")
+- "radio" : Boutons radio (nécessite un tableau "options")
+- "signature" : Zone de signature
+- "file" : Upload de fichier
+- "image" : Upload d'image
+
+=== FORMAT DE SORTIE ===
+Retourne UNIQUEMENT un JSON valide (pas de markdown, pas de texte avant/après) avec cette structure exacte :
+{
+  "nom": "Nom du formulaire",
+  "description": "Description courte du formulaire",
+  "fields": [
+    {
+      "label": "Nom du champ",
+      "type": "text|textarea|number|date|select|checkbox|checkbox_group|radio|signature|file|image",
+      "required": true/false,
+      "options": ["option1", "option2"]  // uniquement pour select, checkbox_group, radio
+    }
+  ]
+}
+
+=== RÈGLES ===
+- Analyse minutieusement l'entrée (image, texte, Excel)
+- Identifie chaque champ/zone de saisie et son type le plus approprié
+- Marque comme "required" les champs qui semblent obligatoires
+- Pour les listes de choix, utilise "select" ou "checkbox_group" selon le contexte
+- Pour les zones de texte longues (commentaires, descriptions), utilise "textarea"
+- Pour les signatures, utilise "signature"
+- Génère un nom et une description pertinents pour le formulaire
+- Le JSON doit être valide et parsable directement
+"""
+
+
+@router.post("/form-templates/generate-ai")
+async def generate_form_template_ai(
+    description: Optional[str] = Form(None),
+    json_prompt: Optional[str] = Form(None),
+    file: Optional[UploadFile] = File(None),
+    current_user: dict = Depends(get_current_admin_user)
+):
+    """Générer un modèle de formulaire via IA à partir d'une description, image, Excel ou JSON"""
+    try:
+        from emergentintegrations.llm.chat import LlmChat, UserMessage, FileContentWithMimeType
+        import tempfile
+
+        # Récupérer la clé LLM
+        api_key = os.environ.get("EMERGENT_LLM_KEY")
+        if not api_key:
+            gk = await db.global_settings.find_one({"key": "EMERGENT_LLM_KEY"})
+            if gk and gk.get("value"):
+                api_key = gk["value"]
+        if not api_key:
+            raise HTTPException(status_code=500, detail="Clé LLM non configurée")
+
+        # Récupérer le modèle IA configuré
+        ai_settings = await db.global_settings.find_one({"key": "form_ai_model"})
+        provider = "openai"
+        model = "gpt-4o"
+        if ai_settings and ai_settings.get("value"):
+            provider = ai_settings["value"].get("provider", "openai")
+            model = ai_settings["value"].get("model", "gpt-4o")
+
+        # Créer le chat IA
+        chat = LlmChat(
+            api_key=api_key,
+            session_id=f"form-gen-{uuid.uuid4()}",
+            system_message=FORM_AI_PROMPT
+        ).with_model(provider, model)
+
+        # Construire le message
+        user_text = ""
+        file_contents = []
+
+        if json_prompt:
+            user_text = f"Voici un prompt JSON à convertir en formulaire :\n```json\n{json_prompt}\n```\nGénère le formulaire correspondant."
+        elif description:
+            user_text = f"Crée un formulaire basé sur cette description :\n\n{description}"
+        else:
+            user_text = "Analyse le fichier ci-joint et crée un formulaire basé sur son contenu."
+
+        # Traiter le fichier uploadé
+        if file:
+            content = await file.read()
+            mime_type, _ = mimetypes.guess_type(file.filename) if file.filename else (None, None)
+            mime_type = mime_type or file.content_type or "application/octet-stream"
+
+            if mime_type.startswith("image/"):
+                # Image : envoyer directement à l'IA
+                with tempfile.NamedTemporaryFile(delete=False, suffix=Path(file.filename).suffix) as tmp:
+                    tmp.write(content)
+                    tmp_path = tmp.name
+                file_contents.append(FileContentWithMimeType(file_path=tmp_path, mime_type=mime_type))
+                user_text += f"\n\nAnalyse cette image de formulaire et extrais tous les champs visibles."
+
+            elif "spreadsheet" in mime_type or "excel" in mime_type or file.filename.endswith(('.xlsx', '.xls', '.csv')):
+                # Excel/CSV : extraire le contenu textuel
+                import io
+                try:
+                    import openpyxl
+                    wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
+                    ws = wb.active
+                    rows_text = []
+                    for row in ws.iter_rows(max_row=50, values_only=True):
+                        row_vals = [str(c) if c is not None else "" for c in row]
+                        if any(v.strip() for v in row_vals):
+                            rows_text.append(" | ".join(row_vals))
+                    excel_text = "\n".join(rows_text)
+                    user_text += f"\n\nContenu du fichier Excel :\n```\n{excel_text}\n```\nAnalyse ce contenu et crée un formulaire avec les champs appropriés."
+                except Exception:
+                    # Fallback : CSV
+                    try:
+                        text_content = content.decode('utf-8', errors='replace')
+                        user_text += f"\n\nContenu du fichier :\n```\n{text_content[:5000]}\n```\nAnalyse et crée un formulaire."
+                    except Exception:
+                        user_text += "\n\nImpossible de lire le fichier. Crée un formulaire générique de maintenance."
+            else:
+                # Autre type de fichier
+                try:
+                    text_content = content.decode('utf-8', errors='replace')
+                    user_text += f"\n\nContenu du fichier :\n```\n{text_content[:5000]}\n```"
+                except Exception:
+                    user_text += "\n\nFichier non lisible."
+
+        if not user_text.strip() and not file:
+            raise HTTPException(status_code=400, detail="Fournissez une description, un JSON ou un fichier")
+
+        # Appeler l'IA
+        msg = UserMessage(text=user_text, file_contents=file_contents if file_contents else None)
+        response = await chat.send_message(msg)
+
+        # Parser la réponse JSON
+        import re
+        json_match = re.search(r'\{[\s\S]*\}', response)
+        if not json_match:
+            raise HTTPException(status_code=500, detail="L'IA n'a pas retourné un JSON valide")
+
+        result = json.loads(json_match.group())
+
+        # Valider la structure
+        if "fields" not in result or not isinstance(result["fields"], list):
+            raise HTTPException(status_code=500, detail="Structure de formulaire invalide")
+
+        return {
+            "success": True,
+            "template": {
+                "nom": result.get("nom", "Formulaire généré par IA"),
+                "description": result.get("description", ""),
+                "fields": result["fields"]
+            }
+        }
+    except HTTPException:
+        raise
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=500, detail="L'IA n'a pas retourné un JSON valide. Réessayez.")
+    except Exception as e:
+        logger.error(f"Erreur génération IA formulaire: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== PARAMÈTRES MODÈLE IA FORMULAIRES ====================
+
+@router.get("/ai-model-config")
+async def get_ai_model_config(current_user: dict = Depends(get_current_user)):
+    """Récupérer la configuration du modèle IA pour les formulaires"""
+    try:
+        config = await db.global_settings.find_one({"key": "form_ai_model"}, {"_id": 0})
+        if config and config.get("value"):
+            return config["value"]
+        return {"provider": "openai", "model": "gpt-4o"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.put("/ai-model-config")
+async def update_ai_model_config(
+    data: dict,
+    current_user: dict = Depends(get_current_admin_user)
+):
+    """Mettre à jour la configuration du modèle IA pour les formulaires"""
+    try:
+        provider = data.get("provider", "openai")
+        model = data.get("model", "gpt-4o")
+        
+        await db.global_settings.update_one(
+            {"key": "form_ai_model"},
+            {"$set": {"key": "form_ai_model", "value": {"provider": provider, "model": model}, "updated_at": datetime.now(timezone.utc).isoformat()}},
+            upsert=True
+        )
+        return {"success": True, "provider": provider, "model": model}
+    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
