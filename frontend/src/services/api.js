@@ -701,7 +701,27 @@ export const documentationsAPI = {
   updateFolder: (folderId, data) => api.put(`/documentations/folders/${folderId}`, data).then(res => res.data),
   deleteFolder: (folderId) => api.delete(`/documentations/folders/${folderId}`).then(res => res.data),
   moveDocument: (docId, data) => api.put(`/documentations/documents/${docId}/move`, data).then(res => res.data),
-  getExplorerContents: (poleId, folderId) => api.get(`/documentations/poles/${poleId}/explorer`, { params: { folder_id: folderId || null } }).then(res => res.data)
+  getExplorerContents: (poleId, folderId, sortBy) => api.get(`/documentations/poles/${poleId}/explorer`, { params: { folder_id: folderId || null, sort_by: sortBy || 'name' } }).then(res => res.data),
+
+  // Copier / Déplacer
+  copyNode: (data) => api.post('/documentations/copy', data).then(res => res.data),
+  moveNode: (data) => api.post('/documentations/move', data).then(res => res.data),
+
+  // Permissions
+  togglePermission: (nodeId, data) => api.patch(`/documentations/permissions/${nodeId}`, data).then(res => res.data),
+
+  // Envoyer vers un autre pôle
+  sendToPole: (data) => api.post('/documentations/send-to', data).then(res => res.data),
+
+  // Partager par email FSAO
+  shareByEmail: (data) => api.post('/documentations/share-email', data).then(res => res.data),
+
+  // Insérer dans OT / Amélioration / M.Prev
+  getInsertTargets: (targetType) => api.get('/documentations/insert-targets', { params: { target_type: targetType } }).then(res => res.data),
+  insertInto: (data) => api.post('/documentations/insert-into', data).then(res => res.data),
+
+  // Form Templates
+  getFormTemplates: () => api.get('/documentations/form-templates').then(res => res.data),
 };
 
 // ==================== AUTORISATIONS PARTICULIÈRES ====================

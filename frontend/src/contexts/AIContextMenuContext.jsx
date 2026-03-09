@@ -257,6 +257,10 @@ export const AIContextMenuProvider = ({ children }) => {
     const isChatComponent = target.closest('[data-chat-message], .chat-message, .message-container, [data-no-ai-menu]');
     if (isChatComponent) return;
 
+    // Ignorer si on est dans l'explorateur de documents (menu contextuel dédié)
+    const isDocExplorer = target.closest('[data-explorer-bg], [data-testid^="explorer-item-"], [data-testid="explorer-view"]');
+    if (isDocExplorer) return;
+
     e.preventDefault();
     
     // Extraire le contexte enrichi

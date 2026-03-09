@@ -1397,9 +1397,10 @@ async def move_document(
 async def get_explorer_contents(
     pole_id: str,
     folder_id: Optional[str] = None,
+    sort_by: Optional[str] = "name",
     current_user: dict = Depends(get_current_user)
 ):
-    """Récupérer le contenu d'un dossier pour la vue explorateur"""
+    """Récupérer le contenu d'un dossier pour la vue explorateur avec filtrage par permissions"""
     try:
         pole = await db.poles_service.find_one({"id": pole_id})
         if not pole:
@@ -1407,12 +1408,23 @@ async def get_explorer_contents(
         if "_id" in pole:
             del pole["_id"]
 
+        user_role = current_user.get("role", "")
+        user_service = current_user.get("service", "")
+        is_admin = user_role == "ADMIN"
+        is_maintenance = user_service == "Maintenance" or pole.get("pole") == "MAINTENANCE"
+
         # Sous-dossiers
         folders = await db.doc_folders.find(
             {"pole_id": pole_id, "parent_id": folder_id}, {"_id": 0}
         ).to_list(length=None)
 
-        # Documents dans ce dossier (folder_id null ou absent = racine)
+        # Filtrer par permissions
+        if not is_admin:
+            folders = [f for f in folders if not f.get("hidden_for_users", False)]
+        if not is_admin and not is_maintenance:
+            folders = [f for f in folders if not f.get("hidden_for_external", False)]
+
+        # Documents dans ce dossier
         if folder_id is None:
             documents = await db.documents.find(
                 {"pole_id": pole_id, "$or": [{"folder_id": None}, {"folder_id": {"$exists": False}}]}, {"_id": 0}
@@ -1422,12 +1434,29 @@ async def get_explorer_contents(
                 {"pole_id": pole_id, "folder_id": folder_id}, {"_id": 0}
             ).to_list(length=None)
 
-        # Bons de travail (uniquement à la racine du pôle, sans folder_id)
+        # Filtrer par permissions
+        if not is_admin:
+            documents = [d for d in documents if not d.get("hidden_for_users", False)]
+        if not is_admin and not is_maintenance:
+            documents = [d for d in documents if not d.get("hidden_for_external", False)]
+
+        # Bons de travail (uniquement à la racine du pôle)
         bons_travail = []
         if folder_id is None:
             bons_travail = await db.bons_travail.find(
                 {"pole_id": pole_id}, {"_id": 0}
             ).to_list(length=None)
+
+        # Tri
+        sort_key_map = {
+            "name": lambda x: (x.get("name") or x.get("titre") or x.get("fichier_nom") or "").lower(),
+            "date": lambda x: x.get("created_at") or x.get("updated_at") or "",
+            "type": lambda x: x.get("fichier_type") or x.get("type_document") or ""
+        }
+        sort_fn = sort_key_map.get(sort_by, sort_key_map["name"])
+        folders.sort(key=sort_fn)
+        documents.sort(key=sort_fn)
+        bons_travail.sort(key=sort_fn)
 
         # Breadcrumb
         breadcrumb = [{"id": pole_id, "name": pole.get("nom", ""), "type": "pole"}]
@@ -1453,4 +1482,374 @@ async def get_explorer_contents(
         raise
     except Exception as e:
         logger.error(f"Erreur récupération contenu explorateur: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== COPIER / COUPER-COLLER ====================
+
+@router.post("/copy")
+async def copy_node(
+    copy_data: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    """Copier un document ou dossier vers un emplacement cible"""
+    try:
+        node_id = copy_data.get("node_id")
+        node_type = copy_data.get("node_type")  # "document" ou "folder"
+        target_pole_id = copy_data.get("target_pole_id")
+        target_folder_id = copy_data.get("target_folder_id")
+
+        if node_type == "document":
+            doc = await db.documents.find_one({"id": node_id}, {"_id": 0})
+            if not doc:
+                raise HTTPException(status_code=404, detail="Document non trouvé")
+            # Créer une copie
+            new_doc = {**doc}
+            new_doc["id"] = str(uuid.uuid4())
+            new_doc["titre"] = f"{doc.get('titre', 'Document')} (copie)"
+            if doc.get("fichier_nom"):
+                name, ext = os.path.splitext(doc["fichier_nom"])
+                new_doc["fichier_nom"] = f"{name} (copie){ext}"
+            if target_pole_id:
+                new_doc["pole_id"] = target_pole_id
+            new_doc["folder_id"] = target_folder_id
+            new_doc["created_at"] = datetime.now(timezone.utc).isoformat()
+            new_doc["created_by"] = current_user.get("id")
+            # Copier le fichier physique si existant
+            if doc.get("fichier_url"):
+                src_path = Path(f"/app/backend{doc['fichier_url']}")
+                if src_path.exists():
+                    upload_dir = Path("uploads/documents")
+                    upload_dir.mkdir(parents=True, exist_ok=True)
+                    new_filename = f"{new_doc['id']}_{uuid.uuid4()}{src_path.suffix}"
+                    dst_path = upload_dir / new_filename
+                    import shutil
+                    shutil.copy2(src_path, dst_path)
+                    new_doc["fichier_url"] = f"/uploads/documents/{new_filename}"
+            await db.documents.insert_one(new_doc)
+            new_doc.pop("_id", None)
+            if realtime_manager:
+                await realtime_manager.emit_event("documentations", "created", new_doc, user_id=current_user["id"])
+            return new_doc
+
+        elif node_type == "folder":
+            folder = await db.doc_folders.find_one({"id": node_id}, {"_id": 0})
+            if not folder:
+                raise HTTPException(status_code=404, detail="Dossier non trouvé")
+            new_folder = {**folder}
+            new_folder["id"] = str(uuid.uuid4())
+            new_folder["name"] = f"{folder.get('name', 'Dossier')} (copie)"
+            if target_pole_id:
+                new_folder["pole_id"] = target_pole_id
+            new_folder["parent_id"] = target_folder_id
+            new_folder["created_at"] = datetime.now(timezone.utc).isoformat()
+            new_folder["created_by"] = current_user.get("id")
+            await db.doc_folders.insert_one(new_folder)
+            new_folder.pop("_id", None)
+            if realtime_manager:
+                await realtime_manager.emit_event("documentations", "created", new_folder, user_id=current_user["id"])
+            return new_folder
+        else:
+            raise HTTPException(status_code=400, detail="Type de noeud invalide")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erreur copie: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/move")
+async def move_node(
+    move_data: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    """Déplacer (couper-coller) un document ou dossier"""
+    try:
+        node_id = move_data.get("node_id")
+        node_type = move_data.get("node_type")
+        target_pole_id = move_data.get("target_pole_id")
+        target_folder_id = move_data.get("target_folder_id")
+
+        if node_type == "document":
+            doc = await db.documents.find_one({"id": node_id})
+            if not doc:
+                raise HTTPException(status_code=404, detail="Document non trouvé")
+            update = {"updated_at": datetime.now(timezone.utc).isoformat(), "folder_id": target_folder_id}
+            if target_pole_id:
+                update["pole_id"] = target_pole_id
+            await db.documents.update_one({"id": node_id}, {"$set": update})
+            updated = await db.documents.find_one({"id": node_id}, {"_id": 0})
+            if realtime_manager:
+                await realtime_manager.emit_event("documentations", "updated", updated, user_id=current_user["id"])
+            return updated
+
+        elif node_type == "folder":
+            folder = await db.doc_folders.find_one({"id": node_id})
+            if not folder:
+                raise HTTPException(status_code=404, detail="Dossier non trouvé")
+            update = {"updated_at": datetime.now(timezone.utc).isoformat(), "parent_id": target_folder_id}
+            if target_pole_id:
+                update["pole_id"] = target_pole_id
+            await db.doc_folders.update_one({"id": node_id}, {"$set": update})
+            updated = await db.doc_folders.find_one({"id": node_id}, {"_id": 0})
+            if realtime_manager:
+                await realtime_manager.emit_event("documentations", "updated", updated, user_id=current_user["id"])
+            return updated
+        else:
+            raise HTTPException(status_code=400, detail="Type de noeud invalide")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erreur déplacement: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== PERMISSIONS ====================
+
+@router.patch("/permissions/{node_id}")
+async def toggle_permissions(
+    node_id: str,
+    perm_data: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    """Basculer la visibilité d'un document ou dossier"""
+    try:
+        node_type = perm_data.get("node_type", "document")
+        field = perm_data.get("field")  # "hidden_for_external" ou "hidden_for_users"
+
+        if field not in ("hidden_for_external", "hidden_for_users"):
+            raise HTTPException(status_code=400, detail="Champ de permission invalide")
+
+        collection = db.documents if node_type == "document" else db.doc_folders
+        node = await collection.find_one({"id": node_id})
+        if not node:
+            raise HTTPException(status_code=404, detail="Élément non trouvé")
+
+        current_value = node.get(field, False)
+        new_value = not current_value
+
+        await collection.update_one(
+            {"id": node_id},
+            {"$set": {field: new_value, "updated_at": datetime.now(timezone.utc).isoformat()}}
+        )
+
+        updated = await collection.find_one({"id": node_id}, {"_id": 0})
+        if realtime_manager:
+            await realtime_manager.emit_event("documentations", "updated", updated, user_id=current_user["id"])
+
+        return {"success": True, "field": field, "value": new_value, "node": updated}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erreur permissions: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== ENVOYER VERS (autre pôle) ====================
+
+@router.post("/send-to")
+async def send_to_pole(
+    data: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    """Copier un fichier/dossier vers la racine d'un autre pôle"""
+    try:
+        node_id = data.get("node_id")
+        node_type = data.get("node_type")
+        target_pole_id = data.get("target_pole_id")
+
+        # Vérifier que le pôle cible existe
+        target_pole = await db.poles_service.find_one({"id": target_pole_id})
+        if not target_pole:
+            raise HTTPException(status_code=404, detail="Pôle cible non trouvé")
+
+        # Copier vers la racine du pôle cible
+        result = await copy_node(
+            {"node_id": node_id, "node_type": node_type, "target_pole_id": target_pole_id, "target_folder_id": None},
+            current_user
+        )
+        return {"success": True, "message": f"Copié vers {target_pole.get('nom')}", "node": result}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erreur envoi vers pôle: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== PARTAGER PAR FSAO (EMAIL SMTP) ====================
+
+@router.post("/share-email")
+async def share_by_email(
+    data: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    """Envoyer un document par email via le SMTP configuré dans l'application"""
+    try:
+        import email_service
+
+        document_id = data.get("document_id")
+        recipient = data.get("recipient")
+        subject = data.get("subject", "Document partagé via FSAO")
+        message = data.get("message", "")
+        signature = data.get("signature", f"Cordialement,\n{current_user.get('prenom', '')} {current_user.get('nom', '')}\nFSAO Atlas")
+
+        if not recipient:
+            raise HTTPException(status_code=400, detail="Destinataire requis")
+
+        doc = await db.documents.find_one({"id": document_id})
+        if not doc:
+            raise HTTPException(status_code=404, detail="Document non trouvé")
+
+        # Construire le HTML de l'email
+        html_content = f"""
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #2563eb;">Document partagé</h2>
+            <p>{message.replace(chr(10), '<br>')}</p>
+            <div style="background: #f3f4f6; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                <p style="margin: 0;"><strong>Document :</strong> {doc.get('fichier_nom') or doc.get('titre', 'Document')}</p>
+                {f"<p style='margin: 5px 0 0;'><strong>Type :</strong> {doc.get('fichier_type', 'N/A')}</p>" if doc.get('fichier_type') else ""}
+            </div>
+            <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;" />
+            <p style="white-space: pre-line; color: #6b7280;">{signature}</p>
+        </div>
+        """
+
+        # Envoyer avec ou sans pièce jointe
+        attachment_data = None
+        attachment_filename = None
+        if doc.get("fichier_url"):
+            file_path = Path(f"/app/backend{doc['fichier_url']}")
+            if file_path.exists():
+                with open(file_path, "rb") as f:
+                    attachment_data = f.read()
+                attachment_filename = doc.get("fichier_nom", "document")
+
+        if attachment_data:
+            success = email_service.send_email_with_attachment(
+                to_email=recipient,
+                subject=subject,
+                html_content=html_content,
+                attachment_data=attachment_data,
+                attachment_filename=attachment_filename
+            )
+        else:
+            success = email_service.send_email(
+                to_email=recipient,
+                subject=subject,
+                html_content=html_content
+            )
+
+        if success:
+            return {"success": True, "message": f"Email envoyé à {recipient}"}
+        else:
+            raise HTTPException(status_code=500, detail="Échec de l'envoi de l'email")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erreur partage email: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== INSÉRER DANS OT / AMÉLIORATION / M.PREV ====================
+
+@router.get("/insert-targets")
+async def get_insert_targets(
+    target_type: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Récupérer la liste des OT, Améliorations ou M.Prev pour le dialogue d'insertion"""
+    try:
+        if target_type == "work_order":
+            items = await db.work_orders.find(
+                {"statut": {"$in": ["OUVERT", "EN_COURS", "EN_ATTENTE"]}},
+                {"_id": 0, "id": 1, "numero": 1, "titre": 1, "statut": 1}
+            ).to_list(500)
+            return items
+        elif target_type == "improvement":
+            items = await db.improvements.find(
+                {"statut": {"$in": ["OUVERT", "EN_COURS", "EN_ATTENTE", "PROPOSEE"]}},
+                {"_id": 0, "id": 1, "numero": 1, "titre": 1, "statut": 1}
+            ).to_list(500)
+            return items
+        elif target_type == "preventive_maintenance":
+            items = await db.preventive_maintenances.find(
+                {"statut": "ACTIF"},
+                {"_id": 0, "id": 1, "titre": 1, "statut": 1, "equipement_nom": 1}
+            ).to_list(500)
+            # Ajouter un label pour l'affichage
+            for item in items:
+                if not item.get("titre"):
+                    item["titre"] = item.get("equipement_nom", "M.Prev")
+            return items
+        else:
+            raise HTTPException(status_code=400, detail="Type cible invalide")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erreur récupération cibles insertion: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/insert-into")
+async def insert_document_into(
+    data: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    """Insérer un document dans un OT, une Amélioration ou une M.Prev"""
+    try:
+        document_id = data.get("document_id")
+        target_type = data.get("target_type")
+        target_id = data.get("target_id")
+
+        doc = await db.documents.find_one({"id": document_id}, {"_id": 0})
+        if not doc:
+            raise HTTPException(status_code=404, detail="Document non trouvé")
+
+        # Créer l'entrée d'attachment
+        attachment = {
+            "id": str(uuid.uuid4()),
+            "document_id": document_id,
+            "nom": doc.get("fichier_nom") or doc.get("titre", "Document"),
+            "url": doc.get("fichier_url", ""),
+            "type": doc.get("fichier_type", ""),
+            "taille": doc.get("fichier_taille", 0),
+            "source": "documentations",
+            "added_at": datetime.now(timezone.utc).isoformat(),
+            "added_by": current_user.get("id"),
+            "added_by_name": f"{current_user.get('prenom', '')} {current_user.get('nom', '')}".strip()
+        }
+
+        if target_type == "work_order":
+            result = await db.work_orders.update_one(
+                {"id": target_id},
+                {"$push": {"attachments": attachment}}
+            )
+            if result.modified_count == 0:
+                # Essayer par _id
+                from bson import ObjectId as BsonObjectId
+                result = await db.work_orders.update_one(
+                    {"_id": BsonObjectId(target_id)},
+                    {"$push": {"attachments": attachment}}
+                )
+            entity_name = "l'Ordre de Travail"
+        elif target_type == "improvement":
+            result = await db.improvements.update_one(
+                {"id": target_id},
+                {"$push": {"attachments": attachment}}
+            )
+            entity_name = "l'Amélioration"
+        elif target_type == "preventive_maintenance":
+            result = await db.preventive_maintenances.update_one(
+                {"id": target_id},
+                {"$push": {"attachments": attachment}}
+            )
+            entity_name = "la Maintenance Préventive"
+        else:
+            raise HTTPException(status_code=400, detail="Type cible invalide")
+
+        return {"success": True, "message": f"Document inséré dans {entity_name}"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erreur insertion document: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
