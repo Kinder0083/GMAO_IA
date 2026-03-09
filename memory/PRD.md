@@ -36,6 +36,8 @@ Plateforme integree avec gestion des equipements, ordres de travail, consignatio
 ### Session 9 Mars 2026 - Refonte Module Documentations
 - **Backend** : 7 nouveaux endpoints (copy, move, permissions, send-to, share-email, insert-targets, insert-into)
 - **Backend** : Endpoint explorer ameliore avec tri (name/date/type) et filtrage par permissions (hidden_for_external, hidden_for_users)
+- **Backend** : Integration audit/journal pour toutes les actions documentations (COPY, MOVE, SHARE, PERMISSION_CHANGE)
+- **Backend** : 4 nouveaux ActionTypes ajoutes au modele (COPY, MOVE, SHARE, PERMISSION_CHANGE)
 - **Frontend** : ExplorerView refait avec menu contextuel complet (clic droit fichier/dossier/espace vide)
 - **Frontend** : Presse-papiers interne (Copier/Couper/Coller)
 - **Frontend** : Visionneuse integree (PDF, images, texte)
@@ -43,6 +45,7 @@ Plateforme integree avec gestion des equipements, ordres de travail, consignatio
 - **Frontend** : Icones de permissions (cadenas = masque ext, buste = masque utilisateurs)
 - **Frontend** : Drag & drop pour deplacer fichiers/dossiers
 - **Frontend** : Integration WebSocket pour synchronisation temps reel
+- **Frontend** : Journal d'Audit mis a jour avec nouveaux types d'actions et d'entites
 - **Testing** : 23/23 backend tests PASS, 14/14 frontend verifications PASS
 
 ### Sessions precedentes

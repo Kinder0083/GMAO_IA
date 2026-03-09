@@ -562,6 +562,10 @@ class ActionType(str, Enum):
     DELETE = "DELETE"
     LOGIN = "LOGIN"
     LOGOUT = "LOGOUT"
+    COPY = "COPY"
+    MOVE = "MOVE"
+    SHARE = "SHARE"
+    PERMISSION_CHANGE = "PERMISSION_CHANGE"
 
 class EntityType(str, Enum):
     USER = "USER"

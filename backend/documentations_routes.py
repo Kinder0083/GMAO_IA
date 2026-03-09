@@ -1530,6 +1530,17 @@ async def copy_node(
             new_doc.pop("_id", None)
             if realtime_manager:
                 await realtime_manager.emit_event("documentations", "created", new_doc, user_id=current_user["id"])
+            # Audit
+            await audit_service.log_action(
+                user_id=current_user["id"],
+                user_name=f"{current_user.get('prenom', '')} {current_user.get('nom', '')}",
+                user_email=current_user.get("email", ""),
+                action=ActionType.COPY,
+                entity_type=EntityType.DOCUMENTATION,
+                entity_id=new_doc["id"],
+                entity_name=doc.get("fichier_nom") or doc.get("titre", "Document"),
+                details=f"a copié le document \"{doc.get('fichier_nom') or doc.get('titre', 'Document')}\""
+            )
             return new_doc
 
         elif node_type == "folder":
@@ -1548,6 +1559,17 @@ async def copy_node(
             new_folder.pop("_id", None)
             if realtime_manager:
                 await realtime_manager.emit_event("documentations", "created", new_folder, user_id=current_user["id"])
+            # Audit
+            await audit_service.log_action(
+                user_id=current_user["id"],
+                user_name=f"{current_user.get('prenom', '')} {current_user.get('nom', '')}",
+                user_email=current_user.get("email", ""),
+                action=ActionType.COPY,
+                entity_type=EntityType.DOCUMENTATION,
+                entity_id=new_folder["id"],
+                entity_name=folder.get("name", "Dossier"),
+                details=f"a copié le dossier \"{folder.get('name', 'Dossier')}\""
+            )
             return new_folder
         else:
             raise HTTPException(status_code=400, detail="Type de noeud invalide")
@@ -1581,6 +1603,17 @@ async def move_node(
             updated = await db.documents.find_one({"id": node_id}, {"_id": 0})
             if realtime_manager:
                 await realtime_manager.emit_event("documentations", "updated", updated, user_id=current_user["id"])
+            # Audit
+            await audit_service.log_action(
+                user_id=current_user["id"],
+                user_name=f"{current_user.get('prenom', '')} {current_user.get('nom', '')}",
+                user_email=current_user.get("email", ""),
+                action=ActionType.MOVE,
+                entity_type=EntityType.DOCUMENTATION,
+                entity_id=node_id,
+                entity_name=doc.get("fichier_nom") or doc.get("titre", "Document"),
+                details=f"a déplacé le document \"{doc.get('fichier_nom') or doc.get('titre', 'Document')}\""
+            )
             return updated
 
         elif node_type == "folder":
@@ -1594,6 +1627,17 @@ async def move_node(
             updated = await db.doc_folders.find_one({"id": node_id}, {"_id": 0})
             if realtime_manager:
                 await realtime_manager.emit_event("documentations", "updated", updated, user_id=current_user["id"])
+            # Audit
+            await audit_service.log_action(
+                user_id=current_user["id"],
+                user_name=f"{current_user.get('prenom', '')} {current_user.get('nom', '')}",
+                user_email=current_user.get("email", ""),
+                action=ActionType.MOVE,
+                entity_type=EntityType.DOCUMENTATION,
+                entity_id=node_id,
+                entity_name=folder.get("name", "Dossier"),
+                details=f"a déplacé le dossier \"{folder.get('name', 'Dossier')}\""
+            )
             return updated
         else:
             raise HTTPException(status_code=400, detail="Type de noeud invalide")
@@ -1637,6 +1681,21 @@ async def toggle_permissions(
         if realtime_manager:
             await realtime_manager.emit_event("documentations", "updated", updated, user_id=current_user["id"])
 
+        # Audit
+        node_name = node.get("fichier_nom") or node.get("titre") or node.get("name", "Élément")
+        field_label = "services externes" if field == "hidden_for_external" else "utilisateurs"
+        action_label = "masqué" if new_value else "rendu visible"
+        await audit_service.log_action(
+            user_id=current_user["id"],
+            user_name=f"{current_user.get('prenom', '')} {current_user.get('nom', '')}",
+            user_email=current_user.get("email", ""),
+            action=ActionType.PERMISSION_CHANGE,
+            entity_type=EntityType.DOCUMENTATION,
+            entity_id=node_id,
+            entity_name=node_name,
+            details=f"a {action_label} \"{node_name}\" aux {field_label}"
+        )
+
         return {"success": True, "field": field, "value": new_value, "node": updated}
     except HTTPException:
         raise
@@ -1667,6 +1726,16 @@ async def send_to_pole(
         result = await copy_node(
             {"node_id": node_id, "node_type": node_type, "target_pole_id": target_pole_id, "target_folder_id": None},
             current_user
+        )
+        # Audit (note: copy_node a déjà un audit de copie, ici on ajoute le contexte "envoyé vers")
+        await audit_service.log_action(
+            user_id=current_user["id"],
+            user_name=f"{current_user.get('prenom', '')} {current_user.get('nom', '')}",
+            user_email=current_user.get("email", ""),
+            action=ActionType.COPY,
+            entity_type=EntityType.DOCUMENTATION,
+            entity_id=node_id,
+            details=f"a envoyé vers le pôle \"{target_pole.get('nom')}\""
         )
         return {"success": True, "message": f"Copié vers {target_pole.get('nom')}", "node": result}
     except HTTPException:
@@ -1740,6 +1809,18 @@ async def share_by_email(
             )
 
         if success:
+            # Audit
+            doc_name = doc.get('fichier_nom') or doc.get('titre', 'Document')
+            await audit_service.log_action(
+                user_id=current_user["id"],
+                user_name=f"{current_user.get('prenom', '')} {current_user.get('nom', '')}",
+                user_email=current_user.get("email", ""),
+                action=ActionType.SHARE,
+                entity_type=EntityType.DOCUMENTATION,
+                entity_id=document_id,
+                entity_name=doc_name,
+                details=f"a partagé \"{doc_name}\" par email FSAO à {recipient}"
+            )
             return {"success": True, "message": f"Email envoyé à {recipient}"}
         else:
             raise HTTPException(status_code=500, detail="Échec de l'envoi de l'email")
@@ -1850,6 +1931,19 @@ async def insert_document_into(
             entity_name = "la Maintenance Préventive"
         else:
             raise HTTPException(status_code=400, detail="Type cible invalide")
+
+        # Audit
+        doc_name = doc.get('fichier_nom') or doc.get('titre', 'Document')
+        await audit_service.log_action(
+            user_id=current_user["id"],
+            user_name=f"{current_user.get('prenom', '')} {current_user.get('nom', '')}",
+            user_email=current_user.get("email", ""),
+            action=ActionType.UPDATE,
+            entity_type=EntityType.DOCUMENTATION,
+            entity_id=document_id,
+            entity_name=doc_name,
+            details=f"a inséré \"{doc_name}\" dans {entity_name}"
+        )
 
         return {"success": True, "message": f"Document inséré dans {entity_name}"}
     except HTTPException:

@@ -30,7 +30,11 @@ const Journal = () => {
     UPDATE: { label: 'Modification', color: 'bg-blue-500' },
     DELETE: { label: 'Suppression', color: 'bg-red-500' },
     LOGIN: { label: 'Connexion', color: 'bg-purple-500' },
-    LOGOUT: { label: 'Déconnexion', color: 'bg-gray-500' }
+    LOGOUT: { label: 'Déconnexion', color: 'bg-gray-500' },
+    COPY: { label: 'Copie', color: 'bg-teal-500' },
+    MOVE: { label: 'Déplacement', color: 'bg-amber-500' },
+    SHARE: { label: 'Partage', color: 'bg-indigo-500' },
+    PERMISSION_CHANGE: { label: 'Permission', color: 'bg-orange-500' }
   };
 
   const entityTypes = {
@@ -42,7 +46,15 @@ const Journal = () => {
     INVENTORY: 'Inventaire',
     PREVENTIVE_MAINTENANCE: 'Maintenance préventive',
     PURCHASE_HISTORY: 'Historique d\'achat',
-    LOTO: 'Consignation LOTO'
+    LOTO: 'Consignation LOTO',
+    DOCUMENTATION: 'Documentation',
+    IMPROVEMENT: 'Amélioration',
+    IMPROVEMENT_REQUEST: 'Demande d\'amélioration',
+    PRESQU_ACCIDENT: 'Presqu\'accident',
+    SETTINGS: 'Paramètres',
+    DEMANDE_ARRET: 'Demande d\'arrêt',
+    WHITEBOARD: 'Tableau blanc',
+    SURVEILLANCE: 'Surveillance'
   };
 
   useEffect(() => {
