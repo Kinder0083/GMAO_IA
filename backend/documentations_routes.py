@@ -651,10 +651,18 @@ async def view_document_file(
 @router.get("/documents/{document_id}/download")
 async def download_document_file(
     document_id: str,
-    current_user: dict = Depends(get_current_user)
+    token: str = None,
+    current_user: dict = Depends(get_current_user_optional)
 ):
     """Télécharger le fichier d'un document (force le téléchargement)"""
     try:
+        if not current_user and token:
+            payload = decode_access_token(token)
+            if payload is None:
+                raise HTTPException(status_code=401, detail="Token invalide ou expiré")
+        elif not current_user and not token:
+            raise HTTPException(status_code=401, detail="Not authenticated")
+
         doc = await db.documents.find_one({"id": document_id})
         if not doc:
             raise HTTPException(status_code=404, detail="Document non trouvé")
@@ -662,21 +670,20 @@ async def download_document_file(
         if not doc.get("fichier_url"):
             raise HTTPException(status_code=404, detail="Aucun fichier associé")
         
-        # Le fichier_url commence par /uploads/documents/
-        # Le fichier réel est dans /app/backend/uploads/documents/
         file_path = Path(f"/app/backend{doc['fichier_url']}")
         if not file_path.exists():
             raise HTTPException(status_code=404, detail="Fichier non trouvé sur le serveur")
         
-        # Lire le fichier
         with open(file_path, "rb") as f:
             content = f.read()
         
+        filename = doc.get('fichier_nom', 'document')
         return StreamingResponse(
             BytesIO(content),
-            media_type=doc.get("fichier_type", "application/octet-stream"),
+            media_type="application/octet-stream",
             headers={
-                "Content-Disposition": f"attachment; filename={doc.get('fichier_nom', 'document')}"
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Content-Length": str(len(content))
             }
         )
     except HTTPException:

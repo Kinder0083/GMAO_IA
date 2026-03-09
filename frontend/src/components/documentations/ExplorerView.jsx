@@ -589,7 +589,7 @@ export default function ExplorerView({ poles, onRefresh }) {
           onDelete={(item, type) => { handleDelete(item, type); setContextMenu(null); }}
           onNewFolder={() => { setNewFolderName('Nouveau dossier'); setNewFolderDialog(true); setContextMenu(null); }}
           onOpen={(item, type) => { handleDoubleClick(item, type); setContextMenu(null); }}
-          onDownload={(item) => { window.open(`${getBackendURL()}/api/documentations/documents/${item.id}/download`, '_blank'); setContextMenu(null); }}
+          onDownload={(item) => { window.open(`${getBackendURL()}/api/documentations/documents/${item.id}/download?token=${localStorage.getItem('token')}`, '_blank'); setContextMenu(null); }}
           onPrint={(item, type) => { handlePrint(item, type); setContextMenu(null); }}
           onSendTo={(item, type) => { setSendToDialog({ item, type }); setContextMenu(null); }}
           onShareEmail={(item) => { handleShareEmail(item); setContextMenu(null); }}
@@ -766,7 +766,7 @@ export default function ExplorerView({ poles, onRefresh }) {
             )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => window.open(`${getBackendURL()}/api/documentations/documents/${viewerDialog?.id}/download`, '_blank')}>
+            <Button variant="outline" onClick={() => window.open(`${getBackendURL()}/api/documentations/documents/${viewerDialog?.id}/download?token=${localStorage.getItem('token')}`, '_blank')}>
               <Download className="h-4 w-4 mr-1" /> Télécharger
             </Button>
             <Button onClick={() => setViewerDialog(null)}>Fermer</Button>
