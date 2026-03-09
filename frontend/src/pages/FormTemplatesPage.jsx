@@ -25,12 +25,14 @@ import {
   ToggleLeft,
   PenTool,
   Upload,
-  Image
+  Image,
+  X
 } from 'lucide-react';
 import { useToast } from '../hooks/use-toast';
 import { useConfirmDialog } from '../components/ui/confirm-dialog';
 import api from '../services/api';
 import FormBuilderDialog from '../components/FormBuilderDialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
 
 // Types de formulaires disponibles (système)
 const SYSTEM_FORM_TYPES = [
@@ -114,6 +116,13 @@ function FormTemplatesPage() {
     }
     setSelectedTemplate(template);
     setShowFormBuilder(true);
+  };
+
+  // View state
+  const [viewTemplate, setViewTemplate] = useState(null);
+
+  const handleViewTemplate = (template) => {
+    setViewTemplate(template);
   };
 
   const handleDelete = (template) => {
@@ -268,7 +277,8 @@ function FormTemplatesPage() {
             const typeInfo = getFormTypeInfo(template);
             const Icon = typeInfo.icon;
             return (
-              <Card key={template.id} className="hover:shadow-lg transition-shadow">
+              <Card key={template.id} className="hover:shadow-lg transition-shadow cursor-pointer group"
+                onClick={() => handleViewTemplate(template)}>
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-3">
@@ -282,6 +292,7 @@ function FormTemplatesPage() {
                         </Badge>
                       </div>
                     </div>
+                    <Eye className="h-4 w-4 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -290,8 +301,13 @@ function FormTemplatesPage() {
                       {template.description}
                     </p>
                   )}
-                  <div className="text-xs text-gray-400">
-                    Ce modèle est utilisé par le système
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="text-xs">
+                      {(template.fields || []).length} champ(s)
+                    </Badge>
+                    <span className="text-xs text-gray-400">
+                      Cliquer pour visualiser
+                    </span>
                   </div>
                 </CardContent>
               </Card>
@@ -329,7 +345,8 @@ function FormTemplatesPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {customTemplates.map((template) => (
-              <Card key={template.id} className="hover:shadow-lg transition-shadow">
+              <Card key={template.id} className="hover:shadow-lg transition-shadow cursor-pointer group"
+                onClick={() => handleViewTemplate(template)}>
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-3">
@@ -350,6 +367,7 @@ function FormTemplatesPage() {
                         </div>
                       </div>
                     </div>
+                    <Eye className="h-4 w-4 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -383,7 +401,22 @@ function FormTemplatesPage() {
                   )}
                   
                   <TooltipProvider delayDuration={300}>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleViewTemplate(template)}
+                          >
+                            <Eye className="h-4 w-4 mr-1" />
+                            Voir
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="font-medium">Visualiser le modèle</p>
+                        </TooltipContent>
+                      </Tooltip>
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Button
@@ -397,7 +430,6 @@ function FormTemplatesPage() {
                         </TooltipTrigger>
                         <TooltipContent>
                           <p className="font-medium">Modifier le modèle</p>
-                          <p className="text-xs text-gray-300">Éditer les champs et paramètres</p>
                         </TooltipContent>
                       </Tooltip>
                       <Tooltip>
@@ -413,7 +445,6 @@ function FormTemplatesPage() {
                         </TooltipTrigger>
                         <TooltipContent>
                           <p className="font-medium">Supprimer le modèle</p>
-                          <p className="text-xs text-gray-300">Les formulaires existants ne seront pas affectés</p>
                         </TooltipContent>
                       </Tooltip>
                     </div>
@@ -432,6 +463,72 @@ function FormTemplatesPage() {
         template={selectedTemplate}
         onSave={handleSaveTemplate}
       />
+
+      {/* Template Viewer Dialog */}
+      <Dialog open={!!viewTemplate} onOpenChange={() => setViewTemplate(null)}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-3">
+              {viewTemplate && (() => {
+                const info = getFormTypeInfo(viewTemplate);
+                const TplIcon = info.icon;
+                return <TplIcon className={`h-5 w-5 ${info.color.split(' ')[1]}`} />;
+              })()}
+              {viewTemplate?.nom}
+              {viewTemplate?.is_system && <Badge variant="secondary" className="text-xs">Système</Badge>}
+            </DialogTitle>
+          </DialogHeader>
+          {viewTemplate && (
+            <div className="space-y-4">
+              {viewTemplate.description && (
+                <p className="text-sm text-gray-600">{viewTemplate.description}</p>
+              )}
+              <div>
+                <h3 className="font-semibold text-sm mb-3 text-gray-700">
+                  Champs du formulaire ({(viewTemplate.fields || []).length})
+                </h3>
+                <div className="space-y-2">
+                  {(viewTemplate.fields || []).map((field, idx) => {
+                    const FieldIcon = FIELD_TYPE_ICONS[field.type] || Type;
+                    return (
+                      <div key={idx} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border">
+                        <div className="p-1.5 bg-white rounded border">
+                          <FieldIcon className="h-4 w-4 text-gray-500" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium">{field.label}</p>
+                          <p className="text-xs text-gray-400 capitalize">{field.type}{field.required ? ' - Obligatoire' : ''}</p>
+                        </div>
+                        {field.options && field.options.length > 0 && (
+                          <div className="flex flex-wrap gap-1">
+                            {field.options.slice(0, 3).map((opt, i) => (
+                              <Badge key={i} variant="outline" className="text-[10px]">{opt}</Badge>
+                            ))}
+                            {field.options.length > 3 && <Badge variant="outline" className="text-[10px]">+{field.options.length - 3}</Badge>}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {(!viewTemplate.fields || viewTemplate.fields.length === 0) && (
+                    <p className="text-sm text-gray-400 text-center py-4">Aucun champ défini</p>
+                  )}
+                </div>
+              </div>
+              {!viewTemplate.is_system && (
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => { setViewTemplate(null); handleEdit(viewTemplate); }}>
+                    <Edit className="h-4 w-4 mr-1" /> Modifier
+                  </Button>
+                  <Button variant="destructive" onClick={() => { setViewTemplate(null); handleDelete(viewTemplate); }}>
+                    <Trash2 className="h-4 w-4 mr-1" /> Supprimer
+                  </Button>
+                </DialogFooter>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <ConfirmDialog />
     </div>

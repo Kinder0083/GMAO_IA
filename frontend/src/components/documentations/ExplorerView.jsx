@@ -16,6 +16,7 @@ import { documentationsAPI } from '../../services/api';
 import { useToast } from '../../hooks/use-toast';
 import { useConfirmDialog } from '../ui/confirm-dialog';
 import { getBackendURL } from '../../utils/config';
+import CustomFormFiller from '../CustomFormFiller';
 
 const getFileIcon = (type) => {
   if (type?.includes('pdf')) return { icon: FileText, color: '#ef4444' };
@@ -53,6 +54,9 @@ export default function ExplorerView({ poles, onRefresh }) {
   const [insertDialog, setInsertDialog] = useState(null);
   const [viewerDialog, setViewerDialog] = useState(null);
   const [newDocDialog, setNewDocDialog] = useState(false);
+
+  // Custom form filler for templates
+  const [customFormTemplate, setCustomFormTemplate] = useState(null);
 
   // Share email form
   const [emailForm, setEmailForm] = useState({ recipient: '', subject: '', message: '' });
@@ -598,7 +602,18 @@ export default function ExplorerView({ poles, onRefresh }) {
           onToggleHiddenUsers={(item, type) => { handleTogglePermission(item, type, 'hidden_for_users'); setContextMenu(null); }}
           onInsertInto={(item) => { handleOpenInsertDialog(item); setContextMenu(null); }}
           onSort={(s) => { handleSort(s); setContextMenu(null); }}
-          onNewFromTemplate={(tpl) => { navigate(`/documentations/${currentPoleId}/nouveau/${tpl.id}`); setContextMenu(null); }}
+          onNewFromTemplate={(tpl) => {
+            // Router vers la bonne page selon le type de template
+            if (tpl.type === 'BON_TRAVAIL') {
+              navigate(`/documentations/${currentPoleId}/bon-de-travail`);
+            } else if (tpl.type === 'AUTORISATION') {
+              navigate('/autorisations-particulieres/new');
+            } else {
+              // Template custom : ouvrir le CustomFormFiller
+              setCustomFormTemplate(tpl);
+            }
+            setContextMenu(null);
+          }}
         />
       )}
 
@@ -773,6 +788,18 @@ export default function ExplorerView({ poles, onRefresh }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Custom Form Filler */}
+      {customFormTemplate && (
+        <CustomFormFiller
+          open={!!customFormTemplate}
+          onOpenChange={(open) => { if (!open) setCustomFormTemplate(null); }}
+          template={customFormTemplate}
+          poleId={currentPoleId}
+          folderId={currentFolderId}
+          onSaved={() => { setCustomFormTemplate(null); loadExplorerContents(currentPoleId, currentFolderId); }}
+        />
+      )}
 
       <ConfirmDialog />
     </div>
