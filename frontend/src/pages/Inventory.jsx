@@ -481,43 +481,57 @@ const Inventory = () => {
         </div>
       </div>
 
-      {/* Service Tabs */}
+      {/* Service Tabs - Style classeur (identique au Dashboard Service) */}
       {loadingServices ? (
         <div className="text-center py-4 text-gray-500">Chargement des services...</div>
-      ) : (
-        <div className="border-b border-gray-200" data-testid="service-tabs">
-          <div className="flex items-center gap-1 overflow-x-auto pb-0">
-            {services.map(svc => (
-              <button
-                key={svc.id}
-                onClick={() => setActiveServiceId(svc.id)}
-                data-testid={`service-tab-${svc.name.replace(/\s+/g, '-').toLowerCase()}`}
-                className={`
-                  relative px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors
-                  border-b-2 -mb-[1px]
-                  ${activeServiceId === svc.id
-                    ? 'border-blue-600 text-blue-700 bg-blue-50/50'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                  }
-                `}
-              >
-                {svc.name}
-                {activeServiceId === svc.id && isManagerOrAdmin && svc.name !== 'Non classé' && (
-                  <span
-                    className="ml-2 text-gray-400 hover:text-red-500 cursor-pointer"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setServiceToDelete(svc);
-                      setDeleteServiceDialogOpen(true);
-                    }}
-                    title="Supprimer ce service"
-                  >
-                    <X size={14} className="inline" />
-                  </span>
-                )}
-              </button>
-            ))}
+      ) : services.length > 0 && (
+        <div className="relative mb-6" data-testid="service-tabs">
+          <div className="flex flex-wrap gap-0.5 items-end px-2" role="tablist">
+            {services.map(svc => {
+              const isActive = svc.id === activeServiceId;
+              const svcItems = isActive ? serviceItems : [];
+              const svcCount = isActive ? filteredItems.length : null;
+              return (
+                <button
+                  key={svc.id}
+                  role="tab"
+                  data-state={isActive ? 'active' : 'inactive'}
+                  data-testid={`service-tab-${svc.name.replace(/\s+/g, '-').toLowerCase()}`}
+                  onClick={() => setActiveServiceId(svc.id)}
+                  className={`
+                    relative px-4 py-2 text-xs font-medium transition-all duration-200 
+                    rounded-t-xl border border-b-0 
+                    ${isActive 
+                      ? 'bg-white text-blue-700 border-gray-200 shadow-sm z-10 -mb-px pb-3' 
+                      : 'bg-gray-50 text-gray-500 border-transparent hover:bg-gray-100 hover:text-gray-700'
+                    }
+                  `}
+                  style={isActive ? { boxShadow: '0 -2px 8px rgba(59,130,246,0.1)' } : {}}
+                >
+                  <span className="relative z-10">{svc.name}</span>
+                  {isActive && svcCount !== null && svcCount > 0 && (
+                    <span className="ml-1.5 inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-blue-100 text-blue-700 text-[10px] font-bold">
+                      {svcCount}
+                    </span>
+                  )}
+                  {isActive && isManagerOrAdmin && svc.name !== 'Non classé' && (
+                    <span
+                      className="ml-1.5 text-gray-400 hover:text-red-500 cursor-pointer"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setServiceToDelete(svc);
+                        setDeleteServiceDialogOpen(true);
+                      }}
+                      title="Supprimer ce service"
+                    >
+                      <X size={12} className="inline" />
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
+          <div className="border-t border-gray-200" />
         </div>
       )}
 

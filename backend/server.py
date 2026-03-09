@@ -3156,8 +3156,42 @@ async def get_inventory_stats(current_user: dict = Depends(require_permission("i
 
 @api_router.get("/inventory/services", tags=["Inventaire - Services"])
 async def get_inventory_services(current_user: dict = Depends(get_current_user)):
-    """Liste tous les services d'inventaire (onglets), triés par ordre alphabétique."""
-    services = await db.inventory_services.find({}, {"_id": 0}).sort("name", 1).to_list(100)
+    """Liste tous les services d'inventaire (onglets), synchronises avec les services des roles."""
+    # Synchroniser avec la liste des services (meme source que Dashboard Service)
+    try:
+        from roles_routes import SERVICES as roles_services
+        
+        existing_names = set()
+        existing_services = await db.inventory_services.find({}, {"_id": 0}).to_list(200)
+        for svc in existing_services:
+            existing_names.add(svc.get("name", "").upper())
+        
+        # Auto-creer les services manquants
+        for role_svc in roles_services:
+            if role_svc.upper() not in existing_names:
+                new_svc = {
+                    "id": str(uuid.uuid4()),
+                    "name": role_svc,
+                    "created_by": "system",
+                    "created_by_name": "Synchronisation automatique",
+                    "created_at": datetime.now(timezone.utc).isoformat()
+                }
+                await db.inventory_services.insert_one(new_svc)
+        
+        # Assurer "Non classe" existe
+        if "NON CLASSÉ" not in existing_names and "NON CLASSE" not in existing_names:
+            nc_doc = {
+                "id": str(uuid.uuid4()),
+                "name": "Non classé",
+                "created_by": "system",
+                "created_by_name": "Système",
+                "created_at": datetime.now(timezone.utc).isoformat()
+            }
+            await db.inventory_services.insert_one(nc_doc)
+    except Exception as e:
+        logger.warning(f"Erreur sync services inventaire: {e}")
+    
+    services = await db.inventory_services.find({}, {"_id": 0}).sort("name", 1).to_list(200)
     return services
 
 
