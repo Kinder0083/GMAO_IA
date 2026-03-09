@@ -47,7 +47,15 @@ Plateforme integree avec gestion des equipements, ordres de travail, consignatio
 - **Frontend** : Upload de fichiers : bouton "+ Ajouter un fichier" et glisser-deposer depuis le bureau
 - **Frontend** : Integration WebSocket pour synchronisation temps reel
 - **Frontend** : Journal d'Audit mis a jour avec nouveaux types d'actions et d'entites
-- **Testing** : 23/23 backend tests PASS, 14/14 frontend verifications PASS
+- **Backend** : Endpoint IA pour generation de formulaires (description texte, Excel/image, JSON)
+- **Backend** : Endpoints config modele IA (GET/PUT /ai-model-config)
+- **Backend** : Templates systeme peuples avec vrais champs (12 pour BdT, 9 pour Autorisation)
+- **Backend** : Templates systeme maintenant modifiables
+- **Frontend** : Bouton "Creation IA" avec dialogue 3 modes (description, fichier, JSON)
+- **Frontend** : Visualisation complete des templates systeme (tous les champs affiches)
+- **Frontend** : Section "Modele IA pour formulaires" dans Parametres Speciaux
+- **Testing** : 23/23 backend tests PASS, 14/14 frontend verifications PASS (iteration 106)
+- **Testing** : 8/8 backend + 8/8 frontend PASS pour templates IA (iteration 107)
 
 ### Sessions precedentes
 - Editeur de widgets personnalises avec preview Excel et constructeur formules
