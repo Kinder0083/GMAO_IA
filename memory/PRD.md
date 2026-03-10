@@ -83,7 +83,12 @@ Plateforme integree avec gestion des equipements, ordres de travail, consignatio
   - Stats annuelles calculees uniquement dans la plage valide
   - Indicateur "Horizon : Mois Annee" affiche dans la navigation
   - Passe/archivage inchange, WebSocket preserve
-- **Testing** : 100% PASS (iter_111: 14/14 frontend - navigation, limite, stats, grille, WebSocket)
+- **Feature** : Auto-approbation des demandes d'arret quand demandeur = destinataire
+  - Backend: Si demandeur_id == destinataire_id, statut passe directement a APPROUVEE sans email
+  - Backend: Entrees planning creees immediatement (meme logique que validation par token)
+  - Frontend: Toast different "Demande auto-approuvee" vs "Demande envoyee"
+  - Flux normal preserve quand destinataire est une autre personne
+- **Testing** : 100% PASS (iter_112: 5/5 backend pytest auto-approval)
 
 ## Prioritized Backlog
 ### P0 (Critical)
