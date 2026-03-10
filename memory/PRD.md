@@ -88,7 +88,11 @@ Plateforme integree avec gestion des equipements, ordres de travail, consignatio
   - Backend: Entrees planning creees immediatement (meme logique que validation par token)
   - Frontend: Toast different "Demande auto-approuvee" vs "Demande envoyee"
   - Flux normal preserve quand destinataire est une autre personne
-- **Testing** : 100% PASS (iter_112: 5/5 backend pytest auto-approval)
+- **Bug Fix** : Synchronisation temps reel Equipements ↔ Planning M.Prev
+  - Backend: emit_event pour equipments ne filtre plus l'utilisateur courant (tous les clients recoivent la notif)
+  - Backend: update_equipment_status_for_maintenance ecrit dans status_history + broadcast WebSocket
+  - Frontend: Chaine reactived = WebSocket status_changed → loadData() → useEffect → loadStatusHistory()
+- **Testing** : 100% PASS (iter_112: auto-approval, iter_113: 11/11 backend WebSocket sync)
 
 ## Prioritized Backlog
 ### P0 (Critical)
