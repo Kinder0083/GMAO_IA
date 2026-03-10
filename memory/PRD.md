@@ -77,7 +77,13 @@ Plateforme integree avec gestion des equipements, ordres de travail, consignatio
   - Frontend: ReportViewDialog (resume executif, sections, indicateurs, points d'attention, actions prioritaires)
   - Frontend: 4 boutons d'action par ligne (Visualiser, Telecharger PDF, Imprimer, Envoyer email)
   - Fix serialisation: exclusion _id MongoDB pour eviter ecrasement des UUID
-- **Testing** : 100% PASS (iter_108: filtres, iter_109: save, iter_110: view dialog 14/14 backend + 10/10 frontend)
+- **Optimisation** : Limite l'horizon du Planning M.Prev. a aujourd'hui + 12 mois
+  - dateFin dynamique = min(fin d'annee, aujourd'hui + 12 mois)
+  - Navigation future bloquee au-dela de 12 mois (bouton desactive)
+  - Stats annuelles calculees uniquement dans la plage valide
+  - Indicateur "Horizon : Mois Annee" affiche dans la navigation
+  - Passe/archivage inchange, WebSocket preserve
+- **Testing** : 100% PASS (iter_111: 14/14 frontend - navigation, limite, stats, grille, WebSocket)
 
 ## Prioritized Backlog
 ### P0 (Critical)
