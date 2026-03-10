@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from bson import ObjectId
 import uuid
 import logging
+import os
 
 from models import (
     WeeklyReportTemplate, WeeklyReportTemplateCreate, WeeklyReportTemplateUpdate,
@@ -65,6 +66,9 @@ async def check_report_access(current_user: dict, service: str = None, template_
     
     # Si on vérifie un template spécifique
     if template_id:
+        # Les rapports IA sont accessibles à tous les utilisateurs authentifiés ayant accès aux rapports
+        if template_id == "ai_generated":
+            return user_service
         template = await db.weekly_report_templates.find_one({"id": template_id})
         if not template:
             raise HTTPException(status_code=404, detail="Modèle de rapport non trouvé")
@@ -326,9 +330,9 @@ async def get_history(
         else:
             raise HTTPException(status_code=403, detail="Accès non autorisé à ce rapport")
     
-    history = await db.weekly_report_history.find(query).sort("sent_at", -1).limit(limit).to_list(limit)
+    history = await db.weekly_report_history.find(query, {"_id": 0}).sort("sent_at", -1).limit(limit).to_list(limit)
     
-    return [WeeklyReportHistory(**serialize_doc(h)) for h in history]
+    return [WeeklyReportHistory(**h) for h in history]
 
 
 @router.get("/history/{history_id}/pdf")
@@ -336,12 +340,12 @@ async def download_history_pdf(
     history_id: str,
     current_user: dict = Depends(get_current_user)
 ):
-    """Télécharger le PDF d'un rapport archivé"""
+    """Télécharger le PDF d'un rapport archivé. Génère le PDF à la volée si nécessaire."""
     from fastapi.responses import FileResponse
     import os
     
     # Récupérer l'entrée d'historique
-    history = await db.weekly_report_history.find_one({"id": history_id})
+    history = await db.weekly_report_history.find_one({"id": history_id}, {"_id": 0})
     if not history:
         raise HTTPException(status_code=404, detail="Rapport non trouvé dans l'historique")
     
@@ -349,14 +353,203 @@ async def download_history_pdf(
     await check_report_access(current_user, template_id=history.get("template_id"))
     
     pdf_path = history.get("pdf_path")
+    
+    # Si pas de PDF existant, le générer à la volée (rapports IA)
     if not pdf_path or not os.path.exists(pdf_path):
-        raise HTTPException(status_code=404, detail="Fichier PDF non trouvé")
+        report_content = history.get("report_content")
+        if report_content:
+            from weekly_report_service import generate_pdf_report, PDF_STORAGE_DIR
+            html = _generate_html_from_ai_content(report_content, history)
+            pdf_path = generate_pdf_report(
+                {"template_name": history.get("template_name", "Rapport IA"),
+                 "service": "",
+                 "period": {"start": history.get("period_start", "")[:10], "end": history.get("period_end", "")[:10]}},
+                html
+            )
+            if pdf_path:
+                await db.weekly_report_history.update_one(
+                    {"id": history_id},
+                    {"$set": {"pdf_path": pdf_path}}
+                )
+        
+        if not pdf_path or not os.path.exists(pdf_path):
+            raise HTTPException(status_code=404, detail="Impossible de générer le PDF")
     
     return FileResponse(
         path=pdf_path,
         filename=f"rapport_{history.get('template_name', 'export')}_{history.get('sent_at', 'date')[:10]}.pdf",
         media_type="application/pdf"
     )
+
+
+@router.get("/history/{history_id}/content")
+async def get_history_content(
+    history_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Récupérer le contenu d'un rapport de l'historique pour visualisation"""
+    history = await db.weekly_report_history.find_one({"id": history_id}, {"_id": 0})
+    if not history:
+        raise HTTPException(status_code=404, detail="Rapport non trouvé dans l'historique")
+    
+    await check_report_access(current_user, template_id=history.get("template_id"))
+    
+    result = {
+        "id": history.get("id"),
+        "template_name": history.get("template_name"),
+        "period_start": history.get("period_start"),
+        "period_end": history.get("period_end"),
+        "status": history.get("status"),
+        "sent_at": history.get("sent_at"),
+        "recipients": history.get("recipients", []),
+        "email_count": history.get("email_count", 0),
+        "report_content": history.get("report_content"),
+        "has_pdf": bool(history.get("pdf_path"))
+    }
+    
+    return result
+
+
+@router.post("/history/{history_id}/send-email")
+async def send_history_report_email(
+    history_id: str,
+    data: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    """Envoyer un rapport de l'historique par email"""
+    history = await db.weekly_report_history.find_one({"id": history_id}, {"_id": 0})
+    if not history:
+        raise HTTPException(status_code=404, detail="Rapport non trouvé dans l'historique")
+    
+    await check_report_access(current_user, template_id=history.get("template_id"))
+    
+    recipients = data.get("recipients", [])
+    if not recipients:
+        raise HTTPException(status_code=400, detail="Aucun destinataire spécifié")
+    
+    # Générer le HTML du rapport
+    report_content = history.get("report_content")
+    if report_content:
+        html_content = _generate_html_from_ai_content(report_content, history)
+    else:
+        html_content = f"<h1>{history.get('template_name', 'Rapport')}</h1><p>Rapport généré le {history.get('sent_at', '')[:10]}</p>"
+    
+    # Générer/récupérer le PDF
+    pdf_path = history.get("pdf_path")
+    if not pdf_path or not os.path.exists(pdf_path):
+        from weekly_report_service import generate_pdf_report
+        pdf_path = generate_pdf_report(
+            {"template_name": history.get("template_name", "Rapport"),
+             "service": "",
+             "period": {"start": history.get("period_start", "")[:10], "end": history.get("period_end", "")[:10]}},
+            html_content
+        )
+    
+    # Envoyer
+    from weekly_report_service import send_report_email
+    period_start = history.get("period_start", "")[:10]
+    period_end = history.get("period_end", "")[:10]
+    subject = f"📊 {history.get('template_name', 'Rapport')} - {period_start} au {period_end}"
+    
+    send_result = await send_report_email(recipients, subject, html_content, pdf_path)
+    
+    # Mettre à jour l'historique
+    await db.weekly_report_history.update_one(
+        {"id": history_id},
+        {"$set": {
+            "pdf_path": pdf_path,
+            "recipients": list(set(history.get("recipients", []) + recipients)),
+            "email_count": history.get("email_count", 0) + send_result.get("sent_count", 0)
+        }}
+    )
+    
+    return {
+        "success": send_result.get("sent_count", 0) > 0,
+        "sent_count": send_result.get("sent_count", 0),
+        "errors": send_result.get("errors", [])
+    }
+
+
+@router.get("/history/{history_id}/html")
+async def get_history_html(
+    history_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Récupérer le HTML d'un rapport pour impression"""
+    history = await db.weekly_report_history.find_one({"id": history_id}, {"_id": 0})
+    if not history:
+        raise HTTPException(status_code=404, detail="Rapport non trouvé dans l'historique")
+    
+    await check_report_access(current_user, template_id=history.get("template_id"))
+    
+    report_content = history.get("report_content")
+    if report_content:
+        html = _generate_html_from_ai_content(report_content, history)
+    else:
+        html = f"<html><body><h1>{history.get('template_name', 'Rapport')}</h1></body></html>"
+    
+    from fastapi.responses import HTMLResponse
+    return HTMLResponse(content=html)
+
+
+def _generate_html_from_ai_content(report_content: dict, history: dict) -> str:
+    """Génère le HTML à partir du contenu IA pour visualisation/impression/email"""
+    r = report_content
+    period_start = history.get("period_start", "")[:10] if history.get("period_start") else ""
+    period_end = history.get("period_end", "")[:10] if history.get("period_end") else ""
+    
+    sections_html = ""
+    for section in r.get("sections", []):
+        indicators_html = ""
+        if section.get("indicateurs"):
+            indicators_html = '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">'
+            for ind in section["indicateurs"]:
+                trend_color = "#16a34a" if ind.get("tendance") == "hausse" else "#dc2626" if ind.get("tendance") == "baisse" else "#64748b"
+                trend_arrow = "↑" if ind.get("tendance") == "hausse" else "↓" if ind.get("tendance") == "baisse" else "→"
+                indicators_html += f'<span style="background:#f8fafc;border:1px solid #e2e8f0;padding:4px 10px;border-radius:16px;font-size:13px;">{ind.get("nom","")}: <strong>{ind.get("valeur","")}</strong> <span style="color:{trend_color}">{trend_arrow}</span></span>'
+            indicators_html += "</div>"
+        
+        sections_html += f"""
+        <div style="margin-bottom:24px;padding-left:16px;border-left:3px solid #7c3aed;">
+            <h3 style="color:#1e293b;font-size:16px;margin:0 0 8px 0;">{section.get("titre","")}</h3>
+            <p style="color:#475569;font-size:14px;line-height:1.6;margin:0;">{section.get("contenu","")}</p>
+            {indicators_html}
+        </div>"""
+    
+    attention_html = ""
+    if r.get("points_attention"):
+        items = "".join(f"<li style='margin-bottom:4px;'>{p}</li>" for p in r["points_attention"])
+        attention_html = f"""
+        <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:16px;margin-bottom:24px;">
+            <h3 style="color:#92400e;font-size:14px;margin:0 0 8px 0;">⚠ Points d'attention</h3>
+            <ul style="margin:0;padding-left:20px;color:#78350f;font-size:14px;">{items}</ul>
+        </div>"""
+    
+    actions_html = ""
+    if r.get("actions_prioritaires"):
+        items = "".join(f"<li style='margin-bottom:4px;'>{a}</li>" for a in r["actions_prioritaires"])
+        actions_html = f"""
+        <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:16px;margin-bottom:24px;">
+            <h3 style="color:#1e40af;font-size:14px;margin:0 0 8px 0;">🎯 Actions prioritaires</h3>
+            <ul style="margin:0;padding-left:20px;color:#1e3a5f;font-size:14px;">{items}</ul>
+        </div>"""
+    
+    return f"""<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<style>@media print {{ body {{ margin: 0; }} }}</style></head>
+<body style="font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;line-height:1.6;color:#1e293b;max-width:800px;margin:0 auto;padding:20px;background:#fff;">
+    <div style="background:linear-gradient(135deg,#1e40af 0%,#7c3aed 100%);color:white;padding:30px;border-radius:12px;margin-bottom:30px;">
+        <h1 style="margin:0 0 8px 0;font-size:24px;">{r.get("titre", history.get("template_name", "Rapport"))}</h1>
+        <p style="margin:0;opacity:0.9;font-size:14px;">Période : {period_start} → {period_end}</p>
+    </div>
+    {f'<div style="background:#f8fafc;border-radius:8px;padding:16px;margin-bottom:24px;"><p style="font-size:14px;color:#475569;margin:0;line-height:1.6;">{r.get("resume_executif","")}</p></div>' if r.get("resume_executif") else ""}
+    {sections_html}
+    {attention_html}
+    {actions_html}
+    <div style="margin-top:40px;padding:16px;background:#f1f5f9;border-radius:8px;text-align:center;color:#64748b;font-size:12px;">
+        <p style="margin:0;">Rapport généré par FSAO Iris</p>
+    </div>
+</body></html>"""
 
 
 # ==================== SETTINGS ====================
