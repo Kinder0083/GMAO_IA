@@ -92,7 +92,13 @@ Plateforme integree avec gestion des equipements, ordres de travail, consignatio
   - Backend: emit_event pour equipments ne filtre plus l'utilisateur courant (tous les clients recoivent la notif)
   - Backend: update_equipment_status_for_maintenance ecrit dans status_history + broadcast WebSocket
   - Frontend: Chaine reactived = WebSocket status_changed → loadData() → useEffect → loadStatusHistory()
-- **Testing** : 100% PASS (iter_112: auto-approval, iter_113: 11/11 backend WebSocket sync)
+- **Feature** : Reordonnement des equipements par les admins (page /assets)
+  - Backend: PUT /api/equipments/reorder avec validation role ADMIN
+  - Backend: GET /api/equipments trie par display_order
+  - Frontend: Bouton "Modifier l'ordre" (admin only) avec mode reordonnement
+  - Frontend: Fleches haut/bas + drag-and-drop (@dnd-kit) + numeros de position
+  - Frontend: Boutons Enregistrer/Annuler, cartes avec bordure pointillee bleue
+- **Testing** : 100% PASS (iter_113: WS sync, iter_114: 8/8 backend + frontend reorder)
 
 ## Prioritized Backlog
 ### P0 (Critical)
