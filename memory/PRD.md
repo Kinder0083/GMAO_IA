@@ -65,11 +65,19 @@ Plateforme integree avec gestion des equipements, ordres de travail, consignatio
 - Reorganisation menus Parametres/Personnalisations
 - Harmonisation interface Inventaire avec onglets de service
 
-### Session 10 Mars 2026 - Filtres chronologiques
+### Session 10 Mars 2026 - Filtres chronologiques + Bug Historique Rapports
 - **Frontend** : Ajout filtres chronologiques sur la page "Demandes d'amelioration" (ImprovementRequests.jsx) - boutons Toutes/Aujourd'hui/Cette semaine/Ce mois/Cette annee/Personnalise
 - **Frontend** : Verification et validation des filtres chronologiques deja presents sur "Demandes d'intervention" (InterventionRequests.jsx)
 - **Frontend** : Ajout data-testid sur les boutons de filtre des deux pages pour coherence
-- **Testing** : 100% tests frontend PASS (iteration_108) - filtres de date fonctionnels sur les deux pages
+- **Bug Fix** : Correction du bug ou les rapports generes par IA manuelle et automatique ne s'enregistraient pas dans l'onglet Historique
+  - Backend: /ai-weekly-reports/generate sauvegarde maintenant dans weekly_report_history (template_id: "ai_generated", status: "generated")
+  - Backend: /templates/{id}/test sauvegarde maintenant aussi les rapports de test dans l'historique (prefix [TEST])
+  - Backend: L'historique et les stats incluent maintenant les rapports IA
+  - Frontend: Badge violet "Genere (IA)" pour le statut "generated" dans ReportHistoryTable
+  - Frontend: AIReportGenerator rafraichit les donnees apres generation via callback onGenerated
+  - Models: Ajout du statut GENERATED a l'enum ReportSendStatus
+- **Testing** : 100% tests frontend PASS (iteration_108) - filtres de date
+- **Testing** : 100% tests backend+frontend PASS (iteration_109) - historique rapports IA
 
 ## Prioritized Backlog
 ### P0 (Critical)
