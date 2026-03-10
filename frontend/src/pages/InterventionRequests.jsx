@@ -3,8 +3,9 @@ import { useLocationStateFilter } from '../hooks/useLocationStateFilter';
 import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { Plus, Search, Eye, Pencil, Trash2, Wrench, AlertCircle } from 'lucide-react';
+import { Plus, Search, Eye, Pencil, Trash2, Wrench, AlertCircle, Calendar } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../components/ui/tooltip';
+import { Label } from '../components/ui/label';
 import InterventionRequestDialog from '../components/InterventionRequests/InterventionRequestDialog';
 import InterventionRequestFormDialog from '../components/InterventionRequests/InterventionRequestFormDialog';
 import ConvertToWorkOrderDialog from '../components/InterventionRequests/ConvertToWorkOrderDialog';
@@ -21,6 +22,10 @@ const InterventionRequests = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterPriority, setFilterPriority] = useState('ALL');
   const [filterOverdue, setFilterOverdue] = useState(false);
+  const [dateFilter, setDateFilter] = useState('all');
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
+  const [showCustomDatePicker, setShowCustomDatePicker] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [formDialogOpen, setFormDialogOpen] = useState(false);
   const [convertDialogOpen, setConvertDialogOpen] = useState(false);
@@ -73,7 +78,36 @@ const InterventionRequests = () => {
     const matchesPriority = filterPriority === 'ALL' || req.priorite === filterPriority;
     const today = new Date(); today.setHours(23, 59, 59, 999);
     const matchesOverdue = !filterOverdue || (req.date_limite_desiree && new Date(req.date_limite_desiree) < today && req.statut !== 'TERMINE' && req.statut !== 'ANNULE');
-    return matchesSearch && matchesPriority && matchesOverdue;
+
+    // Filtre chronologique
+    let matchesDate = true;
+    if (dateFilter !== 'all') {
+      const reqDate = new Date(req.created_at || req.date_creation);
+      const now = new Date();
+      now.setHours(0, 0, 0, 0);
+      if (dateFilter === 'today') {
+        const endOfDay = new Date(now); endOfDay.setHours(23, 59, 59, 999);
+        matchesDate = reqDate >= now && reqDate <= endOfDay;
+      } else if (dateFilter === 'week') {
+        const startOfWeek = new Date(now); startOfWeek.setDate(now.getDate() - now.getDay());
+        const endOfWeek = new Date(startOfWeek); endOfWeek.setDate(startOfWeek.getDate() + 6); endOfWeek.setHours(23, 59, 59, 999);
+        matchesDate = reqDate >= startOfWeek && reqDate <= endOfWeek;
+      } else if (dateFilter === 'month') {
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0); endOfMonth.setHours(23, 59, 59, 999);
+        matchesDate = reqDate >= startOfMonth && reqDate <= endOfMonth;
+      } else if (dateFilter === 'year') {
+        const startOfYear = new Date(now.getFullYear(), 0, 1);
+        const endOfYear = new Date(now.getFullYear(), 11, 31); endOfYear.setHours(23, 59, 59, 999);
+        matchesDate = reqDate >= startOfYear && reqDate <= endOfYear;
+      } else if (dateFilter === 'custom' && customStartDate && customEndDate) {
+        const start = new Date(customStartDate);
+        const end = new Date(customEndDate); end.setHours(23, 59, 59, 999);
+        matchesDate = reqDate >= start && reqDate <= end;
+      }
+    }
+
+    return matchesSearch && matchesPriority && matchesOverdue && matchesDate;
   });
 
   // Appliquer le filtre "en retard" depuis la navigation (header)
@@ -126,6 +160,44 @@ const InterventionRequests = () => {
           Nouvelle demande
         </Button>
       </div>
+
+      {/* Date Filters */}
+      <Card>
+        <CardContent className="pt-4 pb-4">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm font-medium text-gray-600 mr-1">Période :</span>
+            {[
+              { value: 'all', label: 'Toutes' },
+              { value: 'today', label: "Aujourd'hui" },
+              { value: 'week', label: 'Cette semaine' },
+              { value: 'month', label: 'Ce mois' },
+              { value: 'year', label: 'Cette année' }
+            ].map(({ value, label }) => (
+              <Button key={value} variant={dateFilter === value ? 'default' : 'outline'} size="sm"
+                onClick={() => { setDateFilter(value); setShowCustomDatePicker(false); }}
+                className={dateFilter === value ? 'bg-blue-600 hover:bg-blue-700' : ''}>
+                {label}
+              </Button>
+            ))}
+            <Button variant={dateFilter === 'custom' ? 'default' : 'outline'} size="sm"
+              onClick={() => { setShowCustomDatePicker(!showCustomDatePicker); if (!showCustomDatePicker) setDateFilter('custom'); }}
+              className={dateFilter === 'custom' ? 'bg-blue-600 hover:bg-blue-700' : ''}>
+              <Calendar size={14} className="mr-1" /> Personnalisé
+            </Button>
+            {showCustomDatePicker && (
+              <>
+                <div className="h-6 w-px bg-gray-300" />
+                <div className="flex gap-2 items-center">
+                  <Label className="text-sm">Du</Label>
+                  <Input type="date" value={customStartDate} onChange={(e) => setCustomStartDate(e.target.value)} className="w-36 h-8" />
+                  <Label className="text-sm">Au</Label>
+                  <Input type="date" value={customEndDate} onChange={(e) => setCustomEndDate(e.target.value)} className="w-36 h-8" />
+                </div>
+              </>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Filters */}
       <Card>
