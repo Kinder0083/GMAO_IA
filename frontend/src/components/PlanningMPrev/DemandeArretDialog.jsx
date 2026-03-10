@@ -226,9 +226,13 @@ const DemandeArretDialog = ({ open, onOpenChange, onSuccess }) => {
         }
       }
       
+      // Message différent selon auto-approbation ou envoi normal
+      const isAutoApproved = demande.statut === 'APPROUVEE';
       toast({
-        title: 'Succès',
-        description: 'Demande d\'arrêt envoyée avec succès'
+        title: isAutoApproved ? 'Demande auto-approuvée' : 'Demande envoyée',
+        description: isAutoApproved 
+          ? 'La maintenance a été directement inscrite au planning (vous êtes le destinataire)'
+          : 'Demande d\'arrêt envoyée avec succès'
       });
       
       // Reset le formulaire

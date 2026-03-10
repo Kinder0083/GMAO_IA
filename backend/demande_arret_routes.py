@@ -115,8 +115,53 @@ async def create_demande_arret(
         
         await db.demandes_arret.insert_one(data)
         
-        # Envoyer l'email de demande
-        await send_demande_email(data)
+        # Vérifier si le demandeur est le même que le destinataire (auto-approbation)
+        is_self_request = str(current_user.get("id")) == str(demande.destinataire_id)
+        
+        if is_self_request:
+            now = datetime.now(timezone.utc)
+            end_maintenance_token = str(uuid.uuid4())
+            
+            for eq_id in demande.equipement_ids:
+                planning_entry = {
+                    "id": str(uuid.uuid4()),
+                    "equipement_id": eq_id,
+                    "demande_arret_id": data["id"],
+                    "date_debut": demande.date_debut,
+                    "date_fin": demande.date_fin,
+                    "periode_debut": demande.periode_debut,
+                    "periode_fin": demande.periode_fin,
+                    "heure_debut": data.get("heure_debut"),
+                    "heure_fin": data.get("heure_fin"),
+                    "motif": demande.commentaire,
+                    "statut": EquipmentStatus.EN_MAINTENANCE,
+                    "end_maintenance_token": end_maintenance_token,
+                    "created_at": now.isoformat()
+                }
+                await db.planning_equipement.insert_one(planning_entry)
+                
+                today_str = now.strftime("%Y-%m-%d")
+                if demande.date_debut <= today_str:
+                    await update_equipment_status_for_maintenance(
+                        eq_id=eq_id,
+                        new_status=EquipmentStatus.EN_MAINTENANCE,
+                        changed_by_name=data["demandeur_nom"]
+                    )
+            
+            await db.demandes_arret.update_one(
+                {"id": data["id"]},
+                {"$set": {
+                    "statut": DemandeArretStatus.APPROUVEE,
+                    "date_validation": now.isoformat(),
+                    "end_maintenance_token": end_maintenance_token,
+                    "auto_approuvee": True,
+                    "updated_at": now.isoformat()
+                }}
+            )
+            data["statut"] = DemandeArretStatus.APPROUVEE
+            logger.info(f"Demande auto-approuvee (demandeur=destinataire): {data['id']}")
+        else:
+            await send_demande_email(data)
         
         # Enregistrer dans le journal d'audit
         await audit_service.log_action(
