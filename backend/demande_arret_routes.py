@@ -782,10 +782,11 @@ async def update_equipment_status_for_maintenance(
 ):
     """
     Mettre à jour le statut actuel d'un équipement pour la maintenance.
-    Met à jour le statut + le point de couleur.
+    Met à jour le statut + le point de couleur + broadcast WebSocket.
     """
     from bson import ObjectId
     from datetime import datetime, timezone
+    from realtime_manager import realtime_manager
     
     now = datetime.now(timezone.utc)
     rounded_hour = now.replace(minute=0, second=0, microsecond=0)
@@ -799,6 +800,24 @@ async def update_equipment_status_for_maintenance(
             "updated_at": now.isoformat()
         }}
     )
+    
+    # Enregistrer dans l'historique des statuts
+    await db.equipment_status_history.update_one(
+        {"equipment_id": eq_id, "changed_at": rounded_hour},
+        {"$set": {
+            "equipment_id": eq_id,
+            "statut": new_status,
+            "changed_at": rounded_hour,
+            "changed_by_name": changed_by_name
+        }},
+        upsert=True
+    )
+    
+    # Broadcast WebSocket pour synchronisation temps réel avec le Planning
+    updated_eq = await db.equipments.find_one({"_id": ObjectId(eq_id)})
+    if updated_eq:
+        updated_eq["id"] = str(updated_eq.pop("_id"))
+        await realtime_manager.emit_event("equipments", "status_changed", updated_eq)
     
     logger.info(f"Statut équipement {eq_id} mis à jour à {new_status}")
 

@@ -2300,12 +2300,11 @@ async def update_equipment(eq_id: str, eq_update: EquipmentUpdate, current_user:
         children_count = await db.equipments.count_documents({"parent_id": eq["id"]})
         eq["hasChildren"] = children_count > 0
         
-        # Broadcast WebSocket pour la synchronisation temps réel
+        # Broadcast WebSocket pour la synchronisation temps réel (sans exclure l'utilisateur pour les autres vues)
         await realtime_manager.emit_event(
             "equipments",
             "updated",
-            eq,
-            user_id=current_user.get("id")
+            eq
         )
         
         return Equipment(**eq)
@@ -2525,14 +2524,14 @@ async def update_equipment_status(
         await check_and_update_parent_status(eq_id)
         
         # Broadcast WebSocket pour la synchronisation temps réel
+        # Ne pas exclure l'utilisateur courant pour que les autres vues (Planning) soient aussi mises à jour
         updated_eq = await db.equipments.find_one({"_id": ObjectId(eq_id)})
         if updated_eq:
             updated_eq = serialize_doc(updated_eq)
             await realtime_manager.emit_event(
                 "equipments",
                 "status_changed",
-                updated_eq,
-                user_id=current_user.get("id")
+                updated_eq
             )
         
         return {"message": "Statut mis à jour", "statut": statut}
