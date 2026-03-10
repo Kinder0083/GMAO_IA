@@ -58,6 +58,13 @@ const ReportHistoryTable = ({ history, onRefresh }) => {
             Échec
           </Badge>
         );
+      case 'generated':
+        return (
+          <Badge className="bg-violet-500">
+            <FileText className="h-3 w-3 mr-1" />
+            Généré (IA)
+          </Badge>
+        );
       default:
         return <Badge variant="secondary">{status}</Badge>;
     }

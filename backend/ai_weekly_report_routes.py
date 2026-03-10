@@ -9,6 +9,7 @@ from bson import ObjectId
 import logging
 import json
 import os
+import uuid
 
 logger = logging.getLogger(__name__)
 
@@ -172,6 +173,26 @@ Genere en JSON :
         chat.with_model("gemini", "gemini-2.5-flash")
         response = await chat.send_message(UserMessage(text=prompt))
         result = json.loads(clean_json_response(response))
+
+        # Sauvegarder dans l'historique
+        history_entry = {
+            "id": str(uuid.uuid4()),
+            "template_id": "ai_generated",
+            "template_name": result.get("titre", f"Rapport IA {report_type}"),
+            "period_start": start_date.isoformat(),
+            "period_end": end_date.isoformat(),
+            "recipients": [],
+            "status": "generated",
+            "pdf_path": None,
+            "email_count": 0,
+            "errors": [],
+            "sent_at": datetime.now(timezone.utc).isoformat(),
+            "sent_by": current_user.get("id"),
+            "sent_by_name": f"{current_user.get('prenom', '')} {current_user.get('nom', '')}".strip(),
+            "report_content": result
+        }
+        await db.weekly_report_history.insert_one(history_entry)
+        logger.info(f"Rapport IA sauvegarde dans l'historique: {history_entry['id']}")
 
         return {
             "success": True,

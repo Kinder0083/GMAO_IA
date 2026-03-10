@@ -731,27 +731,27 @@ async def generate_and_send_report(
     
     send_result = await send_report_email(recipients, subject, html_content, pdf_path)
     
-    # 6. Enregistrer dans l'historique (sauf pour les tests)
+    # 6. Enregistrer dans l'historique (tests et envois normaux)
+    start_date, end_date = get_period_dates(template.get("period", "previous_week"))
+    
+    history_entry = {
+        "id": str(uuid.uuid4()),
+        "template_id": template.get("id"),
+        "template_name": f"[TEST] {template.get('name')}" if is_test else template.get("name"),
+        "period_start": start_date.isoformat(),
+        "period_end": end_date.isoformat(),
+        "recipients": recipients,
+        "status": "sent" if send_result["sent_count"] == len(recipients) else ("partial" if send_result["sent_count"] > 0 else "failed"),
+        "pdf_path": pdf_path,
+        "email_count": send_result["sent_count"],
+        "errors": send_result["errors"],
+        "sent_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.weekly_report_history.insert_one(history_entry)
+    
+    # Mettre à jour le template (sauf pour les tests)
     if not is_test:
-        start_date, end_date = get_period_dates(template.get("period", "previous_week"))
-        
-        history_entry = {
-            "id": str(uuid.uuid4()),
-            "template_id": template.get("id"),
-            "template_name": template.get("name"),
-            "period_start": start_date.isoformat(),
-            "period_end": end_date.isoformat(),
-            "recipients": recipients,
-            "status": "sent" if send_result["sent_count"] == len(recipients) else ("partial" if send_result["sent_count"] > 0 else "failed"),
-            "pdf_path": pdf_path,
-            "email_count": send_result["sent_count"],
-            "errors": send_result["errors"],
-            "sent_at": datetime.now(timezone.utc).isoformat()
-        }
-        
-        await db.weekly_report_history.insert_one(history_entry)
-        
-        # Mettre à jour le template
         await db.weekly_report_templates.update_one(
             {"id": template.get("id")},
             {

@@ -299,7 +299,7 @@ const WeeklyReportsPage = () => {
         {/* Templates Tab */}
         <TabsContent value="templates" className="space-y-4">
           {/* Générateur IA de rapports */}
-          <AIReportGenerator />
+          <AIReportGenerator onGenerated={loadData} />
 
           {templates.length === 0 ? (
             <Card>

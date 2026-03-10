@@ -315,6 +315,8 @@ async def get_history(
     ).to_list(1000)
     
     accessible_template_ids = [t["id"] for t in accessible_templates]
+    # Inclure les rapports generés par IA (sans template associé)
+    accessible_template_ids.append("ai_generated")
     
     # Construire le filtre
     query = {"template_id": {"$in": accessible_template_ids}}
@@ -441,6 +443,7 @@ async def get_reports_stats(current_user: dict = Depends(get_current_user)):
     # Stats d'historique
     accessible_templates = await db.weekly_report_templates.find(query, {"id": 1}).to_list(1000)
     accessible_template_ids = [t["id"] for t in accessible_templates]
+    accessible_template_ids.append("ai_generated")
     
     total_sent = await db.weekly_report_history.count_documents({"template_id": {"$in": accessible_template_ids}})
     

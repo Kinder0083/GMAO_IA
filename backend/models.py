@@ -3317,6 +3317,7 @@ class ReportSendStatus(str, Enum):
     SENT = "sent"
     FAILED = "failed"
     PARTIAL = "partial"
+    GENERATED = "generated"
 
 # --- Sous-modèles pour les sections ---
 class WorkOrdersSectionConfig(BaseModel):

@@ -3,7 +3,7 @@ import { Button } from '../ui/button';
 import { Sparkles, Loader2, ChevronDown, ChevronUp, FileText, AlertTriangle, Target } from 'lucide-react';
 import { aiReportsAPI } from '../../services/api';
 
-export default function AIReportGenerator({ service }) {
+export default function AIReportGenerator({ service, onGenerated }) {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState(null);
   const [expanded, setExpanded] = useState(true);
@@ -16,7 +16,10 @@ export default function AIReportGenerator({ service }) {
     try {
       const reportType = period <= 7 ? 'hebdomadaire' : period <= 31 ? 'mensuel' : 'annuel';
       const res = await aiReportsAPI.generate(service, period, reportType);
-      if (res.success) setData(res);
+      if (res.success) {
+        setData(res);
+        if (onGenerated) onGenerated();
+      }
       else setError("Erreur de generation");
     } catch (e) {
       setError(e?.response?.data?.detail || "Erreur de generation IA");
