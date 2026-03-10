@@ -65,6 +65,12 @@ Plateforme integree avec gestion des equipements, ordres de travail, consignatio
 - Reorganisation menus Parametres/Personnalisations
 - Harmonisation interface Inventaire avec onglets de service
 
+### Session 10 Mars 2026 - Filtres chronologiques
+- **Frontend** : Ajout filtres chronologiques sur la page "Demandes d'amelioration" (ImprovementRequests.jsx) - boutons Toutes/Aujourd'hui/Cette semaine/Ce mois/Cette annee/Personnalise
+- **Frontend** : Verification et validation des filtres chronologiques deja presents sur "Demandes d'intervention" (InterventionRequests.jsx)
+- **Frontend** : Ajout data-testid sur les boutons de filtre des deux pages pour coherence
+- **Testing** : 100% tests frontend PASS (iteration_108) - filtres de date fonctionnels sur les deux pages
+
 ## Prioritized Backlog
 ### P0 (Critical)
 - Systeme de mise a jour (/api/updates/apply) - EN PAUSE par l'utilisateur

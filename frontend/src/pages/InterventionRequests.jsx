@@ -174,12 +174,14 @@ const InterventionRequests = () => {
               { value: 'year', label: 'Cette année' }
             ].map(({ value, label }) => (
               <Button key={value} variant={dateFilter === value ? 'default' : 'outline'} size="sm"
+                data-testid={`date-filter-${value}`}
                 onClick={() => { setDateFilter(value); setShowCustomDatePicker(false); }}
                 className={dateFilter === value ? 'bg-blue-600 hover:bg-blue-700' : ''}>
                 {label}
               </Button>
             ))}
             <Button variant={dateFilter === 'custom' ? 'default' : 'outline'} size="sm"
+              data-testid="date-filter-custom"
               onClick={() => { setShowCustomDatePicker(!showCustomDatePicker); if (!showCustomDatePicker) setDateFilter('custom'); }}
               className={dateFilter === 'custom' ? 'bg-blue-600 hover:bg-blue-700' : ''}>
               <Calendar size={14} className="mr-1" /> Personnalisé
