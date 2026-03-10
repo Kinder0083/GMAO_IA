@@ -69,15 +69,15 @@ Plateforme integree avec gestion des equipements, ordres de travail, consignatio
 - **Frontend** : Ajout filtres chronologiques sur la page "Demandes d'amelioration" (ImprovementRequests.jsx) - boutons Toutes/Aujourd'hui/Cette semaine/Ce mois/Cette annee/Personnalise
 - **Frontend** : Verification et validation des filtres chronologiques deja presents sur "Demandes d'intervention" (InterventionRequests.jsx)
 - **Frontend** : Ajout data-testid sur les boutons de filtre des deux pages pour coherence
-- **Bug Fix** : Correction du bug ou les rapports generes par IA manuelle et automatique ne s'enregistraient pas dans l'onglet Historique
-  - Backend: /ai-weekly-reports/generate sauvegarde maintenant dans weekly_report_history (template_id: "ai_generated", status: "generated")
-  - Backend: /templates/{id}/test sauvegarde maintenant aussi les rapports de test dans l'historique (prefix [TEST])
-  - Backend: L'historique et les stats incluent maintenant les rapports IA
-  - Frontend: Badge violet "Genere (IA)" pour le statut "generated" dans ReportHistoryTable
-  - Frontend: AIReportGenerator rafraichit les donnees apres generation via callback onGenerated
-  - Models: Ajout du statut GENERATED a l'enum ReportSendStatus
-- **Testing** : 100% tests frontend PASS (iteration_108) - filtres de date
-- **Testing** : 100% tests backend+frontend PASS (iteration_109) - historique rapports IA
+- **Bug Fix** : Correction du bug ou les rapports ne s'enregistraient pas dans l'Historique
+  - Backend: /ai-weekly-reports/generate + /templates/{id}/test sauvegardent maintenant dans weekly_report_history
+  - Frontend: Badge violet "Genere (IA)" + callback onGenerated pour refresh auto
+- **Feature** : Visualisation complete des rapports dans l'Historique
+  - Backend: 4 nouveaux endpoints: /content, /html, /pdf (generation a la volee), /send-email
+  - Frontend: ReportViewDialog (resume executif, sections, indicateurs, points d'attention, actions prioritaires)
+  - Frontend: 4 boutons d'action par ligne (Visualiser, Telecharger PDF, Imprimer, Envoyer email)
+  - Fix serialisation: exclusion _id MongoDB pour eviter ecrasement des UUID
+- **Testing** : 100% PASS (iter_108: filtres, iter_109: save, iter_110: view dialog 14/14 backend + 10/10 frontend)
 
 ## Prioritized Backlog
 ### P0 (Critical)
