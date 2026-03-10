@@ -48,8 +48,20 @@ const PlanningMPrev = () => {
 
   // Calculer les dates de l'année pour le hook
   const year = currentDate.getFullYear();
+  
+  // Limite future dynamique: aujourd'hui + 12 mois
+  const maxFutureDate = useMemo(() => {
+    const d = new Date();
+    d.setMonth(d.getMonth() + 12);
+    return d;
+  }, []);
+  
   const dateDebut = useMemo(() => new Date(year, 0, 1).toISOString().split('T')[0], [year]);
-  const dateFin = useMemo(() => new Date(year, 11, 31).toISOString().split('T')[0], [year]);
+  const dateFin = useMemo(() => {
+    const endOfYear = new Date(year, 11, 31);
+    const effectiveEnd = endOfYear > maxFutureDate ? maxFutureDate : endOfYear;
+    return effectiveEnd.toISOString().split('T')[0];
+  }, [year, maxFutureDate]);
 
   // Utiliser le hook temps réel pour les équipements (WebSocket)
   const { equipments, refresh: refreshEquipments, wsConnected: equipmentsWsConnected } = useEquipments();
@@ -472,8 +484,17 @@ const PlanningMPrev = () => {
   };
 
   const goToNextMonth = () => {
-    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
+    const nextMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1);
+    if (nextMonth <= maxFutureDate) {
+      setCurrentDate(nextMonth);
+    }
   };
+
+  // Vérifier si la navigation vers le mois suivant est possible
+  const canGoToNextMonth = useMemo(() => {
+    const nextMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1);
+    return nextMonth <= maxFutureDate;
+  }, [currentDate, maxFutureDate]);
 
   const goToCurrentMonth = () => {
     setCurrentDate(new Date());
@@ -505,17 +526,22 @@ const PlanningMPrev = () => {
   const today = getTodayLocalString();
   const month = currentDate.getMonth();
 
-  // Calculer les statistiques annuelles (seulement pour les périodes avec historique)
+  // Calculer les statistiques annuelles (limité à la plage valide: passé → aujourd'hui + 12 mois)
   const annualStats = useMemo(() => {
     let totalOperational = 0;
     let totalMaintenance = 0;
     let totalOutOfService = 0;
     let totalHoursWithData = 0;
     
+    const maxDateStr = `${maxFutureDate.getFullYear()}-${String(maxFutureDate.getMonth() + 1).padStart(2, '0')}-${String(maxFutureDate.getDate()).padStart(2, '0')}`;
+    
     equipments.forEach(equipment => {
       for (let m = 0; m < 12; m++) {
         const daysInMonth = new Date(year, m + 1, 0).getDate();
         for (let day = 1; day <= daysInMonth; day++) {
+          const dateStr = `${year}-${String(m + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+          if (dateStr > maxDateStr) return;
+          
           const date = new Date(year, m, day);
           const statusBlocks = getStatusBlocksForDay(equipment.id, date);
           
@@ -551,7 +577,7 @@ const PlanningMPrev = () => {
       maintenancePercent,
       outOfServicePercent
     };
-  }, [equipments, statusHistory, year]);
+  }, [equipments, statusHistory, year, maxFutureDate]);
 
   // Fonction pour obtenir le statut effectif d'un équipement (prenant en compte les maintenances actives)
   const getEffectiveStatus = (equipmentId, equipmentStatus) => {
@@ -816,8 +842,11 @@ const PlanningMPrev = () => {
               <Button variant="ghost" size="sm" onClick={goToCurrentMonth}>
                 Mois actuel
               </Button>
+              <span className="text-xs text-gray-400">
+                Horizon : {monthNames[maxFutureDate.getMonth()]} {maxFutureDate.getFullYear()}
+              </span>
             </div>
-            <Button variant="outline" size="sm" onClick={goToNextMonth}>
+            <Button variant="outline" size="sm" onClick={goToNextMonth} disabled={!canGoToNextMonth}>
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
