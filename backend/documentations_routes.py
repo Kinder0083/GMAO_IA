@@ -1200,12 +1200,54 @@ async def generate_form_template_ai(
                     excel_text = "\n".join(rows_text)
                     user_text += f"\n\nContenu du fichier Excel :\n```\n{excel_text}\n```\nAnalyse ce contenu et crée un formulaire avec les champs appropriés."
                 except Exception:
-                    # Fallback : CSV
                     try:
                         text_content = content.decode('utf-8', errors='replace')
                         user_text += f"\n\nContenu du fichier :\n```\n{text_content[:5000]}\n```\nAnalyse et crée un formulaire."
                     except Exception:
                         user_text += "\n\nImpossible de lire le fichier. Crée un formulaire générique de maintenance."
+
+            elif "pdf" in mime_type or file.filename.endswith('.pdf'):
+                # PDF : extraire le texte
+                try:
+                    import io
+                    from PyPDF2 import PdfReader
+                    reader = PdfReader(io.BytesIO(content))
+                    pages_text = []
+                    for page in reader.pages[:20]:
+                        text = page.extract_text()
+                        if text and text.strip():
+                            pages_text.append(text.strip())
+                    pdf_text = "\n---\n".join(pages_text)
+                    if pdf_text.strip():
+                        user_text += f"\n\nContenu du fichier PDF :\n```\n{pdf_text[:8000]}\n```\nAnalyse ce contenu et crée un formulaire avec les champs appropriés."
+                    else:
+                        user_text += "\n\nLe PDF ne contient pas de texte extractible. Crée un formulaire basé sur la description fournie ou sur le nom du fichier."
+                except Exception as pdf_err:
+                    logger.warning(f"Erreur extraction PDF: {pdf_err}")
+                    user_text += "\n\nImpossible de lire le PDF. Crée un formulaire basé sur la description fournie."
+
+            elif "word" in mime_type or "document" in mime_type or file.filename.endswith(('.docx', '.doc')):
+                # Word : extraire le texte
+                try:
+                    import io
+                    from docx import Document as DocxDocument
+                    doc = DocxDocument(io.BytesIO(content))
+                    paragraphs = []
+                    for para in doc.paragraphs:
+                        if para.text.strip():
+                            paragraphs.append(para.text.strip())
+                    # Extraire aussi les tableaux
+                    for table in doc.tables:
+                        for row in table.rows:
+                            row_text = " | ".join(cell.text.strip() for cell in row.cells if cell.text.strip())
+                            if row_text:
+                                paragraphs.append(row_text)
+                    word_text = "\n".join(paragraphs)
+                    user_text += f"\n\nContenu du fichier Word :\n```\n{word_text[:8000]}\n```\nAnalyse ce contenu et crée un formulaire avec les champs appropriés."
+                except Exception as docx_err:
+                    logger.warning(f"Erreur extraction Word: {docx_err}")
+                    user_text += "\n\nImpossible de lire le fichier Word. Crée un formulaire basé sur la description fournie."
+
             else:
                 # Autre type de fichier
                 try:

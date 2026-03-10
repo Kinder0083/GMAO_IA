@@ -637,11 +637,11 @@ function FormTemplatesPage() {
               {aiMode === 'file' && (
                 <div className="space-y-3">
                   <div>
-                    <Label>Fichier (Excel, CSV, ou Image de formulaire)</Label>
-                    <Input type="file" accept=".xlsx,.xls,.csv,.png,.jpg,.jpeg,.webp"
+                    <Label>Fichier (Excel, CSV, Word, PDF ou Image de formulaire)</Label>
+                    <Input type="file" accept=".xlsx,.xls,.csv,.png,.jpg,.jpeg,.webp,.pdf,.doc,.docx"
                       onChange={(e) => setAIFile(e.target.files?.[0])}
                       data-testid="ai-file-input" />
-                    <p className="text-xs text-gray-500 mt-1">Formats acceptés : Excel (.xlsx, .xls, .csv), Images (.png, .jpg)</p>
+                    <p className="text-xs text-gray-500 mt-1">Formats acceptés : Excel (.xlsx, .csv), Word (.docx), PDF (.pdf), Images (.png, .jpg)</p>
                   </div>
                   <div>
                     <Label>Description complémentaire (optionnel)</Label>
