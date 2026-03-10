@@ -159,7 +159,8 @@ export const equipmentsAPI = {
   getChildren: (id) => api.get(`/equipments/${id}/children`),
   getHierarchy: (id) => api.get(`/equipments/${id}/hierarchy`),
   updateStatus: (id, statut, force = false) => api.patch(`/equipments/${id}/status`, null, { params: { statut, force } }),
-  getStatusHistory: (params) => api.get('/equipments/status-history', { params })
+  getStatusHistory: (params) => api.get('/equipments/status-history', { params }),
+  reorder: (items) => api.put('/equipments/reorder', items)
 };
 
 // ==================== LOCATIONS ====================

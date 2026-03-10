@@ -1973,7 +1973,7 @@ async def get_equipments(current_user: dict = Depends(get_current_user)):
     # Appliquer le filtre par service pour les responsables de service
     query = await apply_service_filter(query, current_user, "service")
     
-    equipments = await db.equipments.find(query).to_list(1000)
+    equipments = await db.equipments.find(query).sort("display_order", 1).to_list(1000)
     
     result = []
     for eq in equipments:
@@ -2008,6 +2008,29 @@ async def get_equipments(current_user: dict = Depends(get_current_user)):
         result.append(eq)
     
     return result
+
+
+@api_router.put("/equipments/reorder",
+    summary="Reordonner les equipements", tags=["Equipements"])
+async def reorder_equipments(
+    items: List[dict],
+    current_user: dict = Depends(require_permission("assets", "edit"))
+):
+    """Mettre à jour l'ordre d'affichage des équipements (admin uniquement)"""
+    if current_user.get("role") != "ADMIN":
+        raise HTTPException(status_code=403, detail="Seuls les administrateurs peuvent réorganiser les équipements")
+    
+    for item in items:
+        eq_id = item.get("id")
+        order = item.get("display_order", 0)
+        if eq_id:
+            await db.equipments.update_one(
+                {"_id": ObjectId(eq_id)},
+                {"$set": {"display_order": order}}
+            )
+    
+    return {"message": "Ordre mis à jour", "count": len(items)}
+
 
 @api_router.post("/equipments",
     summary="Creer un equipement", response_model=Equipment, tags=["Equipements"])

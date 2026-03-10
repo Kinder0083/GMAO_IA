@@ -1,9 +1,25 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { Plus, Search, Wrench, AlertCircle, CheckCircle2, Clock, Pencil, Trash2, List, GitBranch, FileCheck, Cog, AlertTriangle } from 'lucide-react';
+import { Plus, Search, Wrench, AlertCircle, CheckCircle2, Clock, Pencil, Trash2, List, GitBranch, FileCheck, Cog, AlertTriangle, ArrowUp, ArrowDown, GripVertical, Save, X, Settings2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  rectSortingStrategy,
+  useSortable
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import EquipmentFormDialog from '../components/Equipment/EquipmentFormDialog';
 import EquipmentTreeView from '../components/Equipment/EquipmentTreeView';
 import QuickStatusChanger from '../components/Equipment/QuickStatusChanger';
@@ -12,6 +28,67 @@ import ServiceFilterBadge from '../components/Common/ServiceFilterBadge';
 import { equipmentsAPI } from '../services/api';
 import { useToast } from '../hooks/use-toast';
 import { useEquipments } from '../hooks/useEquipments';
+
+// Composant pour une carte d'équipement réordonnançable
+const SortableEquipmentCard = ({ equipment, isReordering, index, totalCount, onMoveUp, onMoveDown, children }) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging
+  } = useSortable({ id: equipment.id, disabled: !isReordering });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 50 : 'auto'
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} className="relative">
+      {isReordering && (
+        <div className="absolute -top-2 -right-2 z-10 flex gap-1" data-testid={`reorder-controls-${equipment.id}`}>
+          <button
+            {...attributes}
+            {...listeners}
+            className="bg-blue-600 text-white rounded-md p-1.5 shadow-md cursor-grab active:cursor-grabbing hover:bg-blue-700"
+            title="Glisser-déposer"
+            data-testid={`drag-handle-${equipment.id}`}
+          >
+            <GripVertical size={14} />
+          </button>
+          <button
+            onClick={() => onMoveUp(index)}
+            disabled={index === 0}
+            className="bg-gray-700 text-white rounded-md p-1.5 shadow-md hover:bg-gray-800 disabled:opacity-30 disabled:cursor-not-allowed"
+            title="Monter"
+            data-testid={`move-up-${equipment.id}`}
+          >
+            <ArrowUp size={14} />
+          </button>
+          <button
+            onClick={() => onMoveDown(index)}
+            disabled={index === totalCount - 1}
+            className="bg-gray-700 text-white rounded-md p-1.5 shadow-md hover:bg-gray-800 disabled:opacity-30 disabled:cursor-not-allowed"
+            title="Descendre"
+            data-testid={`move-down-${equipment.id}`}
+          >
+            <ArrowDown size={14} />
+          </button>
+        </div>
+      )}
+      {isReordering && (
+        <div className="absolute top-2 left-2 z-10 bg-blue-600 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center shadow">
+          {index + 1}
+        </div>
+      )}
+      {children}
+    </div>
+  );
+};
 
 const Assets = () => {
   const { toast } = useToast();
@@ -24,6 +101,19 @@ const Assets = () => {
   const [itemToDelete, setItemToDelete] = useState(null);
   const [viewMode, setViewMode] = useState('tree'); // 'list' ou 'tree' - arborescence par défaut
   const [parentForNewChild, setParentForNewChild] = useState(null);
+  const [isReordering, setIsReordering] = useState(false);
+  const [orderedEquipments, setOrderedEquipments] = useState([]);
+  const [savingOrder, setSavingOrder] = useState(false);
+
+  // Vérifier si l'utilisateur est admin
+  const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+  const isAdmin = currentUser.role === 'ADMIN';
+
+  // Sensors pour @dnd-kit
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
 
   // Utiliser le hook temps réel
   const { 
@@ -87,9 +177,63 @@ const Assets = () => {
   };
 
   const handleStatusChange = async (equipmentId, newStatus) => {
-    // Recharger toute la liste pour obtenir les changements de statut parent
     await refreshEquipments();
   };
+
+  // --- Fonctions de réordonnement ---
+  const startReordering = () => {
+    const parentEquipments = equipments.filter(eq => !eq.parent_id);
+    setOrderedEquipments([...parentEquipments]);
+    setIsReordering(true);
+    if (viewMode === 'tree') setViewMode('list');
+  };
+
+  const cancelReordering = () => {
+    setIsReordering(false);
+    setOrderedEquipments([]);
+  };
+
+  const saveOrder = async () => {
+    setSavingOrder(true);
+    try {
+      const items = orderedEquipments.map((eq, idx) => ({
+        id: eq.id,
+        display_order: idx
+      }));
+      await equipmentsAPI.reorder(items);
+      toast({ title: 'Ordre enregistré', description: 'La position des équipements a été mise à jour' });
+      setIsReordering(false);
+      setOrderedEquipments([]);
+      refreshEquipments();
+    } catch (error) {
+      toast({ title: 'Erreur', description: "Impossible d'enregistrer l'ordre", variant: 'destructive' });
+    } finally {
+      setSavingOrder(false);
+    }
+  };
+
+  const handleDragEnd = useCallback((event) => {
+    const { active, over } = event;
+    if (active.id !== over?.id) {
+      setOrderedEquipments(items => {
+        const oldIndex = items.findIndex(i => i.id === active.id);
+        const newIndex = items.findIndex(i => i.id === over.id);
+        return arrayMove(items, oldIndex, newIndex);
+      });
+    }
+  }, []);
+
+  const handleMoveUp = useCallback((index) => {
+    if (index === 0) return;
+    setOrderedEquipments(items => arrayMove([...items], index, index - 1));
+  }, []);
+
+  const handleMoveDown = useCallback((index) => {
+    setOrderedEquipments(items => {
+      if (index >= items.length - 1) return items;
+      return arrayMove([...items], index, index + 1);
+    });
+  }, []);
 
   const filteredEquipments = equipments.filter(eq => {
     const matchesSearch = eq.nom.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -190,8 +334,46 @@ const Assets = () => {
           <div className="flex items-center gap-3">
             <h1 className="text-3xl font-bold text-gray-900">Équipements</h1>
             <ServiceFilterBadge />
+            {isAdmin && !isReordering && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={startReordering}
+                className="ml-2 border-blue-300 text-blue-600 hover:bg-blue-50"
+                data-testid="btn-reorder-mode"
+              >
+                <Settings2 size={16} className="mr-1" />
+                Modifier l'ordre
+              </Button>
+            )}
+            {isReordering && (
+              <div className="flex gap-2 ml-2">
+                <Button
+                  size="sm"
+                  onClick={saveOrder}
+                  disabled={savingOrder}
+                  className="bg-green-600 hover:bg-green-700 text-white"
+                  data-testid="btn-save-order"
+                >
+                  <Save size={16} className="mr-1" />
+                  {savingOrder ? 'Enregistrement...' : 'Enregistrer'}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={cancelReordering}
+                  className="border-red-300 text-red-600 hover:bg-red-50"
+                  data-testid="btn-cancel-order"
+                >
+                  <X size={16} className="mr-1" />
+                  Annuler
+                </Button>
+              </div>
+            )}
           </div>
-          <p className="text-gray-600 mt-1">Gérez votre parc d'équipements</p>
+          <p className="text-gray-600 mt-1">
+            {isReordering ? 'Utilisez les flèches ou le glisser-déposer pour réorganiser' : 'Gérez votre parc d\'équipements'}
+          </p>
         </div>
         <div className="flex gap-3">
           {/* Toggle View Mode */}
@@ -332,10 +514,45 @@ const Assets = () => {
             <div className="col-span-full text-center py-8">
               <p className="text-gray-500">Chargement...</p>
             </div>
-          ) : filteredEquipments.length === 0 ? (
+          ) : (isReordering ? orderedEquipments : filteredEquipments.filter(eq => !eq.parent_id)).length === 0 ? (
             <div className="col-span-full text-center py-8">
               <p className="text-gray-500">Aucun équipement trouvé</p>
             </div>
+          ) : isReordering ? (
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+              <SortableContext items={orderedEquipments.map(eq => eq.id)} strategy={rectSortingStrategy}>
+                {orderedEquipments.map((equipment, index) => (
+                  <SortableEquipmentCard
+                    key={equipment.id}
+                    equipment={equipment}
+                    isReordering={true}
+                    index={index}
+                    totalCount={orderedEquipments.length}
+                    onMoveUp={handleMoveUp}
+                    onMoveDown={handleMoveDown}
+                  >
+                    <Card className="hover:shadow-xl transition-all duration-300 border-2 border-dashed border-blue-300 bg-blue-50/30">
+                      <CardHeader>
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                              <Wrench size={24} className="text-blue-600" />
+                            </div>
+                            <div>
+                              <CardTitle className="text-lg">{equipment.nom}</CardTitle>
+                              <p className="text-sm text-gray-500 mt-1">{equipment.categorie}</p>
+                            </div>
+                          </div>
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        {getStatusBadge(equipment.statut)}
+                      </CardContent>
+                    </Card>
+                  </SortableEquipmentCard>
+                ))}
+              </SortableContext>
+            </DndContext>
           ) : (
             filteredEquipments.filter(eq => !eq.parent_id).map((equipment) => (
               <Card 
