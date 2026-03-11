@@ -185,7 +185,6 @@ const Assets = () => {
     const parentEquipments = equipments.filter(eq => !eq.parent_id);
     setOrderedEquipments([...parentEquipments]);
     setIsReordering(true);
-    if (viewMode === 'tree') setViewMode('list');
   };
 
   const cancelReordering = () => {
@@ -504,6 +503,12 @@ const Assets = () => {
                 onViewDetails={handleViewDetails}
                 onStatusChange={handleStatusChange}
                 onViewInventory={handleViewInventory}
+                isReordering={isReordering}
+                orderedEquipments={orderedEquipments}
+                sensors={sensors}
+                onDragEnd={handleDragEnd}
+                onMoveUp={handleMoveUp}
+                onMoveDown={handleMoveDown}
               />
             )}
           </CardContent>
