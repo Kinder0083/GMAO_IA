@@ -13,6 +13,14 @@ Application GMAO (Gestion de Maintenance Assistee par Ordinateur) pour la gestio
 
 ## Session 11 Mars 2026
 
+### Phase 6 - Formulaire DI Public via QR Code
+- **Fonctionnalite**: "Creer une demande d'intervention" accessible SANS authentification depuis le QR code
+- **Backend**: Endpoint POST /api/qr/public/intervention-request (creation DI sans JWT), POST /api/qr/public/intervention-request/{id}/attachments (upload photos sans auth)
+- **Frontend**: `PublicInterventionForm.jsx` - Formulaire mobile-first epure avec equipement pre-rempli, nom du demandeur, titre, description, priorite, photos (camera native + galerie)
+- **Migration**: Action `create-intervention` passee de `requires_auth: true` a `false` (migration auto dans ensure_default_actions)
+- **UX**: Ecran de succes, gestion d'erreurs, preview photos plein ecran, boutons tactiles larges
+- Testing: 100% (iteration_120 - 13/13 backend, tous tests frontend passes)
+
 ### Phase 5 - Analyse IA Historique Achat
 - **Fonctionnalite**: Boutons "Analyse IA" et "Archives IA" ajoutes sur la page Historique Achat
 - **Backend**: `ai_purchase_history_routes.py` enregistre dans `server.py` (analyse tendances, rapport, archives CRUD)
