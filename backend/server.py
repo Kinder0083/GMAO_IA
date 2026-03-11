@@ -4078,6 +4078,36 @@ async def update_user(user_id: str, user_update: UserUpdate, current_user: dict 
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+
+@api_router.get("/users/{user_id}/header-visibility",
+    summary="Obtenir la visibilité des icônes header d'un utilisateur", tags=["Utilisateurs"])
+async def get_user_header_visibility(user_id: str, current_user: dict = Depends(get_current_user)):
+    """Obtenir les paramètres de visibilité des icônes header pour un utilisateur"""
+    user = await db.users.find_one({"_id": ObjectId(user_id)}, {"header_icons_visibility": 1})
+    if not user:
+        raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+    return user.get("header_icons_visibility", {})
+
+@api_router.put("/users/{user_id}/header-visibility",
+    summary="Modifier la visibilité des icônes header d'un utilisateur", tags=["Utilisateurs"])
+async def update_user_header_visibility(
+    user_id: str,
+    visibility: dict,
+    current_user: dict = Depends(get_current_admin_user)
+):
+    """Modifier les paramètres de visibilité des icônes header (admin uniquement)"""
+    user = await db.users.find_one({"_id": ObjectId(user_id)})
+    if not user:
+        raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+    
+    await db.users.update_one(
+        {"_id": ObjectId(user_id)},
+        {"$set": {"header_icons_visibility": visibility}}
+    )
+    
+    return {"message": "Visibilité des icônes mise à jour", "visibility": visibility}
+
+
 @api_router.delete("/users/{user_id}", response_model=MessageResponse,
     summary="Supprimer un utilisateur", tags=["Utilisateurs"])
 async def delete_user(user_id: str, current_user: dict = Depends(get_current_admin_user)):

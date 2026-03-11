@@ -3,13 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { Plus, Search, Users as UsersIcon, Mail, Phone, Trash2, Settings, UserPlus, Edit, Shield, Wifi, WifiOff, BellRing } from 'lucide-react';
+import { Plus, Search, Users as UsersIcon, Mail, Phone, Trash2, Settings, UserPlus, Edit, Shield, Wifi, WifiOff, BellRing, Monitor } from 'lucide-react';
 import UserProfileDialog from '../components/Common/UserProfileDialog';
 import InviteMemberDialog from '../components/Common/InviteMemberDialog';
 import CreateMemberDialog from '../components/Common/CreateMemberDialog';
 import EditUserDialog from '../components/Common/EditUserDialog';
 import PermissionsManagementDialog from '../components/Common/PermissionsManagementDialog';
 import DeleteConfirmDialog from '../components/Common/DeleteConfirmDialog';
+import UserHeaderSettingsDialog from '../components/Users/UserHeaderSettingsDialog';
 import { usersAPI } from '../services/api';
 import { useToast } from '../hooks/use-toast';
 import { formatErrorMessage } from '../utils/errorFormatter';
@@ -31,6 +32,8 @@ const People = () => {
   const [selectedUser, setSelectedUser] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
   const [pushTestLoading, setPushTestLoading] = useState(null);
+  const [headerSettingsOpen, setHeaderSettingsOpen] = useState(false);
+  const [headerSettingsUser, setHeaderSettingsUser] = useState(null);
 
   const handleTestPushNotification = async (user) => {
     setPushTestLoading(user.id);
@@ -428,6 +431,15 @@ const People = () => {
                       </Button>
                       <Button 
                         variant="outline" 
+                        className="flex-1 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300"
+                        onClick={() => { setHeaderSettingsUser(user); setHeaderSettingsOpen(true); }}
+                        data-testid={`btn-header-settings-${user.id}`}
+                      >
+                        <Monitor size={16} className="mr-2" />
+                        Headers
+                      </Button>
+                      <Button 
+                        variant="outline" 
                         className="hover:bg-red-50 hover:text-red-600 hover:border-red-300"
                         onClick={() => handleDeleteClick(user)}
                       >
@@ -480,6 +492,12 @@ const People = () => {
         onConfirm={handleDeleteConfirm}
         title="Supprimer le membre"
         description={`Êtes-vous sûr de vouloir supprimer ${selectedUser?.prenom} ${selectedUser?.nom} ? Cette action est irréversible.`}
+      />
+
+      <UserHeaderSettingsDialog
+        open={headerSettingsOpen}
+        onOpenChange={setHeaderSettingsOpen}
+        user={headerSettingsUser}
       />
     </div>
     </TooltipProvider>

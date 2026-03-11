@@ -276,7 +276,9 @@ export const usersAPI = {
   updatePermissions: (id, permissions) => api.put(`/users/${id}/permissions`, permissions),
   getDefaultPermissionsByRole: (role) => api.get(`/users/default-permissions/${role}`),
   setPasswordPermanent: (userId) => api.post(`/users/${userId}/set-password-permanent`),
-  resetPasswordByAdmin: (userId) => api.post(`/users/${userId}/reset-password-admin`)
+  resetPasswordByAdmin: (userId) => api.post(`/users/${userId}/reset-password-admin`),
+  getHeaderVisibility: (userId) => api.get(`/users/${userId}/header-visibility`),
+  updateHeaderVisibility: (userId, visibility) => api.put(`/users/${userId}/header-visibility`, visibility)
 };
 
 // ==================== VENDORS ====================

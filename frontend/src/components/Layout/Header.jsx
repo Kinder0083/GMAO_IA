@@ -58,6 +58,16 @@ const Header = ({
   const [bellMenuOpen, setBellMenuOpen] = useState(false);
   const [changelogOpen, setChangelogOpen] = useState(false);
   const [hasNewRelease, setHasNewRelease] = useState(false);
+  const [headerVisibility, setHeaderVisibility] = useState(null);
+
+  // Charger la visibilité des icônes pour l'utilisateur connecté
+  useEffect(() => {
+    if (user?.id) {
+      api.get(`/users/${user.id}/header-visibility`)
+        .then(res => setHeaderVisibility(res.data || {}))
+        .catch(() => setHeaderVisibility({}));
+    }
+  }, [user?.id]);
 
   // Déterminer l'ordre des icônes depuis les préférences
   const savedOrder = preferences?.header_icon_order;
@@ -65,14 +75,20 @@ const Header = ({
     ? savedOrder
     : DEFAULT_HEADER_ORDER;
   
+  // Filtrer par visibilité utilisateur (masquées par défaut si aucun paramètre)
+  const isIconVisible = (iconId) => {
+    if (headerVisibility === null) return false; // chargement en cours
+    return !!headerVisibility[iconId];
+  };
+
   // Séparer gauche et droite en respectant l'ordre utilisateur (exclure 'profile' qui est toujours en dernier)
   const leftIcons = iconOrder.filter(id => {
     const reg = HEADER_ICONS_REGISTRY.find(r => r.id === id);
-    return reg?.zone === 'left';
+    return reg?.zone === 'left' && isIconVisible(id);
   });
   const rightIcons = iconOrder.filter(id => {
     const reg = HEADER_ICONS_REGISTRY.find(r => r.id === id);
-    return reg?.zone === 'right' && id !== 'profile';
+    return reg?.zone === 'right' && id !== 'profile' && isIconVisible(id);
   });
 
   const checkNewReleases = useCallback(async () => {

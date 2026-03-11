@@ -98,7 +98,12 @@ Plateforme integree avec gestion des equipements, ordres de travail, consignatio
   - Frontend: Bouton "Modifier l'ordre" (admin only) avec mode reordonnement
   - Frontend: Fleches haut/bas + drag-and-drop (@dnd-kit) + numeros de position
   - Frontend: Boutons Enregistrer/Annuler, cartes avec bordure pointillee bleue
-- **Testing** : 100% PASS (iter_113: WS sync, iter_114: 8/8 backend + frontend reorder)
+- **Feature** : Gestion visibilite icones header par utilisateur (page /people)
+  - Backend: GET/PUT /api/users/{id}/header-visibility (admin only)
+  - Frontend: Bouton "Headers" sur chaque fiche utilisateur, dialogue avec toggles ON/OFF par icone
+  - Frontend: Header.jsx filtre les icones selon les parametres de l'utilisateur connecte
+  - Toutes icones masquees par defaut, admin active celles souhaitees
+- **Testing** : Backend 6/6 curl tests PASS + screenshots frontend validates
 
 ## Prioritized Backlog
 ### P0 (Critical)
