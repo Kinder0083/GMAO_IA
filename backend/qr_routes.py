@@ -525,6 +525,97 @@ async def create_public_intervention_request(data: dict):
 
     logger.info(f"[QR PUBLIC] DI creee: {request_id} par {demandeur_nom} pour equipement {equipment_id}")
 
+    # Notification email aux responsables maintenance (admins)
+    try:
+        import email_service
+        app_url = os.environ.get('FRONTEND_URL', os.environ.get('APP_URL', 'http://localhost'))
+        convert_url = f"{app_url}/intervention-requests?action=convert&id={request_id}"
+        refuse_url = f"{app_url}/intervention-requests?action=refuse&id={request_id}"
+
+        equip_nom = eq_info.get("nom", "N/A") if eq_info else "N/A"
+        loc_nom = loc_info.get("nom", "") if loc_info else ""
+
+        priority_colors = {
+            "URGENTE": "#dc2626", "HAUTE": "#ea580c",
+            "MOYENNE": "#d97706", "NORMALE": "#6b7280",
+            "BASSE": "#3b82f6", "AUCUNE": "#6b7280"
+        }
+        prio_color = priority_colors.get(priorite, "#6b7280")
+
+        subject = f"Nouvelle demande d'intervention (QR) - {titre}"
+        html_content = f"""
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <div style="background: linear-gradient(135deg, #1e40af, #3b82f6); color: white; padding: 20px 24px; border-radius: 12px 12px 0 0;">
+                <h2 style="margin: 0; font-size: 18px;">Nouvelle demande d'intervention</h2>
+                <p style="margin: 6px 0 0; opacity: 0.9; font-size: 13px;">Soumise via QR code par {demandeur_nom}</p>
+            </div>
+            <div style="padding: 24px; background: #ffffff; border: 1px solid #e5e7eb; border-top: none;">
+                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin-bottom: 20px;">
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <tr>
+                            <td style="padding: 6px 0; color: #64748b; font-size: 13px; width: 120px;">Titre</td>
+                            <td style="padding: 6px 0; font-weight: 600; font-size: 14px;">{titre}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 6px 0; color: #64748b; font-size: 13px;">Description</td>
+                            <td style="padding: 6px 0; font-size: 14px;">{description}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 6px 0; color: #64748b; font-size: 13px;">Equipement</td>
+                            <td style="padding: 6px 0; font-size: 14px; font-weight: 500;">{equip_nom}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 6px 0; color: #64748b; font-size: 13px;">Emplacement</td>
+                            <td style="padding: 6px 0; font-size: 14px;">{loc_nom or 'Non renseigne'}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 6px 0; color: #64748b; font-size: 13px;">Demandeur</td>
+                            <td style="padding: 6px 0; font-size: 14px;">{demandeur_nom}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 6px 0; color: #64748b; font-size: 13px;">Priorite</td>
+                            <td style="padding: 6px 0;">
+                                <span style="display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; color: white; background-color: {prio_color};">{priorite}</span>
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+
+                <p style="color: #475569; font-size: 14px; margin-bottom: 20px;">Vous pouvez agir directement sur cette demande :</p>
+
+                <div style="text-align: center; margin-bottom: 12px;">
+                    <a href="{convert_url}" style="display: inline-block; padding: 12px 32px; background-color: #16a34a; color: white; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 14px;">
+                        Convertir en Ordre de Travail
+                    </a>
+                </div>
+                <div style="text-align: center; margin-bottom: 20px;">
+                    <a href="{refuse_url}" style="display: inline-block; padding: 12px 32px; background-color: #dc2626; color: white; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 14px;">
+                        Refuser la demande
+                    </a>
+                </div>
+
+                <p style="color: #94a3b8; font-size: 12px; text-align: center; margin: 0;">FSAO Iris - GMAO</p>
+            </div>
+            <div style="border-radius: 0 0 12px 12px; background: #f1f5f9; padding: 12px; border: 1px solid #e5e7eb; border-top: none;">
+                <p style="color: #94a3b8; font-size: 11px; text-align: center; margin: 0;">Cet email a ete envoye automatiquement suite a une demande via QR code.</p>
+            </div>
+        </div>
+        """
+
+        # Envoyer aux admins et responsables
+        admins = await db.users.find({"role": "ADMIN", "statut": "actif"}).to_list(100)
+        admin_emails = [a["email"] for a in admins if a.get("email")]
+        sent_count = 0
+        for admin_email in admin_emails:
+            try:
+                if email_service.send_email(admin_email, subject, html_content):
+                    sent_count += 1
+            except Exception as mail_err:
+                logger.warning(f"Erreur envoi email notification DI QR a {admin_email}: {mail_err}")
+        logger.info(f"[QR PUBLIC] Notification email envoyee a {sent_count}/{len(admin_emails)} admins")
+    except Exception as notif_err:
+        logger.warning(f"[QR PUBLIC] Erreur notification email: {notif_err}")
+
     return {"success": True, "id": request_id, "message": "Demande transmise avec succes"}
 
 

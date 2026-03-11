@@ -14,11 +14,12 @@ import DeleteConfirmDialog from '../components/Common/DeleteConfirmDialog';
 import { interventionRequestsAPI, workOrdersAPI } from '../services/api';
 import { useToast } from '../hooks/use-toast';
 import { useInterventionRequests } from '../hooks/useInterventionRequests';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 const InterventionRequests = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterPriority, setFilterPriority] = useState('ALL');
@@ -41,6 +42,25 @@ const InterventionRequests = () => {
     loading, 
     refresh: refreshRequests 
   } = useInterventionRequests();
+
+  // Handle email action links (?action=convert&id=xxx or ?action=refuse&id=xxx)
+  useEffect(() => {
+    const action = searchParams.get('action');
+    const requestId = searchParams.get('id');
+    if (action && requestId && requests.length > 0) {
+      const targetRequest = requests.find(r => r.id === requestId);
+      if (targetRequest) {
+        setSelectedRequest(targetRequest);
+        if (action === 'convert' && !targetRequest.work_order_id && !targetRequest.refused) {
+          setConvertDialogOpen(true);
+        } else if (action === 'refuse' && !targetRequest.refused && !targetRequest.work_order_id) {
+          setRefuseDialogOpen(true);
+        }
+      }
+      // Clean up URL params
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, requests]);
 
   const handleRefreshAndNotify = () => {
     refreshRequests();
