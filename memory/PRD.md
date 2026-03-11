@@ -33,79 +33,42 @@ Plateforme integree avec gestion des equipements, ordres de travail, consignatio
 - **PWA**: Service Worker, notifications push VAPID
 
 ## What's been implemented (latest)
-### Session 9 Mars 2026 - Refonte Module Documentations
-- **Backend** : 7 nouveaux endpoints (copy, move, permissions, send-to, share-email, insert-targets, insert-into)
-- **Backend** : Endpoint explorer ameliore avec tri (name/date/type) et filtrage par permissions (hidden_for_external, hidden_for_users)
-- **Backend** : Integration audit/journal pour toutes les actions documentations (COPY, MOVE, SHARE, PERMISSION_CHANGE)
-- **Backend** : 4 nouveaux ActionTypes ajoutes au modele (COPY, MOVE, SHARE, PERMISSION_CHANGE)
-- **Frontend** : ExplorerView refait avec menu contextuel complet (clic droit fichier/dossier/espace vide)
-- **Frontend** : Presse-papiers interne (Copier/Couper/Coller)
-- **Frontend** : Visionneuse integree (PDF, images, texte)
-- **Frontend** : Dialogues: Partager par FSAO (email SMTP), Inserer dans OT/Amelioration/M.Prev, Renommer, Nouveau dossier, Envoyer vers
-- **Frontend** : Icones de permissions (cadenas = masque ext, buste = masque utilisateurs)
-- **Frontend** : Drag & drop pour deplacer fichiers/dossiers
-- **Frontend** : Upload de fichiers : bouton "+ Ajouter un fichier" et glisser-deposer depuis le bureau
-- **Frontend** : Integration WebSocket pour synchronisation temps reel
-- **Frontend** : Journal d'Audit mis a jour avec nouveaux types d'actions et d'entites
-- **Backend** : Endpoint IA pour generation de formulaires (description texte, Excel/image, JSON)
-- **Backend** : Endpoints config modele IA (GET/PUT /ai-model-config)
-- **Backend** : Templates systeme peuples avec vrais champs (12 pour BdT, 9 pour Autorisation)
-- **Backend** : Templates systeme maintenant modifiables
-- **Frontend** : Bouton "Creation IA" avec dialogue 3 modes (description, fichier, JSON)
-- **Frontend** : Visualisation complete des templates systeme (tous les champs affiches)
-- **Frontend** : Section "Modele IA pour formulaires" dans Parametres Speciaux
-- **Testing** : 23/23 backend tests PASS, 14/14 frontend verifications PASS (iteration 106)
-- **Testing** : 8/8 backend + 8/8 frontend PASS pour templates IA (iteration 107)
 
-### Sessions precedentes
-- Editeur de widgets personnalises avec preview Excel et constructeur formules
-- Synchronisation permissions frontend/backend
-- Documentation README et chapitres PWA
-- Bouton "Presqu'accident" dans QR Code + capture camera/photo
-- Reorganisation menus Parametres/Personnalisations
-- Harmonisation interface Inventaire avec onglets de service
+### Session 11 Mars 2026 - Permissions, Pieces Jointes, Selection Equipement
+- **Tache 1 - Mise a jour Permissions** : 12 nouveaux modules ajoutes a la grille de permissions (PermissionsGrid.jsx)
+  - Dashboard Service, M.E.S, Rapports M.E.S, Contrats, Formations, Rapports Hebdo.
+  - Consignations LOTO, Cameras, Gestion d'equipe, Analytics Checklists, Demandes d'arret, Autorisations Part.
+- **Tache 2 - Pieces jointes demandes d'intervention** :
+  - Backend: 3 nouveaux endpoints (POST upload, GET download, DELETE) pour /api/intervention-requests/{id}/attachments
+  - Backend: Repertoire d'upload dedie /app/backend/uploads/intervention-requests/
+  - Backend: Modele InterventionRequest enrichi avec champ attachments
+  - Frontend: Bouton capture photo via camera (navigator.mediaDevices)
+  - Frontend: Zone drag-and-drop pour fichiers + bouton Parcourir
+  - Frontend: Liste de fichiers avec preview image et suppression
+- **Tache 3 - Refonte selection equipement** :
+  - Frontend: Le selecteur Equipement n'affiche que les parents (sans parent_id)
+  - Frontend: Nouveau selecteur Sous-equipement apparait si l'equipement parent a des enfants
+  - Frontend: Champ Emplacement masque mais auto-rempli depuis l'equipement parent
+  - Frontend: Appel GET /api/equipments/{id}/children pour charger les sous-equipements
+- **Testing** : 17/17 backend tests PASS, frontend 100% verifie (iteration_116.json)
+- **Bug Fix** : Endpoint DELETE /api/intervention-requests corrige (newline manquante)
 
 ### Session 10 Mars 2026 - Filtres chronologiques + Bug Historique Rapports
 - **Frontend** : Ajout filtres chronologiques sur la page "Demandes d'amelioration" (ImprovementRequests.jsx) - boutons Toutes/Aujourd'hui/Cette semaine/Ce mois/Cette annee/Personnalise
 - **Frontend** : Verification et validation des filtres chronologiques deja presents sur "Demandes d'intervention" (InterventionRequests.jsx)
-- **Frontend** : Ajout data-testid sur les boutons de filtre des deux pages pour coherence
 - **Bug Fix** : Correction du bug ou les rapports ne s'enregistraient pas dans l'Historique
-  - Backend: /ai-weekly-reports/generate + /templates/{id}/test sauvegardent maintenant dans weekly_report_history
-  - Frontend: Badge violet "Genere (IA)" + callback onGenerated pour refresh auto
 - **Feature** : Visualisation complete des rapports dans l'Historique
-  - Backend: 4 nouveaux endpoints: /content, /html, /pdf (generation a la volee), /send-email
-  - Frontend: ReportViewDialog (resume executif, sections, indicateurs, points d'attention, actions prioritaires)
-  - Frontend: 4 boutons d'action par ligne (Visualiser, Telecharger PDF, Imprimer, Envoyer email)
-  - Fix serialisation: exclusion _id MongoDB pour eviter ecrasement des UUID
 - **Optimisation** : Limite l'horizon du Planning M.Prev. a aujourd'hui + 12 mois
-  - dateFin dynamique = min(fin d'annee, aujourd'hui + 12 mois)
-  - Navigation future bloquee au-dela de 12 mois (bouton desactive)
-  - Stats annuelles calculees uniquement dans la plage valide
-  - Indicateur "Horizon : Mois Annee" affiche dans la navigation
-  - Passe/archivage inchange, WebSocket preserve
 - **Feature** : Auto-approbation des demandes d'arret quand demandeur = destinataire
-  - Backend: Si demandeur_id == destinataire_id, statut passe directement a APPROUVEE sans email
-  - Backend: Entrees planning creees immediatement (meme logique que validation par token)
-  - Frontend: Toast different "Demande auto-approuvee" vs "Demande envoyee"
-  - Flux normal preserve quand destinataire est une autre personne
-- **Bug Fix** : Synchronisation temps reel Equipements ↔ Planning M.Prev
-  - Backend: emit_event pour equipments ne filtre plus l'utilisateur courant (tous les clients recoivent la notif)
-  - Backend: update_equipment_status_for_maintenance ecrit dans status_history + broadcast WebSocket
-  - Frontend: Chaine reactived = WebSocket status_changed → loadData() → useEffect → loadStatusHistory()
+- **Bug Fix** : Synchronisation temps reel Equipements <-> Planning M.Prev
 - **Feature** : Reordonnement des equipements par les admins (page /assets)
-  - Backend: PUT /api/equipments/reorder avec validation role ADMIN
-  - Backend: GET /api/equipments trie par display_order
-  - Frontend: Bouton "Modifier l'ordre" (admin only) avec mode reordonnement
-  - Frontend: Fleches haut/bas + drag-and-drop (@dnd-kit) + numeros de position
-  - Frontend: Boutons Enregistrer/Annuler, cartes avec bordure pointillee bleue
-  - Frontend: Reordonnement supporte les deux modes (Liste ET Arborescence)
-  - Frontend: EquipmentTreeView reecrit avec SortableTreeNode pour le drag & drop arborescent
 - **Feature** : Gestion visibilite icones header par utilisateur (page /people)
-  - Backend: GET/PUT /api/users/{id}/header-visibility (admin only)
-  - Frontend: Bouton "Headers" sur chaque fiche utilisateur, dialogue avec toggles ON/OFF par icone
-  - Frontend: Header.jsx filtre les icones selon les parametres de l'utilisateur connecte
-  - Toutes icones masquees par defaut, admin active celles souhaitees
 - **Testing** : Backend 6/6 curl tests PASS + screenshots frontend validates
+
+### Session 9 Mars 2026 - Refonte Module Documentations
+- Backend/Frontend refonte complete du module Documentations avec menu contextuel, presse-papiers, visionneuse, drag & drop
+- Backend/Frontend IA pour generation de formulaires
+- Testing : 23/23 backend + 14/14 frontend PASS
 
 ## Prioritized Backlog
 ### P0 (Critical)
@@ -116,7 +79,7 @@ Plateforme integree avec gestion des equipements, ordres de travail, consignatio
 
 ### P2 (Future)
 - Templates de widgets additionnels
-- Ameliorations futures suggereees par l'utilisateur
+- Ameliorations futures suggerees par l'utilisateur
 
 ## Architecture
 ```
@@ -126,25 +89,29 @@ Plateforme integree avec gestion des equipements, ordres de travail, consignatio
 │   ├── documentations_routes.py # Module Documentations (1800+ lines)
 │   ├── realtime_manager.py     # WebSocket manager
 │   ├── email_service.py        # Service SMTP
-│   ├── routes/                 # Routes additionnelles
-│   └── models.py               # Modeles Pydantic
+│   ├── models.py               # Modeles Pydantic
+│   ├── uploads/
+│   │   ├── work-orders/        # PJ ordres de travail
+│   │   └── intervention-requests/ # PJ demandes d'intervention (NEW)
+│   └── routes/                 # Routes additionnelles
 └── frontend/
     └── src/
         ├── components/
-        │   ├── documentations/
-        │   │   └── ExplorerView.jsx  # Explorateur de fichiers complet
+        │   ├── Common/
+        │   │   └── PermissionsGrid.jsx  # UPDATED - 12 new modules
+        │   ├── InterventionRequests/
+        │   │   └── InterventionRequestFormDialog.jsx  # REWRITTEN
         │   ├── ui/               # Shadcn components
-        │   └── Common/           # Composants partages
+        │   └── Layout/
+        │       ├── Sidebar.jsx
+        │       └── menuConfig.js
         ├── pages/
-        │   ├── Documentations.jsx # Page principale
-        │   └── ...
         ├── hooks/
-        │   ├── useDocumentations.js # Hook avec WebSocket
-        │   └── useRealtimeData.js   # Hook generique WebSocket
+        │   ├── useEquipments.js
+        │   └── useRealtimeData.js
         ├── contexts/
-        │   └── AIContextMenuContext.jsx
         └── services/
-            └── api.js            # API client
+            └── api.js
 ```
 
 ## Credentials
