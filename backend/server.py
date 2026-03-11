@@ -5631,6 +5631,42 @@ RÈGLES:
 
 
 # ==================== PURCHASE HISTORY ROUTES ====================
+@api_router.get("/purchase-history/template", tags=["Historique Achats"])
+async def download_purchase_history_template(
+    format: str = "csv",
+    current_user: dict = Depends(require_permission("purchaseHistory", "view"))
+):
+    """Telecharger le template CSV pour l'import d'historique d'achat"""
+    import io
+    import csv
+    
+    headers = [
+        "fournisseur", "numeroCommande", "numeroReception", "dateCreation",
+        "article", "description", "groupeStatistique", "quantite",
+        "montantLigneHT", "quantiteRetournee", "site", "creationUser"
+    ]
+    
+    example_row = [
+        "Fournisseur ABC", "CMD-2026-001", "REC-2026-001", "2026-01-15",
+        "Roulement SKF 6205", "Roulement a billes", "Pieces mecaniques", "10",
+        "150.00", "0", "Site principal", "admin"
+    ]
+    
+    output = io.StringIO()
+    writer = csv.writer(output, delimiter=';')
+    writer.writerow(headers)
+    writer.writerow(example_row)
+    
+    content = output.getvalue()
+    output.close()
+    
+    from starlette.responses import Response
+    return Response(
+        content=content,
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=template_historique_achat.csv"}
+    )
+
 @api_router.get("/purchase-history/grouped", tags=["Historique Achats"])
 async def get_purchase_history_grouped(current_user: dict = Depends(require_permission("purchaseHistory", "view"))):
     """Liste tous les achats groupés par N° Commande"""
