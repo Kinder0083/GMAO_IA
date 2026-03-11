@@ -4,24 +4,6 @@
 Application GMAO (Gestion de Maintenance Assistee par Ordinateur) pour la gestion de maintenance industrielle.
 Plateforme integree avec gestion des equipements, ordres de travail, consignations LOTO, documentations, surveillance temps reel, IA, chat live, planning et rapports hebdomadaires.
 
-## Core Modules
-1. **Dashboard Service** : Vue d'ensemble par pole de service avec statistiques
-2. **Ordres de Travail (OT)** : CRUD complet, workflow, impressions, etats
-3. **Equipements** : Gestion, QR codes, historique, criticite
-4. **Consignations LOTO** : Procedures de securite electrique avec etapes detaillees
-5. **Documentations** : Explorateur de fichiers avec gestion avancee (copier, couper, coller, permissions, partage, etc.)
-6. **Maintenance Preventive** : Planification, execution, historique
-7. **Ameliorations** : Suivi des demandes d'amelioration
-8. **Inventaire** : Gestion des pieces de rechange par service
-9. **Surveillance** : Surveillance en temps reel des equipements
-10. **IA** : Historique et tendances IA (Adria), chat contextuel
-11. **Chat Live** : Communication temps reel entre utilisateurs
-12. **Planning** : Gestion du planning equipe
-13. **Rapports Hebdomadaires** : Generation automatique
-14. **Presqu'accidents** : Signalement avec capture photo/camera
-15. **Contrats** : Gestion des contrats de maintenance
-16. **Demandes d'Achat** : Processus de demande d'achat
-
 ## Tech Stack
 - **Frontend**: React 18, Tailwind CSS, Shadcn/UI, react-winbox, react-contexify, Lucide icons
 - **Backend**: FastAPI, Python 3.11
@@ -32,43 +14,47 @@ Plateforme integree avec gestion des equipements, ordres de travail, consignatio
 - **Email**: SMTP configurable (Parametres Speciaux)
 - **PWA**: Service Worker, notifications push VAPID
 
-## What's been implemented (latest)
+## Session 11 Mars 2026 - Phase 2
 
-### Session 11 Mars 2026 - Permissions, Pieces Jointes, Selection Equipement
-- **Tache 1 - Mise a jour Permissions** : 12 nouveaux modules ajoutes a la grille de permissions (PermissionsGrid.jsx)
-  - Dashboard Service, M.E.S, Rapports M.E.S, Contrats, Formations, Rapports Hebdo.
-  - Consignations LOTO, Cameras, Gestion d'equipe, Analytics Checklists, Demandes d'arret, Autorisations Part.
-- **Tache 2 - Pieces jointes demandes d'intervention** :
-  - Backend: 3 nouveaux endpoints (POST upload, GET download, DELETE) pour /api/intervention-requests/{id}/attachments
-  - Backend: Repertoire d'upload dedie /app/backend/uploads/intervention-requests/
-  - Backend: Modele InterventionRequest enrichi avec champ attachments
-  - Frontend: Bouton capture photo via camera (navigator.mediaDevices)
-  - Frontend: Zone drag-and-drop pour fichiers + bouton Parcourir
-  - Frontend: Liste de fichiers avec preview image et suppression
-- **Tache 3 - Refonte selection equipement** :
-  - Frontend: Le selecteur Equipement n'affiche que les parents (sans parent_id)
-  - Frontend: Nouveau selecteur Sous-equipement apparait si l'equipement parent a des enfants
-  - Frontend: Champ Emplacement masque mais auto-rempli depuis l'equipement parent
-  - Frontend: Appel GET /api/equipments/{id}/children pour charger les sous-equipements
-- **Testing** : 17/17 backend tests PASS, frontend 100% verifie (iteration_116.json)
-- **Bug Fix** : Endpoint DELETE /api/intervention-requests corrige (newline manquante)
+### Bug fix: Colonne Equipement vide
+- **Cause racine**: `db.equipments.find_one({"id": ...})` ne trouvait rien car les equipements n'ont pas de champ `id` en base (ils utilisent `_id` ObjectId)
+- **Fix**: Remplacement par `get_equipment_by_id()` et `get_location_by_id()` qui utilisent `ObjectId`
+- Corrige dans les endpoints create ET update des demandes d'intervention
 
-### Session 10 Mars 2026 - Filtres chronologiques + Bug Historique Rapports
-- **Frontend** : Ajout filtres chronologiques sur la page "Demandes d'amelioration" (ImprovementRequests.jsx) - boutons Toutes/Aujourd'hui/Cette semaine/Ce mois/Cette annee/Personnalise
-- **Frontend** : Verification et validation des filtres chronologiques deja presents sur "Demandes d'intervention" (InterventionRequests.jsx)
-- **Bug Fix** : Correction du bug ou les rapports ne s'enregistraient pas dans l'Historique
-- **Feature** : Visualisation complete des rapports dans l'Historique
-- **Optimisation** : Limite l'horizon du Planning M.Prev. a aujourd'hui + 12 mois
-- **Feature** : Auto-approbation des demandes d'arret quand demandeur = destinataire
-- **Bug Fix** : Synchronisation temps reel Equipements <-> Planning M.Prev
-- **Feature** : Reordonnement des equipements par les admins (page /assets)
-- **Feature** : Gestion visibilite icones header par utilisateur (page /people)
-- **Testing** : Backend 6/6 curl tests PASS + screenshots frontend validates
+### Refonte UI pieces jointes DI (identique aux OT)
+- Suppression du mode camera inline (navigator.mediaDevices.getUserMedia) 
+- Remplacement par `<input type="file" capture="environment">` pour ouvrir l'app camera native
+- UI identique aux ordres de travail : boutons "Parcourir" + "Appareil photo"
+- Liste de fichiers avec nom, taille, bouton Supprimer
+- Backend endpoints existants: POST/GET/DELETE /api/intervention-requests/{id}/attachments
 
-### Session 9 Mars 2026 - Refonte Module Documentations
-- Backend/Frontend refonte complete du module Documentations avec menu contextuel, presse-papiers, visionneuse, drag & drop
-- Backend/Frontend IA pour generation de formulaires
-- Testing : 23/23 backend + 14/14 frontend PASS
+### Fonctionnalite "Refus d'intervention"
+- Nouvelle icone Ban (sens interdit) dans la colonne Actions
+- Dialogue `RefuseInterventionDialog.jsx` pour saisir le motif du refus
+- Backend `POST /api/intervention-requests/{id}/refuse` enregistre le refus
+- Email envoye au demandeur avec le motif du refus
+- Enregistrement dans le journal d'audit
+- Colonne "Ordre N°" affiche "REFUS" en rouge avec tooltip du motif au survol
+- Champs ajoutes au modele: refused, refused_reason, refused_at, refused_by, refused_by_name
+
+### Transfert pieces jointes DI -> OT
+- Lors de la conversion d'une DI en OT, les pieces jointes sont copiees
+- Copie physique des fichiers de /uploads/intervention-requests/ vers /uploads/work-orders/
+- Enregistrement des attachments dans le nouvel OT
+
+### Testing: 100% (iteration_116 + iteration_117)
+- Backend: 9/9 tests iteration_117, 17/17 tests iteration_116
+- Frontend: 100% verifie sur les deux iterations
+
+## Session 11 Mars 2026 - Phase 1
+
+### Permissions Grid
+- 12 nouveaux modules ajoutes: Dashboard Service, M.E.S, Rapports M.E.S, Contrats, Formations, Rapports Hebdo., Consignations LOTO, Cameras, Gestion d'equipe, Analytics Checklists, Demandes d'arret, Autorisations Part.
+
+### Selection equipement DI (hierarchique)
+- Dropdown Equipement: uniquement les parents (sans parent_id)
+- Nouveau dropdown Sous-equipement: enfants charges via GET /api/equipments/{id}/children
+- Champ Emplacement masque mais auto-rempli depuis le parent
 
 ## Prioritized Backlog
 ### P0 (Critical)
@@ -77,41 +63,28 @@ Plateforme integree avec gestion des equipements, ordres de travail, consignatio
 ### P1 (Upcoming)
 - Aucune tache planifiee - attente instructions utilisateur
 
-### P2 (Future)
-- Templates de widgets additionnels
-- Ameliorations futures suggerees par l'utilisateur
-
 ## Architecture
 ```
 /app
 ├── backend/
 │   ├── server.py               # FastAPI main app (11K+ lines)
-│   ├── documentations_routes.py # Module Documentations (1800+ lines)
-│   ├── realtime_manager.py     # WebSocket manager
-│   ├── email_service.py        # Service SMTP
-│   ├── models.py               # Modeles Pydantic
+│   ├── models.py               # Modeles Pydantic (InterventionRequest with refused fields)
 │   ├── uploads/
 │   │   ├── work-orders/        # PJ ordres de travail
-│   │   └── intervention-requests/ # PJ demandes d'intervention (NEW)
-│   └── routes/                 # Routes additionnelles
-└── frontend/
-    └── src/
-        ├── components/
-        │   ├── Common/
-        │   │   └── PermissionsGrid.jsx  # UPDATED - 12 new modules
-        │   ├── InterventionRequests/
-        │   │   └── InterventionRequestFormDialog.jsx  # REWRITTEN
-        │   ├── ui/               # Shadcn components
-        │   └── Layout/
-        │       ├── Sidebar.jsx
-        │       └── menuConfig.js
-        ├── pages/
-        ├── hooks/
-        │   ├── useEquipments.js
-        │   └── useRealtimeData.js
-        ├── contexts/
-        └── services/
-            └── api.js
+│   │   └── intervention-requests/ # PJ demandes d'intervention
+│   └── email_service.py
+└── frontend/src/
+    ├── components/
+    │   ├── Common/PermissionsGrid.jsx      # 45 modules
+    │   ├── InterventionRequests/
+    │   │   ├── InterventionRequestFormDialog.jsx  # Camera native + fichiers
+    │   │   ├── RefuseInterventionDialog.jsx       # NEW - Dialogue refus
+    │   │   ├── InterventionRequestDialog.jsx
+    │   │   └── ConvertToWorkOrderDialog.jsx
+    │   └── WorkOrders/
+    │       └── WorkOrderFormDialog.jsx     # Reference UI fichiers
+    └── pages/
+        └── InterventionRequests.jsx        # Liste + Ban icon + REFUS label
 ```
 
 ## Credentials
