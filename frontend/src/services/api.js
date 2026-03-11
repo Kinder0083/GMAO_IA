@@ -307,7 +307,13 @@ export const purchaseHistoryAPI = {
   deleteAll: () => api.delete('/purchase-history/all'),
   create: (data) => api.post('/purchase-history', data),
   update: (id, data) => api.put(`/purchase-history/${id}`, data),
-  delete: (id) => api.delete(`/purchase-history/${id}`)
+  delete: (id) => api.delete(`/purchase-history/${id}`),
+  // IA Purchase History
+  aiAnalyzeTrends: () => api.post('/ai-purchase-history/analyze-trends', {}).then(res => res.data),
+  aiGenerateReport: () => api.post('/ai-purchase-history/generate-report', {}).then(res => res.data),
+  getAIArchives: () => api.get('/ai-purchase-history/archives').then(res => res.data),
+  getAIArchive: (id) => api.get(`/ai-purchase-history/archives/${id}`).then(res => res.data),
+  deleteAIArchive: (id) => api.delete(`/ai-purchase-history/archives/${id}`).then(res => res.data),
 };
 
 // ==================== REPORTS ====================

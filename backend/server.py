@@ -10642,6 +10642,10 @@ from ai_sensor_routes import router as ai_sensor_router, init_ai_sensor_routes
 init_ai_sensor_routes(db)
 api_router.include_router(ai_sensor_router)
 
+from ai_purchase_history_routes import router as ai_purchase_history_router, init_ai_purchase_history_routes
+init_ai_purchase_history_routes(db, audit_service)
+api_router.include_router(ai_purchase_history_router)
+
 from automation_routes import router as automation_router, init_automation_routes
 init_automation_routes(db)
 api_router.include_router(automation_router)

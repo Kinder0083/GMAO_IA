@@ -2,17 +2,20 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { Plus, Search, ShoppingCart, TrendingUp, Calendar, Pencil, Trash2, Download, Upload, ChevronDown, ChevronRight } from 'lucide-react';
+import { Plus, Search, ShoppingCart, TrendingUp, Calendar, Pencil, Trash2, Download, Upload, ChevronDown, ChevronRight, Brain, FileText, Archive } from 'lucide-react';
 import { purchaseHistoryAPI } from '../services/api';
 import { useToast } from '../hooks/use-toast';
 import { useConfirmDialog } from '../components/ui/confirm-dialog';
 import PurchaseFormDialog from '../components/PurchaseHistory/PurchaseFormDialog';
+import AIPurchaseAnalyzer from '../components/AIPurchaseAnalyzer';
 import { ResponsiveBar } from '@nivo/bar';
 import { formatErrorMessage } from '../utils/errorFormatter';
+import { useNavigate } from 'react-router-dom';
 
 const PurchaseHistory = () => {
   const { toast } = useToast();
   const { confirm, ConfirmDialog } = useConfirmDialog();
+  const navigate = useNavigate();
   const [purchases, setPurchases] = useState([]);
   const [groupedPurchases, setGroupedPurchases] = useState([]);
   const [stats, setStats] = useState(null);
@@ -24,7 +27,8 @@ const PurchaseHistory = () => {
   const [filterSupplier, setFilterSupplier] = useState('');
   const [expandedOrders, setExpandedOrders] = useState(new Set());
   const [currentUser, setCurrentUser] = useState(null);
-  const [selectedMonth, setSelectedMonth] = useState(''); // Mois sélectionné pour le détail par catégorie
+  const [selectedMonth, setSelectedMonth] = useState('');
+  const [openAIAnalysis, setOpenAIAnalysis] = useState(false);
 
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem('user') || '{}');
@@ -208,6 +212,22 @@ const PurchaseHistory = () => {
           <p className="text-gray-600 mt-1">Gérez et analysez vos achats</p>
         </div>
         <div className="flex gap-2">
+          <Button
+            variant="outline"
+            className="border-purple-300 text-purple-700 hover:bg-purple-50"
+            data-testid="open-purchase-ai-btn"
+            onClick={() => setOpenAIAnalysis(true)}
+          >
+            <Brain size={16} className="mr-1" /> Analyse IA
+          </Button>
+          <Button
+            variant="outline"
+            className="border-amber-300 text-amber-700 hover:bg-amber-50"
+            data-testid="open-purchase-archives-ia-btn"
+            onClick={() => navigate('/purchase-history-archives-ia')}
+          >
+            <Archive size={16} className="mr-1" /> Archives IA
+          </Button>
           {currentUser?.role === 'ADMIN' && (
             <Button
               variant="outline"
@@ -749,6 +769,9 @@ const PurchaseHistory = () => {
       
       {/* Confirm Dialog */}
       <ConfirmDialog />
+
+      {/* AI Analysis Dialog */}
+      <AIPurchaseAnalyzer open={openAIAnalysis} onClose={() => setOpenAIAnalysis(false)} />
     </div>
   );
 };

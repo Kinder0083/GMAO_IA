@@ -58,6 +58,7 @@ import SurveillanceAIDashboard from "./pages/SurveillanceAIDashboard";
 import PresquAccidentList from "./pages/PresquAccidentList";
 import PresquAccidentRapport from "./pages/PresquAccidentRapport";
 import PresquAccidentArchivesIA from "./pages/PresquAccidentArchivesIA";
+import PurchaseHistoryArchivesIA from "./pages/PurchaseHistoryArchivesIA";
 import Documentations from "./pages/Documentations";
 import SSHTerminal from "./pages/SSHTerminal";
 import SystemHealth from "./pages/SystemHealth";
@@ -227,6 +228,7 @@ function App() {
             <Route path="consignations-loto" element={<ConsignationsLOTO />} />
             <Route path="contrats/dashboard" element={<ContractsDashboard />} />
             <Route path="purchase-history" element={<PurchaseHistory />} />
+            <Route path="purchase-history-archives-ia" element={<PurchaseHistoryArchivesIA />} />
             <Route path="purchase-requests" element={<PurchaseRequests />} />
             <Route path="purchase-requests/archives" element={<PurchaseRequestsArchives />} />
             <Route path="purchase-requests/:id" element={<PurchaseRequestDetail />} />
