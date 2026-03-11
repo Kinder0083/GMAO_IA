@@ -13,6 +13,14 @@ Application GMAO (Gestion de Maintenance Assistee par Ordinateur) pour la gestio
 
 ## Session 11 Mars 2026
 
+### Phase 5 - Analyse IA Historique Achat
+- **Fonctionnalite**: Boutons "Analyse IA" et "Archives IA" ajoutes sur la page Historique Achat
+- **Backend**: `ai_purchase_history_routes.py` enregistre dans `server.py` (analyse tendances, rapport, archives CRUD)
+- **Frontend**: `AIPurchaseAnalyzer.jsx` (dialogue analyse), `PurchaseHistoryArchivesIA.jsx` (page archives), route `/purchase-history-archives-ia`
+- **API**: `purchaseHistoryAPI` dans `api.js` enrichi avec `aiAnalyzeTrends`, `aiGenerateReport`, `getAIArchives`, `getAIArchive`, `deleteAIArchive`
+- **Pattern**: Identique au module Presqu'accidents (LLM fallback chain, auto-archivage, KPI, anomalies, recommandations)
+- Testing: 100% (iteration_119)
+
 ### Phase 4 - WebSocket Demandes d'Intervention
 - **Probleme**: Les DI creees depuis le telephone (PWA) n'apparaissaient pas en temps reel sur la version web
 - **Cause racine**: Le backend excluait l'utilisateur createur du broadcast WebSocket (`exclude_user=current_user["id"]`). Quand le meme compte est utilise sur 2 appareils, le 2e appareil ne recevait pas l'evenement
