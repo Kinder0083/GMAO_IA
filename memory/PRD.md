@@ -18,8 +18,9 @@ Application GMAO (Gestion de Maintenance Assistee par Ordinateur) pour la gestio
 - **Backend**: Endpoint POST /api/qr/public/intervention-request (creation DI sans JWT), POST /api/qr/public/intervention-request/{id}/attachments (upload photos sans auth)
 - **Frontend**: `PublicInterventionForm.jsx` - Formulaire mobile-first epure avec equipement pre-rempli, nom du demandeur, titre, description, priorite, photos (camera native + galerie)
 - **Migration**: Action `create-intervention` passee de `requires_auth: true` a `false` (migration auto dans ensure_default_actions)
-- **UX**: Ecran de succes, gestion d'erreurs, preview photos plein ecran, boutons tactiles larges
-- Testing: 100% (iteration_120 - 13/13 backend, tous tests frontend passes)
+- **Email notification**: Envoi automatique aux admins avec 2 boutons d'action (Convertir en OT / Refuser) liens vers l'app
+- **Liens email**: /intervention-requests?action=convert&id=xxx et ?action=refuse&id=xxx ouvrent automatiquement les dialogues correspondants
+- Testing: 100% (iteration_120 formulaire public, iteration_121 email + liens d'action)
 
 ### Phase 5 - Analyse IA Historique Achat
 - **Fonctionnalite**: Boutons "Analyse IA" et "Archives IA" ajoutes sur la page Historique Achat
