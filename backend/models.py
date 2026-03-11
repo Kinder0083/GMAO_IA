@@ -1331,6 +1331,15 @@ class MeterReadingUpdate(BaseModel):
 
 
 # Intervention Request (Demande d'intervention) Models
+class InterventionRequestAttachment(BaseModel):
+    id: Optional[str] = None
+    filename: str
+    original_filename: str
+    size: int
+    mime_type: str
+    uploaded_at: Optional[datetime] = None
+    url: Optional[str] = None
+
 class InterventionRequest(BaseModel):
     id: str
     titre: str
@@ -1344,11 +1353,12 @@ class InterventionRequest(BaseModel):
     date_creation: datetime
     created_by: str
     created_by_name: Optional[str] = None
-    work_order_id: Optional[str] = None  # ID de l'ordre de travail créé
-    work_order_numero: Optional[str] = None  # Numéro de l'ordre de travail créé (ex: 5801)
-    work_order_date_limite: Optional[datetime] = None  # Date limite de l'ordre créé
-    converted_at: Optional[datetime] = None  # Date de conversion
-    converted_by: Optional[str] = None  # ID de qui a converti
+    work_order_id: Optional[str] = None
+    work_order_numero: Optional[str] = None
+    work_order_date_limite: Optional[datetime] = None
+    converted_at: Optional[datetime] = None
+    converted_by: Optional[str] = None
+    attachments: Optional[List[Any]] = []
 
 class InterventionRequestCreate(BaseModel):
     titre: str

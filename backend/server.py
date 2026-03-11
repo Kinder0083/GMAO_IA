@@ -7300,6 +7300,7 @@ async def create_intervention_request(
         request_data["work_order_date_limite"] = None
         request_data["converted_at"] = None
         request_data["converted_by"] = None
+        request_data["attachments"] = []
         
         # Récupérer les informations de l'équipement si fourni
         if request_data.get("equipement_id"):
@@ -7340,6 +7341,21 @@ async def create_intervention_request(
         logger.error(f"Erreur création demande d'intervention: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+def _clean_ir_attachments(req):
+    """Nettoyer les ObjectId dans les attachments d'une demande d'intervention"""
+    if "attachments" in req and req["attachments"]:
+        cleaned = []
+        for att in req["attachments"]:
+            clean_att = {k: v for k, v in att.items() if k != "_id"}
+            if "_id" in att:
+                clean_att["id"] = str(att["_id"])
+                clean_att["url"] = f"/api/intervention-requests/{req.get('id', '')}/attachments/{str(att['_id'])}"
+            cleaned.append(clean_att)
+        req["attachments"] = cleaned
+    else:
+        req["attachments"] = []
+    return req
+
 @api_router.get("/intervention-requests", response_model=List[InterventionRequest], tags=["Demandes Intervention"])
 async def get_all_intervention_requests(current_user: dict = Depends(require_permission("interventionRequests", "view"))):
     """Récupérer toutes les demandes d'intervention"""
@@ -7348,6 +7364,7 @@ async def get_all_intervention_requests(current_user: dict = Depends(require_per
         
         requests = []
         async for req in db.intervention_requests.find(query).sort("date_creation", -1):
+            req = _clean_ir_attachments(req)
             requests.append(InterventionRequest(**req))
         return requests
     except Exception as e:
@@ -7360,6 +7377,7 @@ async def get_intervention_request(request_id: str, current_user: dict = Depends
     req = await db.intervention_requests.find_one({"id": request_id})
     if not req:
         raise HTTPException(status_code=404, detail="Demande non trouvée")
+    req = _clean_ir_attachments(req)
     return InterventionRequest(**req)
 
 @api_router.put("/intervention-requests/{request_id}", response_model=InterventionRequest, tags=["Demandes Intervention"])
@@ -7418,6 +7436,7 @@ async def update_intervention_request(
         details=f"Modification demande d'intervention"
     )
     
+    updated_req = _clean_ir_attachments(updated_req)
     return InterventionRequest(**updated_req)
 
 @api_router.delete("/intervention-requests/{request_id}", response_model=MessageResponse, tags=["Demandes Intervention"])
@@ -7452,6 +7471,143 @@ async def delete_intervention_request(request_id: str, current_user: dict = Depe
     )
     
     return {"message": "Demande supprimée"}
+
+# ==================== INTERVENTION REQUEST ATTACHMENTS ====================
+IR_UPLOAD_DIR = Path("/app/backend/uploads/intervention-requests")
+IR_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+@api_router.post("/intervention-requests/{request_id}/attachments",
+    summary="Uploader une piece jointe a une demande d'intervention", response_model=AttachmentResponse, tags=["Demandes Intervention"])
+async def upload_ir_attachment(
+    request_id: str,
+    file: UploadFile = File(...),
+    current_user: dict = Depends(require_permission("interventionRequests", "edit"))
+):
+    """Uploader une piece jointe a une demande d'intervention (max 25MB)"""
+    try:
+        req = await db.intervention_requests.find_one({"id": request_id})
+        if not req:
+            raise HTTPException(status_code=404, detail="Demande d'intervention non trouvee")
+        
+        content = await file.read()
+        if len(content) > MAX_FILE_SIZE:
+            raise HTTPException(status_code=400, detail="Fichier trop volumineux (max 25MB)")
+        
+        file_ext = Path(file.filename).suffix
+        unique_filename = f"{uuid.uuid4()}{file_ext}"
+        file_path = IR_UPLOAD_DIR / unique_filename
+        
+        async with aiofiles.open(file_path, 'wb') as f:
+            await f.write(content)
+        
+        attachment = {
+            "_id": ObjectId(),
+            "filename": unique_filename,
+            "original_filename": file.filename,
+            "size": len(content),
+            "mime_type": file.content_type or mimetypes.guess_type(file.filename)[0] or "application/octet-stream",
+            "uploaded_at": datetime.utcnow()
+        }
+        
+        await db.intervention_requests.update_one(
+            {"id": request_id},
+            {"$push": {"attachments": attachment}}
+        )
+        
+        attachment_response = {
+            "id": str(attachment["_id"]),
+            "filename": attachment["filename"],
+            "original_filename": attachment["original_filename"],
+            "size": attachment["size"],
+            "mime_type": attachment["mime_type"],
+            "uploaded_at": attachment["uploaded_at"],
+            "url": f"/api/intervention-requests/{request_id}/attachments/{str(attachment['_id'])}"
+        }
+        
+        return attachment_response
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erreur upload piece jointe DI: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.get("/intervention-requests/{request_id}/attachments/{attachment_id}",
+    summary="Telecharger une piece jointe", tags=["Demandes Intervention"])
+async def download_ir_attachment(
+    request_id: str,
+    attachment_id: str,
+    current_user: dict = Depends(require_permission("interventionRequests", "view"))
+):
+    """Telecharger une piece jointe d'une demande d'intervention"""
+    try:
+        req = await db.intervention_requests.find_one({"id": request_id})
+        if not req:
+            raise HTTPException(status_code=404, detail="Demande non trouvee")
+        
+        attachment = None
+        for att in req.get("attachments", []):
+            if str(att.get("_id")) == attachment_id:
+                attachment = att
+                break
+        
+        if not attachment:
+            raise HTTPException(status_code=404, detail="Piece jointe non trouvee")
+        
+        file_path = IR_UPLOAD_DIR / attachment["filename"]
+        if not file_path.exists():
+            raise HTTPException(status_code=404, detail="Fichier non trouve sur le disque")
+        
+        from starlette.responses import FileResponse
+        return FileResponse(
+            path=str(file_path),
+            filename=attachment["original_filename"],
+            media_type=attachment.get("mime_type", "application/octet-stream")
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erreur download piece jointe DI: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.delete("/intervention-requests/{request_id}/attachments/{attachment_id}",
+    summary="Supprimer une piece jointe", response_model=MessageResponse, tags=["Demandes Intervention"])
+async def delete_ir_attachment(
+    request_id: str,
+    attachment_id: str,
+    current_user: dict = Depends(require_permission("interventionRequests", "edit"))
+):
+    """Supprimer une piece jointe d'une demande d'intervention"""
+    try:
+        req = await db.intervention_requests.find_one({"id": request_id})
+        if not req:
+            raise HTTPException(status_code=404, detail="Demande non trouvee")
+        
+        attachment = None
+        for att in req.get("attachments", []):
+            if str(att.get("_id")) == attachment_id:
+                attachment = att
+                break
+        
+        if not attachment:
+            raise HTTPException(status_code=404, detail="Piece jointe non trouvee")
+        
+        # Delete file from disk
+        file_path = IR_UPLOAD_DIR / attachment["filename"]
+        if file_path.exists():
+            file_path.unlink()
+        
+        # Remove from DB
+        await db.intervention_requests.update_one(
+            {"id": request_id},
+            {"$pull": {"attachments": {"_id": attachment["_id"]}}}
+        )
+        
+        return {"message": "Piece jointe supprimee"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erreur suppression piece jointe DI: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.post("/intervention-requests/{request_id}/convert-to-work-order", response_model=dict, tags=["Demandes Intervention"])
 async def convert_to_work_order(
