@@ -3,12 +3,13 @@ import { useLocationStateFilter } from '../hooks/useLocationStateFilter';
 import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { Plus, Search, Eye, Pencil, Trash2, Wrench, AlertCircle, Calendar } from 'lucide-react';
+import { Plus, Search, Eye, Pencil, Trash2, Wrench, AlertCircle, Calendar, Ban } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../components/ui/tooltip';
 import { Label } from '../components/ui/label';
 import InterventionRequestDialog from '../components/InterventionRequests/InterventionRequestDialog';
 import InterventionRequestFormDialog from '../components/InterventionRequests/InterventionRequestFormDialog';
 import ConvertToWorkOrderDialog from '../components/InterventionRequests/ConvertToWorkOrderDialog';
+import RefuseInterventionDialog from '../components/InterventionRequests/RefuseInterventionDialog';
 import DeleteConfirmDialog from '../components/Common/DeleteConfirmDialog';
 import { interventionRequestsAPI, workOrdersAPI } from '../services/api';
 import { useToast } from '../hooks/use-toast';
@@ -30,6 +31,7 @@ const InterventionRequests = () => {
   const [formDialogOpen, setFormDialogOpen] = useState(false);
   const [convertDialogOpen, setConvertDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [refuseDialogOpen, setRefuseDialogOpen] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState(null);
   const [itemToDelete, setItemToDelete] = useState(null);
 
@@ -346,11 +348,47 @@ const InterventionRequests = () => {
                                 <TooltipContent>Convertir en ordre de travail</TooltipContent>
                               </Tooltip>
                             )}
+                            
+                            {canConvert && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    data-testid={`refuse-btn-${req.id}`}
+                                    onClick={() => {
+                                      setSelectedRequest(req);
+                                      setRefuseDialogOpen(true);
+                                    }}
+                                    className="hover:bg-red-50 hover:text-red-600"
+                                  >
+                                    <Ban size={16} />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Intervention refusee</TooltipContent>
+                              </Tooltip>
+                            )}
                           </div>
                         </TooltipProvider>
                       </td>
                       <td className="py-3 px-4 text-sm">
-                        {req.work_order_numero ? (
+                        <TooltipProvider>
+                        {req.refused ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span 
+                                className="text-red-600 font-bold cursor-default"
+                                data-testid={`refused-label-${req.id}`}
+                              >
+                                REFUS
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-xs">
+                              <p className="font-medium">Motif du refus :</p>
+                              <p>{req.refused_reason}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        ) : req.work_order_numero ? (
                           <span 
                             className="text-blue-600 font-medium cursor-pointer hover:underline"
                             onClick={() => handleWorkOrderClick(req.work_order_id)}
@@ -361,6 +399,7 @@ const InterventionRequests = () => {
                         ) : (
                           <span className="text-gray-400">-</span>
                         )}
+                        </TooltipProvider>
                       </td>
                       <td className="py-3 px-4 text-sm">
                         {req.work_order_date_limite ? (
@@ -406,6 +445,13 @@ const InterventionRequests = () => {
         onConfirm={confirmDelete}
         title="Supprimer la demande"
         description="Êtes-vous sûr de vouloir supprimer cette demande d'intervention ?"
+      />
+
+      <RefuseInterventionDialog
+        open={refuseDialogOpen}
+        onOpenChange={setRefuseDialogOpen}
+        request={selectedRequest}
+        onSuccess={refreshRequests}
       />
     </div>
   );

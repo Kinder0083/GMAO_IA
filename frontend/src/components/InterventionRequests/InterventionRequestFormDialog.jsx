@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -17,7 +17,7 @@ import { interventionRequestsAPI, equipmentsAPI, locationsAPI } from '../../serv
 import api from '../../services/api';
 import { validateDateNotPast } from '../../utils/dateValidation';
 import { formatErrorMessage } from '../../utils/errorFormatter';
-import { Camera, Upload, X, FileIcon, Image as ImageIcon, Loader2 } from 'lucide-react';
+import { Paperclip, Camera, Loader2 } from 'lucide-react';
 
 const InterventionRequestFormDialog = ({ open, onOpenChange, request, onSuccess }) => {
   const { toast } = useToast();
@@ -27,13 +27,9 @@ const InterventionRequestFormDialog = ({ open, onOpenChange, request, onSuccess 
   const [locations, setLocations] = useState([]);
   const [childEquipments, setChildEquipments] = useState([]);
   const [loadingChildren, setLoadingChildren] = useState(false);
-  const [files, setFiles] = useState([]);
-  const [cameraOpen, setCameraOpen] = useState(false);
-  const [dragActive, setDragActive] = useState(false);
-  const videoRef = useRef(null);
-  const canvasRef = useRef(null);
-  const streamRef = useRef(null);
+  const [attachments, setAttachments] = useState([]);
   const fileInputRef = useRef(null);
+  const cameraInputRef = useRef(null);
   const [formData, setFormData] = useState({
     titre: '',
     description: '',
@@ -48,13 +44,11 @@ const InterventionRequestFormDialog = ({ open, onOpenChange, request, onSuccess 
     if (open) {
       loadData();
       if (request) {
-        // Determine if the current equipment is a parent or child
-        const eqId = request.equipement?.id || '';
         setFormData({
           titre: request.titre || '',
           description: request.description || '',
           priorite: request.priorite || 'AUCUNE',
-          equipement_id: eqId,
+          equipement_id: request.equipement?.id || '',
           sous_equipement_id: '',
           emplacement_id: request.emplacement?.id || '',
           date_limite_desiree: request.date_limite_desiree?.split('T')[0] || ''
@@ -69,13 +63,11 @@ const InterventionRequestFormDialog = ({ open, onOpenChange, request, onSuccess 
           emplacement_id: '',
           date_limite_desiree: ''
         });
-        setFiles([]);
+        setAttachments([]);
       }
       setChildEquipments([]);
     } else {
-      // Cleanup camera on close
-      stopCamera();
-      setFiles([]);
+      setAttachments([]);
     }
   }, [open, request]);
 
@@ -84,22 +76,17 @@ const InterventionRequestFormDialog = ({ open, onOpenChange, request, onSuccess 
     if (formData.equipement_id && equipments.length > 0) {
       const parentEq = equipments.find(eq => eq.id === formData.equipement_id);
       if (parentEq) {
-        // Auto-fill emplacement from parent
-        if (parentEq.emplacement?.id) {
-          setFormData(prev => ({ ...prev, emplacement_id: parentEq.emplacement.id }));
-        } else if (parentEq.emplacement_id) {
+        if (parentEq.emplacement_id && formData.emplacement_id !== parentEq.emplacement_id) {
           setFormData(prev => ({ ...prev, emplacement_id: parentEq.emplacement_id }));
         }
-        // Load children
         if (parentEq.hasChildren) {
           loadChildren(parentEq.id);
         } else {
           setChildEquipments([]);
         }
       }
-    } else {
+    } else if (!formData.equipement_id) {
       setChildEquipments([]);
-      setFormData(prev => ({ ...prev, emplacement_id: '', sous_equipement_id: '' }));
     }
   }, [formData.equipement_id, equipments]);
 
@@ -132,113 +119,38 @@ const InterventionRequestFormDialog = ({ open, onOpenChange, request, onSuccess 
   // Get only parent equipments (no parent_id)
   const parentEquipments = equipments.filter(eq => !eq.parent_id);
 
-  // Camera functions
-  const startCamera = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
-      });
-      streamRef.current = stream;
-      setCameraOpen(true);
-      setTimeout(() => {
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-        }
-      }, 100);
-    } catch (error) {
-      toast({
-        title: 'Erreur',
-        description: 'Impossible d\'acceder a la camera. Verifiez les permissions.',
-        variant: 'destructive'
-      });
-    }
-  };
-
-  const stopCamera = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-      streamRef.current = null;
-    }
-    setCameraOpen(false);
-  };
-
-  const capturePhoto = () => {
-    if (!videoRef.current || !canvasRef.current) return;
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(video, 0, 0);
-    canvas.toBlob((blob) => {
-      if (blob) {
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-        const file = new File([blob], `photo_${timestamp}.jpg`, { type: 'image/jpeg' });
-        setFiles(prev => [...prev, { file, preview: URL.createObjectURL(blob) }]);
-        stopCamera();
-        toast({ title: 'Photo capturee', description: 'La photo a ete ajoutee aux pieces jointes.' });
-      }
-    }, 'image/jpeg', 0.85);
-  };
-
-  // Drag and drop handlers
-  const handleDrag = useCallback((e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.type === 'dragenter' || e.type === 'dragover') {
-      setDragActive(true);
-    } else if (e.type === 'dragleave') {
-      setDragActive(false);
-    }
-  }, []);
-
-  const handleDrop = useCallback((e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
-    const droppedFiles = Array.from(e.dataTransfer.files);
-    addFiles(droppedFiles);
-  }, []);
-
-  const handleFileSelect = (e) => {
-    const selectedFiles = Array.from(e.target.files);
-    addFiles(selectedFiles);
-    e.target.value = '';
-  };
-
-  const addFiles = (newFiles) => {
-    const maxSize = 25 * 1024 * 1024; // 25MB
-    const validFiles = newFiles.filter(f => {
+  // File handlers - identical to WorkOrderFormDialog
+  const handleFileSelect = (event) => {
+    const files = Array.from(event.target.files || []);
+    const maxSize = 25 * 1024 * 1024;
+    const validFiles = files.filter(f => {
       if (f.size > maxSize) {
         toast({ title: 'Fichier trop volumineux', description: `${f.name} depasse 25MB`, variant: 'destructive' });
         return false;
       }
       return true;
     });
-    const fileItems = validFiles.map(file => ({
+    const newAttachments = validFiles.map(file => ({
       file,
-      preview: file.type.startsWith('image/') ? URL.createObjectURL(file) : null
+      name: file.name,
+      size: file.size
     }));
-    setFiles(prev => [...prev, ...fileItems]);
+    setAttachments(prev => [...prev, ...newAttachments]);
+    event.target.value = '';
   };
 
-  const removeFile = (index) => {
-    setFiles(prev => {
-      const updated = [...prev];
-      if (updated[index].preview) URL.revokeObjectURL(updated[index].preview);
-      updated.splice(index, 1);
-      return updated;
-    });
+  const handleCameraCapture = () => {
+    if (cameraInputRef.current) {
+      cameraInputRef.current.click();
+    }
   };
 
-  const formatFileSize = (bytes) => {
-    if (bytes < 1024) return bytes + ' o';
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' Ko';
-    return (bytes / (1024 * 1024)).toFixed(1) + ' Mo';
+  const handleRemoveAttachment = (index) => {
+    setAttachments(prev => prev.filter((_, i) => i !== index));
   };
 
   const uploadFiles = async (requestId) => {
-    for (const item of files) {
+    for (const item of attachments) {
       try {
         const fd = new FormData();
         fd.append('file', item.file);
@@ -265,7 +177,6 @@ const InterventionRequestFormDialog = ({ open, onOpenChange, request, onSuccess 
     setLoading(true);
 
     try {
-      // Determine the actual equipment_id to send
       const actualEquipementId = formData.sous_equipement_id || formData.equipement_id || null;
 
       const submitData = {
@@ -282,16 +193,14 @@ const InterventionRequestFormDialog = ({ open, onOpenChange, request, onSuccess 
       if (request) {
         await interventionRequestsAPI.update(request.id, submitData);
         resultId = request.id;
-        // Upload new files if any
-        if (files.length > 0) {
+        if (attachments.length > 0) {
           await uploadFiles(request.id);
         }
         toast({ title: 'Succes', description: 'Demande modifiee avec succes' });
       } else {
         const response = await interventionRequestsAPI.create(submitData);
         resultId = response?.data?.id;
-        // Upload files after creation
-        if (files.length > 0 && resultId) {
+        if (attachments.length > 0 && resultId) {
           await uploadFiles(resultId);
         }
         toast({ title: 'Succes', description: 'Demande transmise avec succes' });
@@ -311,7 +220,7 @@ const InterventionRequestFormDialog = ({ open, onOpenChange, request, onSuccess 
   };
 
   return (
-    <Dialog open={open} onOpenChange={(val) => { if (!val) stopCamera(); onOpenChange(val); }}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle data-testid="intervention-form-title">
@@ -396,7 +305,7 @@ const InterventionRequestFormDialog = ({ open, onOpenChange, request, onSuccess 
               </Select>
             </div>
 
-            {/* Sous-equipement (visible seulement si le parent a des enfants) */}
+            {/* Sous-equipement */}
             {formData.equipement_id && childEquipments.length > 0 && (
               <div className="space-y-2">
                 <Label htmlFor="sous_equipement">Sous-equipement</Label>
@@ -419,7 +328,6 @@ const InterventionRequestFormDialog = ({ open, onOpenChange, request, onSuccess 
               </div>
             )}
 
-            {/* Loading indicator for children */}
             {loadingChildren && (
               <div className="flex items-center gap-2 text-sm text-gray-500">
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -428,7 +336,7 @@ const InterventionRequestFormDialog = ({ open, onOpenChange, request, onSuccess 
             )}
           </div>
 
-          {/* Emplacement auto-rempli (affiche en lecture seule si rempli) */}
+          {/* Emplacement auto-rempli (lecture seule si rempli) */}
           {formData.emplacement_id && (
             <div className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
               <p className="text-xs text-gray-500 mb-0.5">Emplacement (auto)</p>
@@ -438,126 +346,80 @@ const InterventionRequestFormDialog = ({ open, onOpenChange, request, onSuccess 
             </div>
           )}
 
-          {/* Section Pieces jointes */}
-          <div className="space-y-3">
-            <Label>Pieces jointes</Label>
+          {/* Section Fichiers joints - identique aux OT */}
+          <div className="space-y-2 pt-4 border-t">
+            <Label>
+              <Paperclip size={16} className="inline mr-1" />
+              Joindre des fichiers
+            </Label>
             
-            {/* Camera view */}
-            {cameraOpen && (
-              <div className="relative bg-black rounded-lg overflow-hidden">
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  className="w-full max-h-[250px] object-contain"
-                />
-                <canvas ref={canvasRef} className="hidden" />
-                <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-3">
-                  <Button
-                    type="button"
-                    data-testid="capture-photo-btn"
-                    onClick={capturePhoto}
-                    className="bg-white text-gray-900 hover:bg-gray-100 rounded-full h-12 w-12 p-0"
-                  >
-                    <Camera size={20} />
-                  </Button>
-                  <Button
-                    type="button"
-                    data-testid="cancel-camera-btn"
-                    onClick={stopCamera}
-                    variant="destructive"
-                    className="rounded-full h-12 w-12 p-0"
-                  >
-                    <X size={20} />
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {/* Action buttons */}
             <div className="flex gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                data-testid="open-camera-btn"
-                onClick={startCamera}
-                disabled={cameraOpen}
-                className="gap-2"
-              >
-                <Camera size={16} />
-                Prendre une photo
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                data-testid="browse-files-btn"
-                onClick={() => fileInputRef.current?.click()}
-                className="gap-2"
-              >
-                <Upload size={16} />
-                Parcourir
-              </Button>
               <input
                 ref={fileInputRef}
                 type="file"
                 multiple
-                accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
                 onChange={handleFileSelect}
                 className="hidden"
               />
+              <input
+                ref={cameraInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={handleFileSelect}
+                className="hidden"
+              />
+              
+              <Button
+                type="button"
+                variant="outline"
+                data-testid="browse-files-btn"
+                onClick={() => fileInputRef.current?.click()}
+                className="flex-1"
+              >
+                <Paperclip size={16} className="mr-2" />
+                Parcourir
+              </Button>
+              
+              <Button
+                type="button"
+                variant="outline"
+                data-testid="open-camera-btn"
+                onClick={handleCameraCapture}
+                className="flex-1"
+              >
+                <Camera size={16} className="mr-2" />
+                Appareil photo
+              </Button>
             </div>
-
-            {/* Drag and drop zone */}
-            <div
-              data-testid="dropzone"
-              onDragEnter={handleDrag}
-              onDragLeave={handleDrag}
-              onDragOver={handleDrag}
-              onDrop={handleDrop}
-              onClick={() => fileInputRef.current?.click()}
-              className={`border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-colors ${
-                dragActive
-                  ? 'border-blue-500 bg-blue-50'
-                  : 'border-gray-300 hover:border-gray-400 bg-gray-50'
-              }`}
-            >
-              <Upload className="mx-auto h-6 w-6 text-gray-400 mb-1" />
-              <p className="text-sm text-gray-500">
-                Glissez-deposez des fichiers ici ou cliquez pour parcourir
-              </p>
-              <p className="text-xs text-gray-400 mt-1">Max 25 Mo par fichier</p>
-            </div>
-
-            {/* Files list */}
-            {files.length > 0 && (
-              <div className="space-y-2" data-testid="files-list">
-                {files.map((item, index) => (
-                  <div
-                    key={index}
-                    className="flex items-center gap-3 bg-white border rounded-lg p-2"
-                  >
-                    {item.preview ? (
-                      <img src={item.preview} alt="" className="w-10 h-10 object-cover rounded" />
-                    ) : (
-                      <div className="w-10 h-10 bg-gray-100 rounded flex items-center justify-center">
-                        <FileIcon size={18} className="text-gray-400" />
-                      </div>
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{item.file.name}</p>
-                      <p className="text-xs text-gray-500">{formatFileSize(item.file.size)}</p>
+            
+            <p className="text-xs text-gray-500">
+              Formats acceptes : images, videos, documents (max 25MB par fichier)
+            </p>
+            
+            {attachments.length > 0 && (
+              <div className="mt-3 space-y-2" data-testid="files-list">
+                <p className="text-sm font-medium text-gray-700">
+                  {attachments.length} fichier(s) selectionne(s) :
+                </p>
+                {attachments.map((attachment, index) => (
+                  <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                    <div className="flex items-center gap-2">
+                      <Paperclip size={14} className="text-gray-500" />
+                      <span className="text-sm text-gray-700">{attachment.name}</span>
+                      <span className="text-xs text-gray-500">
+                        ({(attachment.size / 1024 / 1024).toFixed(2)} MB)
+                      </span>
                     </div>
                     <Button
                       type="button"
                       variant="ghost"
-                      size="icon"
+                      size="sm"
                       data-testid={`remove-file-${index}`}
-                      onClick={() => removeFile(index)}
-                      className="h-8 w-8 text-gray-400 hover:text-red-500"
+                      onClick={() => handleRemoveAttachment(index)}
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
                     >
-                      <X size={16} />
+                      Supprimer
                     </Button>
                   </div>
                 ))}
@@ -573,7 +435,7 @@ const InterventionRequestFormDialog = ({ open, onOpenChange, request, onSuccess 
               {loading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  {files.length > 0 ? 'Envoi en cours...' : 'Transmission...'}
+                  {attachments.length > 0 ? 'Envoi en cours...' : 'Transmission...'}
                 </>
               ) : (
                 request ? 'Modifier' : 'Transmettre'

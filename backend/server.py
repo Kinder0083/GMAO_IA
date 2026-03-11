@@ -7301,18 +7301,23 @@ async def create_intervention_request(
         request_data["converted_at"] = None
         request_data["converted_by"] = None
         request_data["attachments"] = []
+        request_data["refused"] = False
+        request_data["refused_reason"] = None
+        request_data["refused_at"] = None
+        request_data["refused_by"] = None
+        request_data["refused_by_name"] = None
         
         # Récupérer les informations de l'équipement si fourni
         if request_data.get("equipement_id"):
-            equipment = await db.equipments.find_one({"id": request_data["equipement_id"]})
-            if equipment:
-                request_data["equipement"] = {"id": equipment["id"], "nom": equipment["nom"]}
+            eq_info = await get_equipment_by_id(request_data["equipement_id"])
+            if eq_info:
+                request_data["equipement"] = eq_info
         
         # Récupérer les informations de l'emplacement si fourni
         if request_data.get("emplacement_id"):
-            location = await db.locations.find_one({"id": request_data["emplacement_id"]})
-            if location:
-                request_data["emplacement"] = {"id": location["id"], "nom": location["nom"]}
+            loc_info = await get_location_by_id(request_data["emplacement_id"])
+            if loc_info:
+                request_data["emplacement"] = loc_info
         
         await db.intervention_requests.insert_one(request_data)
         
@@ -7396,18 +7401,18 @@ async def update_intervention_request(
     # Mettre à jour l'équipement si nécessaire
     if "equipement_id" in update_data:
         if update_data["equipement_id"]:
-            equipment = await db.equipments.find_one({"id": update_data["equipement_id"]})
-            if equipment:
-                update_data["equipement"] = {"id": equipment["id"], "nom": equipment["nom"]}
+            eq_info = await get_equipment_by_id(update_data["equipement_id"])
+            if eq_info:
+                update_data["equipement"] = eq_info
         else:
             update_data["equipement"] = None
     
     # Mettre à jour l'emplacement si nécessaire
     if "emplacement_id" in update_data:
         if update_data["emplacement_id"]:
-            location = await db.locations.find_one({"id": update_data["emplacement_id"]})
-            if location:
-                update_data["emplacement"] = {"id": location["id"], "nom": location["nom"]}
+            loc_info = await get_location_by_id(update_data["emplacement_id"])
+            if loc_info:
+                update_data["emplacement"] = loc_info
         else:
             update_data["emplacement"] = None
     
@@ -7609,6 +7614,96 @@ async def delete_ir_attachment(
         logger.error(f"Erreur suppression piece jointe DI: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# ==================== INTERVENTION REQUEST REFUSAL ====================
+
+class RefuseInterventionRequest(BaseModel):
+    motif: str
+
+@api_router.post("/intervention-requests/{request_id}/refuse", response_model=dict, tags=["Demandes Intervention"])
+async def refuse_intervention_request(
+    request_id: str,
+    refuse_data: RefuseInterventionRequest,
+    current_user: dict = Depends(require_permission("interventionRequests", "edit"))
+):
+    """Refuser une demande d'intervention avec un motif"""
+    try:
+        req = await db.intervention_requests.find_one({"id": request_id})
+        if not req:
+            raise HTTPException(status_code=404, detail="Demande non trouvee")
+        
+        refused_by_name = f"{current_user.get('prenom', '')} {current_user.get('nom', '')}"
+        
+        update_data = {
+            "refused": True,
+            "refused_reason": refuse_data.motif,
+            "refused_at": datetime.utcnow(),
+            "refused_by": current_user["id"],
+            "refused_by_name": refused_by_name
+        }
+        
+        await db.intervention_requests.update_one(
+            {"id": request_id},
+            {"$set": update_data}
+        )
+        
+        # Envoyer email au demandeur
+        try:
+            creator_id = req.get("created_by")
+            if creator_id:
+                creator = await db.users.find_one({"id": creator_id})
+                if creator and creator.get("email"):
+                    subject = f"Demande d'intervention refusee - {req.get('titre', '')}"
+                    html_content = f"""
+                    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                        <div style="background-color: #dc2626; color: white; padding: 20px; border-radius: 8px 8px 0 0;">
+                            <h2 style="margin: 0;">Demande d'intervention refusee</h2>
+                        </div>
+                        <div style="padding: 20px; background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 0 0 8px 8px;">
+                            <p>Bonjour {creator.get('prenom', '')} {creator.get('nom', '')},</p>
+                            <p>Votre demande d'intervention a ete refusee.</p>
+                            <div style="background: white; padding: 15px; border-radius: 8px; border: 1px solid #e5e7eb; margin: 15px 0;">
+                                <p><strong>Titre :</strong> {req.get('titre', '')}</p>
+                                <p><strong>Description :</strong> {req.get('description', '')}</p>
+                                <p style="color: #dc2626;"><strong>Motif du refus :</strong> {refuse_data.motif}</p>
+                                <p><strong>Refuse par :</strong> {refused_by_name}</p>
+                            </div>
+                            <p>Cordialement,<br>FSAO Iris - GMAO</p>
+                        </div>
+                    </div>
+                    """
+                    email_service.send_email(creator["email"], subject, html_content)
+        except Exception as email_err:
+            logger.warning(f"Erreur envoi email refus DI: {str(email_err)}")
+        
+        # Audit log
+        await audit_service.log_action(
+            user_id=current_user["id"],
+            user_name=current_user.get("nom", "") + " " + current_user.get("prenom", ""),
+            user_email=current_user["email"],
+            action=ActionType.UPDATE,
+            entity_type=EntityType_Audit.WORK_ORDER,
+            entity_id=request_id,
+            entity_name=req.get('titre', ''),
+            details=f"Refus demande d'intervention - Motif: {refuse_data.motif}"
+        )
+        
+        # Broadcast WebSocket
+        updated_req = await db.intervention_requests.find_one({"id": request_id})
+        updated_req = _clean_ir_attachments(updated_req)
+        await realtime_manager.emit_event(
+            "intervention_requests",
+            "updated",
+            dict(updated_req),
+            user_id=current_user["id"]
+        )
+        
+        return {"message": "Demande d'intervention refusee", "request_id": request_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erreur refus demande d'intervention: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @api_router.post("/intervention-requests/{request_id}/convert-to-work-order", response_model=dict, tags=["Demandes Intervention"])
 async def convert_to_work_order(
     request_id: str,
@@ -7668,6 +7763,31 @@ async def convert_to_work_order(
             "attachments": [],
             "comments": []
         }
+        
+        # Transférer les pièces jointes de la DI vers l'OT
+        ir_attachments = req.get("attachments", [])
+        if ir_attachments:
+            import shutil
+            WO_UPLOAD_DIR = Path("/app/backend/uploads/work-orders")
+            WO_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+            for att in ir_attachments:
+                try:
+                    src_path = IR_UPLOAD_DIR / att["filename"]
+                    if src_path.exists():
+                        new_filename = f"{uuid.uuid4()}{Path(att['filename']).suffix}"
+                        dst_path = WO_UPLOAD_DIR / new_filename
+                        shutil.copy2(str(src_path), str(dst_path))
+                        wo_attachment = {
+                            "_id": ObjectId(),
+                            "filename": new_filename,
+                            "original_filename": att.get("original_filename", att["filename"]),
+                            "size": att.get("size", 0),
+                            "mime_type": att.get("mime_type", "application/octet-stream"),
+                            "uploaded_at": datetime.utcnow()
+                        }
+                        work_order_data["attachments"].append(wo_attachment)
+                except Exception as copy_err:
+                    logger.warning(f"Erreur copie piece jointe DI->OT: {str(copy_err)}")
         
         # Récupérer les informations de l'assigné si fourni
         if assignee_id:

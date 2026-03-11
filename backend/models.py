@@ -1359,6 +1359,11 @@ class InterventionRequest(BaseModel):
     converted_at: Optional[datetime] = None
     converted_by: Optional[str] = None
     attachments: Optional[List[Any]] = []
+    refused: Optional[bool] = False
+    refused_reason: Optional[str] = None
+    refused_at: Optional[datetime] = None
+    refused_by: Optional[str] = None
+    refused_by_name: Optional[str] = None
 
 class InterventionRequestCreate(BaseModel):
     titre: str
