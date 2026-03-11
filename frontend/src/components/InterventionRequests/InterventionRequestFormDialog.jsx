@@ -17,7 +17,7 @@ import { interventionRequestsAPI, equipmentsAPI, locationsAPI } from '../../serv
 import api from '../../services/api';
 import { validateDateNotPast } from '../../utils/dateValidation';
 import { formatErrorMessage } from '../../utils/errorFormatter';
-import { Paperclip, Camera, Loader2 } from 'lucide-react';
+import { Paperclip, Camera, Loader2, X, Eye } from 'lucide-react';
 
 const InterventionRequestFormDialog = ({ open, onOpenChange, request, onSuccess }) => {
   const { toast } = useToast();
@@ -28,6 +28,7 @@ const InterventionRequestFormDialog = ({ open, onOpenChange, request, onSuccess 
   const [childEquipments, setChildEquipments] = useState([]);
   const [loadingChildren, setLoadingChildren] = useState(false);
   const [attachments, setAttachments] = useState([]);
+  const [previewImage, setPreviewImage] = useState(null);
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
   const [formData, setFormData] = useState({
@@ -53,6 +54,21 @@ const InterventionRequestFormDialog = ({ open, onOpenChange, request, onSuccess 
           emplacement_id: request.emplacement?.id || '',
           date_limite_desiree: request.date_limite_desiree?.split('T')[0] || ''
         });
+        // Load existing attachments from the request
+        if (request.attachments && request.attachments.length > 0) {
+          const existing = request.attachments.map(att => ({
+            name: att.original_filename || att.filename,
+            size: att.size || 0,
+            isExisting: true,
+            id: att.id,
+            url: att.url,
+            mime_type: att.mime_type,
+            preview: att.mime_type?.startsWith('image/') ? `${process.env.REACT_APP_BACKEND_URL}${att.url}` : null
+          }));
+          setAttachments(existing);
+        } else {
+          setAttachments([]);
+        }
       } else {
         setFormData({
           titre: '',
@@ -66,12 +82,17 @@ const InterventionRequestFormDialog = ({ open, onOpenChange, request, onSuccess 
         setAttachments([]);
       }
       setChildEquipments([]);
+      setPreviewImage(null);
     } else {
+      // Cleanup object URLs
+      attachments.forEach(att => {
+        if (att.preview && !att.isExisting) URL.revokeObjectURL(att.preview);
+      });
       setAttachments([]);
+      setPreviewImage(null);
     }
   }, [open, request]);
 
-  // When parent equipment is selected, load children and auto-fill emplacement
   useEffect(() => {
     if (formData.equipement_id && equipments.length > 0) {
       const parentEq = equipments.find(eq => eq.id === formData.equipement_id);
@@ -109,17 +130,14 @@ const InterventionRequestFormDialog = ({ open, onOpenChange, request, onSuccess 
       const response = await api.get(`/equipments/${parentId}/children`);
       setChildEquipments(response.data || []);
     } catch (error) {
-      console.error('Erreur chargement sous-equipements:', error);
       setChildEquipments([]);
     } finally {
       setLoadingChildren(false);
     }
   };
 
-  // Get only parent equipments (no parent_id)
   const parentEquipments = equipments.filter(eq => !eq.parent_id);
 
-  // File handlers - identical to WorkOrderFormDialog
   const handleFileSelect = (event) => {
     const files = Array.from(event.target.files || []);
     const maxSize = 25 * 1024 * 1024;
@@ -133,7 +151,9 @@ const InterventionRequestFormDialog = ({ open, onOpenChange, request, onSuccess 
     const newAttachments = validFiles.map(file => ({
       file,
       name: file.name,
-      size: file.size
+      size: file.size,
+      isExisting: false,
+      preview: file.type.startsWith('image/') ? URL.createObjectURL(file) : null
     }));
     setAttachments(prev => [...prev, ...newAttachments]);
     event.target.value = '';
@@ -145,12 +165,22 @@ const InterventionRequestFormDialog = ({ open, onOpenChange, request, onSuccess 
     }
   };
 
-  const handleRemoveAttachment = (index) => {
+  const handleRemoveAttachment = async (index) => {
+    const att = attachments[index];
+    if (att.isExisting && att.id && request) {
+      try {
+        await api.delete(`/intervention-requests/${request.id}/attachments/${att.id}`);
+      } catch (error) {
+        console.error('Erreur suppression PJ:', error);
+      }
+    }
+    if (att.preview && !att.isExisting) URL.revokeObjectURL(att.preview);
     setAttachments(prev => prev.filter((_, i) => i !== index));
   };
 
   const uploadFiles = async (requestId) => {
-    for (const item of attachments) {
+    const newFiles = attachments.filter(a => !a.isExisting && a.file);
+    for (const item of newFiles) {
       try {
         const fd = new FormData();
         fd.append('file', item.file);
@@ -159,6 +189,7 @@ const InterventionRequestFormDialog = ({ open, onOpenChange, request, onSuccess 
         });
       } catch (error) {
         console.error('Erreur upload fichier:', error);
+        toast({ title: 'Erreur', description: `Echec upload: ${item.name}`, variant: 'destructive' });
       }
     }
   };
@@ -189,20 +220,17 @@ const InterventionRequestFormDialog = ({ open, onOpenChange, request, onSuccess 
       };
 
       let resultId = null;
+      const hasNewFiles = attachments.some(a => !a.isExisting);
 
       if (request) {
         await interventionRequestsAPI.update(request.id, submitData);
         resultId = request.id;
-        if (attachments.length > 0) {
-          await uploadFiles(request.id);
-        }
+        if (hasNewFiles) await uploadFiles(request.id);
         toast({ title: 'Succes', description: 'Demande modifiee avec succes' });
       } else {
         const response = await interventionRequestsAPI.create(submitData);
         resultId = response?.data?.id;
-        if (attachments.length > 0 && resultId) {
-          await uploadFiles(resultId);
-        }
+        if (hasNewFiles && resultId) await uploadFiles(resultId);
         toast({ title: 'Succes', description: 'Demande transmise avec succes' });
       }
 
@@ -220,6 +248,7 @@ const InterventionRequestFormDialog = ({ open, onOpenChange, request, onSuccess 
   };
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
@@ -284,7 +313,6 @@ const InterventionRequestFormDialog = ({ open, onOpenChange, request, onSuccess 
               />
             </div>
 
-            {/* Equipement parent */}
             <div className="space-y-2">
               <Label htmlFor="equipement">Equipement</Label>
               <Select
@@ -297,15 +325,12 @@ const InterventionRequestFormDialog = ({ open, onOpenChange, request, onSuccess 
                 <SelectContent>
                   <SelectItem value="none">Aucun</SelectItem>
                   {parentEquipments.map(eq => (
-                    <SelectItem key={eq.id} value={eq.id}>
-                      {eq.nom}
-                    </SelectItem>
+                    <SelectItem key={eq.id} value={eq.id}>{eq.nom}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
 
-            {/* Sous-equipement */}
             {formData.equipement_id && childEquipments.length > 0 && (
               <div className="space-y-2">
                 <Label htmlFor="sous_equipement">Sous-equipement</Label>
@@ -319,9 +344,7 @@ const InterventionRequestFormDialog = ({ open, onOpenChange, request, onSuccess 
                   <SelectContent>
                     <SelectItem value="none">Aucun</SelectItem>
                     {childEquipments.map(eq => (
-                      <SelectItem key={eq.id} value={eq.id}>
-                        {eq.nom}
-                      </SelectItem>
+                      <SelectItem key={eq.id} value={eq.id}>{eq.nom}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -336,7 +359,6 @@ const InterventionRequestFormDialog = ({ open, onOpenChange, request, onSuccess 
             )}
           </div>
 
-          {/* Emplacement auto-rempli (lecture seule si rempli) */}
           {formData.emplacement_id && (
             <div className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
               <p className="text-xs text-gray-500 mb-0.5">Emplacement (auto)</p>
@@ -346,7 +368,7 @@ const InterventionRequestFormDialog = ({ open, onOpenChange, request, onSuccess 
             </div>
           )}
 
-          {/* Section Fichiers joints - identique aux OT */}
+          {/* Section Fichiers joints - identique aux OT avec miniatures */}
           <div className="space-y-2 pt-4 border-t">
             <Label>
               <Paperclip size={16} className="inline mr-1" />
@@ -397,32 +419,74 @@ const InterventionRequestFormDialog = ({ open, onOpenChange, request, onSuccess 
               Formats acceptes : images, videos, documents (max 25MB par fichier)
             </p>
             
+            {/* Miniatures des photos + liste des fichiers */}
             {attachments.length > 0 && (
-              <div className="mt-3 space-y-2" data-testid="files-list">
+              <div className="mt-3 space-y-3" data-testid="files-list">
                 <p className="text-sm font-medium text-gray-700">
-                  {attachments.length} fichier(s) selectionne(s) :
+                  {attachments.length} fichier(s) {request ? '' : 'selectionne(s)'} :
                 </p>
-                {attachments.map((attachment, index) => (
-                  <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                    <div className="flex items-center gap-2">
-                      <Paperclip size={14} className="text-gray-500" />
-                      <span className="text-sm text-gray-700">{attachment.name}</span>
-                      <span className="text-xs text-gray-500">
-                        ({(attachment.size / 1024 / 1024).toFixed(2)} MB)
-                      </span>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      data-testid={`remove-file-${index}`}
-                      onClick={() => handleRemoveAttachment(index)}
-                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                    >
-                      Supprimer
-                    </Button>
+                
+                {/* Grille de miniatures pour les images */}
+                {attachments.some(a => a.preview) && (
+                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                    {attachments.map((att, index) => att.preview ? (
+                      <div key={index} className="relative group rounded-lg overflow-hidden border border-gray-200 aspect-square bg-gray-100">
+                        <img 
+                          src={att.preview} 
+                          alt={att.name}
+                          className="w-full h-full object-cover"
+                        />
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100">
+                          <button
+                            type="button"
+                            onClick={() => setPreviewImage(att.preview)}
+                            className="p-1.5 bg-white rounded-full shadow hover:bg-gray-100"
+                            title="Visualiser"
+                          >
+                            <Eye size={14} className="text-gray-700" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveAttachment(index)}
+                            className="p-1.5 bg-white rounded-full shadow hover:bg-red-50"
+                            title="Supprimer"
+                          >
+                            <X size={14} className="text-red-500" />
+                          </button>
+                        </div>
+                        <p className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-[10px] px-1 py-0.5 truncate">
+                          {att.name}
+                        </p>
+                      </div>
+                    ) : null)}
                   </div>
-                ))}
+                )}
+                
+                {/* Liste des fichiers non-image */}
+                {attachments.filter(a => !a.preview).map((attachment, idx) => {
+                  const realIndex = attachments.indexOf(attachment);
+                  return (
+                    <div key={realIndex} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                      <div className="flex items-center gap-2">
+                        <Paperclip size={14} className="text-gray-500" />
+                        <span className="text-sm text-gray-700">{attachment.name}</span>
+                        <span className="text-xs text-gray-500">
+                          ({(attachment.size / 1024 / 1024).toFixed(2)} MB)
+                        </span>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        data-testid={`remove-file-${realIndex}`}
+                        onClick={() => handleRemoveAttachment(realIndex)}
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                      >
+                        Supprimer
+                      </Button>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -435,7 +499,7 @@ const InterventionRequestFormDialog = ({ open, onOpenChange, request, onSuccess 
               {loading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  {attachments.length > 0 ? 'Envoi en cours...' : 'Transmission...'}
+                  {attachments.some(a => !a.isExisting) ? 'Envoi en cours...' : 'Transmission...'}
                 </>
               ) : (
                 request ? 'Modifier' : 'Transmettre'
@@ -445,6 +509,29 @@ const InterventionRequestFormDialog = ({ open, onOpenChange, request, onSuccess 
         </form>
       </DialogContent>
     </Dialog>
+
+    {/* Modal de visualisation plein ecran */}
+    {previewImage && (
+      <div 
+        className="fixed inset-0 z-[9999] bg-black/80 flex items-center justify-center p-4"
+        onClick={() => setPreviewImage(null)}
+        data-testid="image-preview-modal"
+      >
+        <button
+          className="absolute top-4 right-4 p-2 bg-white/20 rounded-full hover:bg-white/40 transition-colors"
+          onClick={() => setPreviewImage(null)}
+        >
+          <X size={24} className="text-white" />
+        </button>
+        <img 
+          src={previewImage} 
+          alt="Preview" 
+          className="max-w-full max-h-full object-contain rounded-lg"
+          onClick={(e) => e.stopPropagation()}
+        />
+      </div>
+    )}
+    </>
   );
 };
 
