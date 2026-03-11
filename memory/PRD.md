@@ -13,14 +13,15 @@ Application GMAO (Gestion de Maintenance Assistee par Ordinateur) pour la gestio
 
 ## Session 11 Mars 2026
 
-### Phase 6 - Formulaire DI Public via QR Code
+### Phase 6 - Formulaire DI Public via QR Code + Photos + KPI
 - **Fonctionnalite**: "Creer une demande d'intervention" accessible SANS authentification depuis le QR code
-- **Backend**: Endpoint POST /api/qr/public/intervention-request (creation DI sans JWT), POST /api/qr/public/intervention-request/{id}/attachments (upload photos sans auth)
-- **Frontend**: `PublicInterventionForm.jsx` - Formulaire mobile-first epure avec equipement pre-rempli, nom du demandeur, titre, description, priorite, photos (camera native + galerie)
-- **Migration**: Action `create-intervention` passee de `requires_auth: true` a `false` (migration auto dans ensure_default_actions)
-- **Email notification**: Envoi automatique aux admins avec 2 boutons d'action (Convertir en OT / Refuser) liens vers l'app
-- **Liens email**: /intervention-requests?action=convert&id=xxx et ?action=refuse&id=xxx ouvrent automatiquement les dialogues correspondants
-- Testing: 100% (iteration_120 formulaire public, iteration_121 email + liens d'action)
+- **Backend**: POST /api/qr/public/intervention-request, POST /api/qr/public/intervention-request/{id}/attachments (meme format et chemin que standard)
+- **Frontend**: `PublicInterventionForm.jsx` - Formulaire mobile-first epure
+- **Email notification**: Envoi auto aux admins avec 2 boutons action (Convertir en OT / Refuser)
+- **Liens email**: ?action=convert&id=xxx et ?action=refuse&id=xxx ouvrent les dialogues
+- **Photos DI**: Miniatures dans le dialogue de visualisation via AttachmentGallery
+- **KPI Dashboard**: Widgets "DI en attente" et "Temps reponse DI" (GET /api/intervention-requests/stats/kpi)
+- Testing: 100% (iterations 120, 121, 122)
 
 ### Phase 5 - Analyse IA Historique Achat
 - **Fonctionnalite**: Boutons "Analyse IA" et "Archives IA" ajoutes sur la page Historique Achat
