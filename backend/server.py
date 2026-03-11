@@ -7414,6 +7414,103 @@ async def get_all_intervention_requests(current_user: dict = Depends(require_per
         logger.error(f"Erreur récupération demandes: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@api_router.get("/intervention-requests/stats/kpi", tags=["Demandes Intervention"])
+async def get_intervention_requests_kpi(current_user: dict = Depends(require_permission("interventionRequests", "view"))):
+    """KPI des demandes d'intervention : temps de reponse, taux de conversion, etc."""
+    try:
+        all_irs = await db.intervention_requests.find({}, {"_id": 0}).to_list(5000)
+        total = len(all_irs)
+        if total == 0:
+            return {
+                "total": 0,
+                "en_attente": 0,
+                "converties": 0,
+                "refusees": 0,
+                "taux_conversion": 0,
+                "taux_refus": 0,
+                "temps_moyen_reponse_heures": None,
+                "temps_moyen_reponse_label": "-",
+                "publiques": 0,
+                "authentifiees": 0,
+            }
+
+        en_attente = sum(1 for ir in all_irs if not ir.get("work_order_id") and not ir.get("refused"))
+        converties = sum(1 for ir in all_irs if ir.get("work_order_id"))
+        refusees = sum(1 for ir in all_irs if ir.get("refused"))
+        publiques = sum(1 for ir in all_irs if ir.get("created_by") == "PUBLIC")
+        authentifiees = total - publiques
+
+        # Temps moyen de reponse (entre date_creation et converted_at ou refused_at)
+        response_times = []
+        for ir in all_irs:
+            creation = ir.get("date_creation")
+            if not creation:
+                continue
+            if isinstance(creation, str):
+                try:
+                    creation = datetime.fromisoformat(creation.replace('Z', '+00:00'))
+                except Exception:
+                    continue
+
+            response_time = None
+            if ir.get("converted_at"):
+                rt = ir["converted_at"]
+                if isinstance(rt, str):
+                    try:
+                        rt = datetime.fromisoformat(rt.replace('Z', '+00:00'))
+                    except Exception:
+                        continue
+                response_time = rt
+            elif ir.get("refused_at"):
+                rt = ir["refused_at"]
+                if isinstance(rt, str):
+                    try:
+                        rt = datetime.fromisoformat(rt.replace('Z', '+00:00'))
+                    except Exception:
+                        continue
+                response_time = rt
+
+            if response_time:
+                # Make both offset-aware or offset-naive
+                if creation.tzinfo is None and response_time.tzinfo is not None:
+                    creation = creation.replace(tzinfo=timezone.utc)
+                elif creation.tzinfo is not None and response_time.tzinfo is None:
+                    response_time = response_time.replace(tzinfo=timezone.utc)
+                delta = (response_time - creation).total_seconds() / 3600
+                if delta >= 0:
+                    response_times.append(delta)
+
+        temps_moyen = round(sum(response_times) / len(response_times), 1) if response_times else None
+        if temps_moyen is not None:
+            if temps_moyen < 1:
+                label = f"{int(temps_moyen * 60)} min"
+            elif temps_moyen < 24:
+                label = f"{temps_moyen:.1f} h"
+            else:
+                label = f"{temps_moyen / 24:.1f} j"
+        else:
+            label = "-"
+
+        taux_conversion = round((converties / total) * 100, 1) if total > 0 else 0
+        taux_refus = round((refusees / total) * 100, 1) if total > 0 else 0
+
+        return {
+            "total": total,
+            "en_attente": en_attente,
+            "converties": converties,
+            "refusees": refusees,
+            "taux_conversion": taux_conversion,
+            "taux_refus": taux_refus,
+            "temps_moyen_reponse_heures": temps_moyen,
+            "temps_moyen_reponse_label": label,
+            "publiques": publiques,
+            "authentifiees": authentifiees,
+        }
+    except Exception as e:
+        logger.error(f"Erreur KPI DI: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @api_router.get("/intervention-requests/{request_id}", response_model=InterventionRequest, tags=["Demandes Intervention"])
 async def get_intervention_request(request_id: str, current_user: dict = Depends(require_permission("interventionRequests", "view"))):
     """Récupérer une demande d'intervention spécifique"""

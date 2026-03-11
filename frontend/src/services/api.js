@@ -410,7 +410,11 @@ export const interventionRequestsAPI = {
       assignee_id: assigneeId,
       date_limite: dateLimite
     } 
-  })
+  }),
+  downloadAttachment: (requestId, attachmentId) => api.get(`/intervention-requests/${requestId}/attachments/${attachmentId}`, {
+    responseType: 'arraybuffer'
+  }),
+  refuse: (id, data) => api.post(`/intervention-requests/${id}/refuse`, data),
 };
 
 // ==================== IMPROVEMENT REQUESTS (DEMANDES D'AMÉLIORATION) ====================

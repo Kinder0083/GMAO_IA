@@ -622,35 +622,39 @@ async def create_public_intervention_request(data: dict):
 @router.post("/public/intervention-request/{request_id}/attachments")
 async def upload_public_intervention_attachment(request_id: str, file: UploadFile = File(...)):
     """Upload un fichier sur une DI creee publiquement (sans auth)."""
-    import uuid as _uuid
+    from bson import ObjectId as BsonObjectId
+    from pathlib import Path
+    import mimetypes
 
     ir = await db.intervention_requests.find_one({"id": request_id, "created_by": "PUBLIC"})
     if not ir:
         raise HTTPException(status_code=404, detail="Demande non trouvee")
 
-    # Read file
     content = await file.read()
     if len(content) > 25 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="Fichier trop volumineux (max 25MB)")
 
-    att_id = str(_uuid.uuid4())
-    upload_dir = os.path.join("uploads", "intervention_requests", request_id)
-    os.makedirs(upload_dir, exist_ok=True)
+    # Use the SAME upload dir as standard DI uploads
+    IR_UPLOAD_DIR = Path("/app/backend/uploads/intervention-requests")
+    IR_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
-    safe_filename = file.filename.replace("/", "_").replace("\\", "_")
-    filepath = os.path.join(upload_dir, f"{att_id}_{safe_filename}")
+    import uuid as _uuid
+    file_ext = Path(file.filename).suffix
+    unique_filename = f"{_uuid.uuid4()}{file_ext}"
+    file_path = IR_UPLOAD_DIR / unique_filename
 
-    with open(filepath, "wb") as f:
+    with open(file_path, "wb") as f:
         f.write(content)
 
+    # Use the SAME attachment format as standard (with _id: ObjectId)
+    att_oid = BsonObjectId()
     attachment = {
-        "id": att_id,
-        "filename": f"{att_id}_{safe_filename}",
+        "_id": att_oid,
+        "filename": unique_filename,
         "original_filename": file.filename,
-        "mime_type": file.content_type or "application/octet-stream",
         "size": len(content),
-        "uploaded_at": datetime.now(timezone.utc).isoformat(),
-        "url": f"/api/intervention-requests/{request_id}/attachments/{att_id}"
+        "mime_type": file.content_type or mimetypes.guess_type(file.filename)[0] or "application/octet-stream",
+        "uploaded_at": datetime.now(timezone.utc)
     }
 
     await db.intervention_requests.update_one(
@@ -658,7 +662,17 @@ async def upload_public_intervention_attachment(request_id: str, file: UploadFil
         {"$push": {"attachments": attachment}}
     )
 
-    return {"success": True, "attachment": attachment}
+    return {
+        "success": True,
+        "attachment": {
+            "id": str(att_oid),
+            "filename": unique_filename,
+            "original_filename": file.filename,
+            "size": len(content),
+            "mime_type": attachment["mime_type"],
+            "url": f"/api/intervention-requests/{request_id}/attachments/{str(att_oid)}"
+        }
+    }
 
 
 # ========== ROUTES AUTHENTIFIÉES ==========

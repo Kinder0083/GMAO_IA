@@ -33,7 +33,7 @@ import {
 import { useDashboard } from '../hooks/useDashboard';
 import { usePermissions } from '../hooks/usePermissions';
 import { usePreferences } from '../contexts/PreferencesContext';
-import { demandesArretAPI, dashboardAPI } from '../services/api';
+import api, { demandesArretAPI, dashboardAPI } from '../services/api';
 import { useToast } from '../hooks/use-toast';
 import DashboardEditToolbar from '../components/Dashboard/DashboardEditToolbar';
 import MaintenanceStatusPendingAlert from '../components/Dashboard/MaintenanceStatusPendingAlert';
@@ -222,6 +222,7 @@ const Dashboard = () => {
   const [demandesStats, setDemandesStats] = useState({ pending: 0, total: 0 });
   const [reportsStats, setReportsStats] = useState({ pending: 0, total: 0, avgDays: 0 });
   const [widgetData, setWidgetData] = useState(null);
+  const [diKpi, setDiKpi] = useState(null);
 
   // Utiliser le hook temps réel WebSocket pour le dashboard
   const { 
@@ -272,12 +273,29 @@ const Dashboard = () => {
     
     loadDemandesData();
     loadWidgetData();
+
+    const loadDiKpi = async () => {
+      try {
+        const res = await api.get('/intervention-requests/stats/kpi');
+        setDiKpi(res.data);
+      } catch (err) {
+        console.error('Erreur chargement KPI DI:', err);
+      }
+    };
+    loadDiKpi();
   }, []);
 
   // Déterminer quels widgets afficher
   const enabledWidgets = useMemo(() => {
     if (preferences && preferences.dashboard_widgets !== undefined && preferences.dashboard_widgets !== null) {
-      return preferences.dashboard_widgets;
+      const current = preferences.dashboard_widgets;
+      // Auto-inject new DI widgets if not present
+      const newWidgets = ['di_en_attente', 'di_temps_reponse'];
+      const missing = newWidgets.filter(w => !current.includes(w));
+      if (missing.length > 0) {
+        return [...current, ...missing];
+      }
+      return current;
     }
     return [
       'work_orders_active',
@@ -285,6 +303,8 @@ const Dashboard = () => {
       'overdue_tasks',
       'maintenance_stats',
       'demandes_arret_pending',
+      'di_en_attente',
+      'di_temps_reponse',
       'equipment_status_overview',
       'global_summary'
     ];
@@ -595,6 +615,20 @@ const Dashboard = () => {
         icon: AlertCircle,
         color: 'orange',
         trend: '7 derniers jours'
+      }),
+      'di_en_attente': () => ({
+        title: 'DI en attente',
+        value: diKpi?.en_attente ?? '-',
+        icon: Bell,
+        color: (diKpi?.en_attente || 0) > 0 ? 'red' : 'green',
+        trend: `${diKpi?.total ?? 0} DI au total (${diKpi?.publiques ?? 0} QR)`
+      }),
+      'di_temps_reponse': () => ({
+        title: 'Temps reponse DI',
+        value: diKpi?.temps_moyen_reponse_label ?? '-',
+        icon: CalendarClock,
+        color: diKpi?.temps_moyen_reponse_heures != null && diKpi.temps_moyen_reponse_heures > 48 ? 'red' : diKpi?.temps_moyen_reponse_heures != null && diKpi.temps_moyen_reponse_heures > 24 ? 'orange' : 'green',
+        trend: `${diKpi?.taux_conversion ?? 0}% converties, ${diKpi?.taux_refus ?? 0}% refusees`
       }),
       'global_summary': () => {
         const totalOT = safeWorkOrders.length;

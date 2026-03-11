@@ -49,6 +49,10 @@ const AVAILABLE_WIDGETS = [
   { id: 'equipment_alerts', name: 'Alertes équipements', icon: AlertCircle, description: 'Équipements en alerte (sous-équipement hors service)', enabled: true, category: 'planning' },
   { id: 'recent_status_changes', name: 'Changements de statut récents', icon: History, description: 'Historique des derniers changements de statut', enabled: false, category: 'planning' },
   
+  // Widgets Demandes d'intervention
+  { id: 'di_en_attente', name: 'DI en attente', icon: Bell, description: 'Demandes d\'intervention non traitees', enabled: true, category: 'interventions' },
+  { id: 'di_temps_reponse', name: 'Temps reponse DI', icon: CalendarClock, description: 'Temps moyen de traitement des DI', enabled: true, category: 'interventions' },
+
   // Widget résumé global
   { id: 'global_summary', name: 'Résumé global', icon: CheckCircle2, description: 'Vue d\'ensemble de l\'état du système', enabled: true, category: 'global' }
 ];
