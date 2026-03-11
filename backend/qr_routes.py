@@ -4,7 +4,7 @@ Routes pour la gestion des QR codes équipements
 - Page publique d'actions rapides (sans auth)
 - Configuration des actions (admin)
 """
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.responses import StreamingResponse
 from dependencies import get_current_user, get_current_admin_user
 from datetime import datetime, timezone
@@ -25,7 +25,7 @@ DEFAULT_ACTIONS = [
     {"id": "last-wo", "label": "Dernier ordre de travail", "icon": "ClipboardList", "type": "link", "enabled": True, "order": 1, "requires_auth": False},
     {"id": "wo-history", "label": "Historique des OT", "icon": "History", "type": "link", "enabled": True, "order": 2, "requires_auth": False},
     {"id": "kpi", "label": "KPI de l'équipement", "icon": "BarChart3", "type": "link", "enabled": True, "order": 3, "requires_auth": False},
-    {"id": "create-intervention", "label": "Créer une demande d'intervention", "icon": "PlusCircle", "type": "action", "enabled": True, "order": 4, "requires_auth": True},
+    {"id": "create-intervention", "label": "Créer une demande d'intervention", "icon": "PlusCircle", "type": "action", "enabled": True, "order": 4, "requires_auth": False},
     {"id": "report-breakdown", "label": "Signaler une panne", "icon": "AlertTriangle", "type": "action", "enabled": True, "order": 5, "requires_auth": True},
     {"id": "preventive-plan", "label": "Plan de maintenance préventive", "icon": "Calendar", "type": "link", "enabled": True, "order": 6, "requires_auth": False},
     {"id": "create-presquaccident", "label": "Signaler un presqu'accident", "icon": "AlertCircle", "type": "action", "enabled": True, "order": 7, "requires_auth": True},
@@ -49,6 +49,15 @@ async def ensure_default_actions():
                 {"config_id": "default"},
                 {"$push": {"actions": {"$each": new_actions}}}
             )
+        # Migrate: make create-intervention public (no auth required)
+        actions = config.get("actions", [])
+        for action in actions:
+            if action.get("id") == "create-intervention" and action.get("requires_auth") is True:
+                await db[ACTIONS_COLLECTION].update_one(
+                    {"config_id": "default", "actions.id": "create-intervention"},
+                    {"$set": {"actions.$.requires_auth": False}}
+                )
+                break
 
 
 
@@ -398,6 +407,167 @@ async def get_qr_actions_public():
     config = await db[ACTIONS_COLLECTION].find_one({"config_id": "default"}, {"_id": 0})
     actions = config.get("actions", []) if config else DEFAULT_ACTIONS
     return [a for a in actions if a.get("enabled", True)]
+
+
+@router.get("/public/equipment/{eq_id}/locations")
+async def get_equipment_locations_public(eq_id: str):
+    """Recuperer les emplacements disponibles (sans auth) pour le formulaire public."""
+    locations = await db.locations.find({}, {"_id": 0, "id": 1, "nom": 1}).to_list(500)
+    # Also enrich with equipment's own location
+    from bson import ObjectId
+    eq = None
+    try:
+        eq = await db.equipments.find_one({"_id": ObjectId(eq_id)})
+    except Exception:
+        pass
+    eq_location_id = eq.get("emplacement_id") if eq else None
+    eq_location_name = None
+    if eq_location_id:
+        try:
+            loc = await db.locations.find_one({"_id": ObjectId(str(eq_location_id))})
+            if loc:
+                eq_location_name = loc.get("nom")
+        except Exception:
+            pass
+    return {
+        "locations": locations,
+        "equipment_location_id": str(eq_location_id) if eq_location_id else None,
+        "equipment_location_name": eq_location_name
+    }
+
+
+@router.post("/public/intervention-request")
+async def create_public_intervention_request(data: dict):
+    """Creer une demande d'intervention SANS authentification (acces public via QR code)."""
+    import uuid as _uuid
+
+    titre = (data.get("titre") or "").strip()
+    description = (data.get("description") or "").strip()
+    equipment_id = (data.get("equipment_id") or "").strip()
+    demandeur_nom = (data.get("demandeur_nom") or "Anonyme").strip()
+    priorite = data.get("priorite", "AUCUNE")
+    emplacement_id = data.get("emplacement_id")
+
+    if not titre:
+        raise HTTPException(status_code=400, detail="Le titre est obligatoire")
+    if not description:
+        raise HTTPException(status_code=400, detail="La description est obligatoire")
+    if not equipment_id:
+        raise HTTPException(status_code=400, detail="L'equipement est obligatoire")
+
+    # Valid priorities
+    valid_priorities = ["URGENTE", "HAUTE", "MOYENNE", "NORMALE", "BASSE", "AUCUNE"]
+    if priorite not in valid_priorities:
+        priorite = "AUCUNE"
+
+    # Fetch equipment info
+    from bson import ObjectId
+    eq_info = None
+    try:
+        eq = await db.equipments.find_one({"_id": ObjectId(equipment_id)})
+        if eq:
+            eq_info = {"id": str(eq["_id"]), "nom": eq.get("nom", "")}
+            if not emplacement_id and eq.get("emplacement_id"):
+                emplacement_id = eq["emplacement_id"]
+    except Exception:
+        pass
+
+    loc_info = None
+    if emplacement_id:
+        try:
+            loc = await db.locations.find_one({"_id": ObjectId(emplacement_id)})
+            if loc:
+                loc_info = {"id": str(loc["_id"]), "nom": loc.get("nom", "")}
+                emplacement_id = str(emplacement_id)  # Ensure string
+        except Exception:
+            pass
+
+    request_id = str(_uuid.uuid4())
+    now = datetime.now(timezone.utc)
+
+    request_data = {
+        "id": request_id,
+        "titre": titre,
+        "description": description,
+        "priorite": priorite,
+        "equipement_id": equipment_id,
+        "equipement": eq_info,
+        "emplacement_id": str(emplacement_id) if emplacement_id else None,
+        "emplacement": loc_info,
+        "date_limite_desiree": None,
+        "date_creation": now,
+        "created_by": "PUBLIC",
+        "created_by_name": f"{demandeur_nom} (QR)",
+        "work_order_id": None,
+        "work_order_numero": None,
+        "work_order_date_limite": None,
+        "converted_at": None,
+        "converted_by": None,
+        "attachments": [],
+        "refused": False,
+        "refused_reason": None,
+        "refused_at": None,
+        "refused_by": None,
+        "refused_by_name": None,
+    }
+
+    await db.intervention_requests.insert_one(request_data)
+
+    # Broadcast WebSocket
+    try:
+        from realtime_manager import realtime_manager
+        broadcast_data = {k: v for k, v in request_data.items() if k != '_id'}
+        if isinstance(broadcast_data.get("date_creation"), datetime):
+            broadcast_data["date_creation"] = broadcast_data["date_creation"].isoformat()
+        await realtime_manager.emit_event("intervention_requests", "created", broadcast_data)
+    except Exception as e:
+        logger.warning(f"WebSocket broadcast failed for public DI: {e}")
+
+    logger.info(f"[QR PUBLIC] DI creee: {request_id} par {demandeur_nom} pour equipement {equipment_id}")
+
+    return {"success": True, "id": request_id, "message": "Demande transmise avec succes"}
+
+
+@router.post("/public/intervention-request/{request_id}/attachments")
+async def upload_public_intervention_attachment(request_id: str, file: UploadFile = File(...)):
+    """Upload un fichier sur une DI creee publiquement (sans auth)."""
+    import uuid as _uuid
+
+    ir = await db.intervention_requests.find_one({"id": request_id, "created_by": "PUBLIC"})
+    if not ir:
+        raise HTTPException(status_code=404, detail="Demande non trouvee")
+
+    # Read file
+    content = await file.read()
+    if len(content) > 25 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Fichier trop volumineux (max 25MB)")
+
+    att_id = str(_uuid.uuid4())
+    upload_dir = os.path.join("uploads", "intervention_requests", request_id)
+    os.makedirs(upload_dir, exist_ok=True)
+
+    safe_filename = file.filename.replace("/", "_").replace("\\", "_")
+    filepath = os.path.join(upload_dir, f"{att_id}_{safe_filename}")
+
+    with open(filepath, "wb") as f:
+        f.write(content)
+
+    attachment = {
+        "id": att_id,
+        "filename": f"{att_id}_{safe_filename}",
+        "original_filename": file.filename,
+        "mime_type": file.content_type or "application/octet-stream",
+        "size": len(content),
+        "uploaded_at": datetime.now(timezone.utc).isoformat(),
+        "url": f"/api/intervention-requests/{request_id}/attachments/{att_id}"
+    }
+
+    await db.intervention_requests.update_one(
+        {"id": request_id},
+        {"$push": {"attachments": attachment}}
+    )
+
+    return {"success": True, "attachment": attachment}
 
 
 # ========== ROUTES AUTHENTIFIÉES ==========

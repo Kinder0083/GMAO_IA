@@ -5,6 +5,7 @@ import {
   MapPin, Wrench, Activity, ChevronRight, ArrowLeft, QrCode, Lock,
   CheckCircle2, XCircle, Clock, AlertCircle, Sparkles, RefreshCw
 } from 'lucide-react';
+import PublicInterventionForm from '../components/QR/PublicInterventionForm';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
@@ -60,6 +61,7 @@ const QREquipmentPage = () => {
   const [aiSummary, setAiSummary] = useState(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState(null);
+  const [showInterventionForm, setShowInterventionForm] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -95,7 +97,7 @@ const QREquipmentPage = () => {
       'wo-history': () => loadPanel('wo-history', `/equipment/${equipmentId}/wo-history`),
       'kpi': () => loadPanel('kpi', `/equipment/${equipmentId}/kpi`),
       'preventive-plan': () => loadPanel('preventive-plan', `/equipment/${equipmentId}/preventive`),
-      'create-intervention': () => navigate(`/intervention-requests?equipment=${equipmentId}`),
+      'create-intervention': () => setShowInterventionForm(true),
       'report-breakdown': () => navigate(`/work-orders?createForEquipment=${equipmentId}`),
       'create-presquaccident': () => navigate(`/presqu-accident?createForEquipment=${equipmentId}`),
     };
@@ -158,6 +160,28 @@ const QREquipmentPage = () => {
     const Icon = iconMap[name];
     return Icon ? <Icon size={size} className={className} /> : null;
   };
+
+  // Show public intervention form
+  if (showInterventionForm && equipment) {
+    return (
+      <div className="min-h-screen bg-gray-50" data-testid="qr-public-di-page">
+        <div className="bg-white border-b shadow-sm">
+          <div className="max-w-lg mx-auto px-4 py-4">
+            <div className="flex items-center gap-2 text-sm text-gray-500 mb-1">
+              <QrCode size={16} />
+              <span>FSAO Iris — Demande d'intervention</span>
+            </div>
+          </div>
+        </div>
+        <div className="max-w-lg mx-auto px-4 py-6">
+          <PublicInterventionForm
+            equipment={equipment}
+            onClose={() => setShowInterventionForm(false)}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50" data-testid="qr-equipment-page">
