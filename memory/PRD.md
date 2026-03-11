@@ -98,6 +98,8 @@ Plateforme integree avec gestion des equipements, ordres de travail, consignatio
   - Frontend: Bouton "Modifier l'ordre" (admin only) avec mode reordonnement
   - Frontend: Fleches haut/bas + drag-and-drop (@dnd-kit) + numeros de position
   - Frontend: Boutons Enregistrer/Annuler, cartes avec bordure pointillee bleue
+  - Frontend: Reordonnement supporte les deux modes (Liste ET Arborescence)
+  - Frontend: EquipmentTreeView reecrit avec SortableTreeNode pour le drag & drop arborescent
 - **Feature** : Gestion visibilite icones header par utilisateur (page /people)
   - Backend: GET/PUT /api/users/{id}/header-visibility (admin only)
   - Frontend: Bouton "Headers" sur chaque fiche utilisateur, dialogue avec toggles ON/OFF par icone
