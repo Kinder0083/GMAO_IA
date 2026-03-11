@@ -160,13 +160,27 @@ async def init_system_roles():
 async def get_all_roles(current_user: dict = Depends(get_current_user)):
     """Récupérer tous les rôles"""
     try:
-        roles = await db.roles.find({}, {"_id": 0}).to_list(length=None)
+        roles_raw = await db.roles.find({}).to_list(length=None)
         
         # Si aucun rôle n'existe, initialiser les rôles système
-        if not roles or len(roles) == 0:
+        if not roles_raw or len(roles_raw) == 0:
             print("⚠️ Aucun rôle trouvé, initialisation des rôles système...")
             await init_system_roles()
-            roles = await db.roles.find({}, {"_id": 0}).to_list(length=None)
+            roles_raw = await db.roles.find({}).to_list(length=None)
+        
+        # Normaliser: s'assurer que chaque rôle a un champ "id"
+        roles = []
+        needs_migration = False
+        for role in roles_raw:
+            if "id" not in role or not role["id"]:
+                role["id"] = str(role["_id"])
+                needs_migration = True
+                await db.roles.update_one({"_id": role["_id"]}, {"$set": {"id": role["id"]}})
+            role.pop("_id", None)
+            roles.append(role)
+        
+        if needs_migration:
+            print(f"✅ Migration: {len(roles)} rôles mis à jour avec un champ 'id'")
         
         # Trier: rôles système en premier, puis par label
         roles.sort(key=lambda r: (not r.get("is_system", False), r.get("label", "")))
@@ -177,12 +191,26 @@ async def get_all_roles(current_user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=500, detail=f"Erreur lors de la récupération des rôles: {str(e)}")
 
 
+async def _find_role(role_id: str):
+    """Chercher un rôle par id ou _id"""
+    role = await db.roles.find_one({"id": role_id})
+    if not role:
+        try:
+            role = await db.roles.find_one({"_id": ObjectId(role_id)})
+        except:
+            pass
+    return role
+
+
 @router.get("/{role_id}")
 async def get_role(role_id: str, current_user: dict = Depends(get_current_user)):
     """Récupérer un rôle par ID"""
-    role = await db.roles.find_one({"id": role_id}, {"_id": 0})
+    role = await _find_role(role_id)
     if not role:
         raise HTTPException(status_code=404, detail="Rôle non trouvé")
+    if "id" not in role or not role["id"]:
+        role["id"] = str(role["_id"])
+    role.pop("_id", None)
     return role
 
 
@@ -250,9 +278,14 @@ async def update_role(role_id: str, role_data: RoleUpdate, current_user: dict = 
         raise HTTPException(status_code=403, detail="Seuls les administrateurs peuvent modifier les rôles")
     
     # Récupérer le rôle existant
-    existing = await db.roles.find_one({"id": role_id})
+    existing = await _find_role(role_id)
     if not existing:
         raise HTTPException(status_code=404, detail="Rôle non trouvé")
+    
+    # Construire le filtre de recherche pour la mise à jour
+    role_filter = {"id": role_id}
+    if "id" not in existing or existing.get("id") != role_id:
+        role_filter = {"_id": existing["_id"]}
     
     # Préparer les données de mise à jour
     update_data = {}
@@ -269,10 +302,14 @@ async def update_role(role_id: str, role_data: RoleUpdate, current_user: dict = 
     
     update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
     
-    await db.roles.update_one({"id": role_id}, {"$set": update_data})
+    await db.roles.update_one(role_filter, {"$set": update_data})
     
     # Retourner le rôle mis à jour
-    updated = await db.roles.find_one({"id": role_id}, {"_id": 0})
+    updated = await _find_role(role_id)
+    if updated:
+        if "id" not in updated or not updated["id"]:
+            updated["id"] = str(updated["_id"])
+        updated.pop("_id", None)
     return updated
 
 
@@ -284,7 +321,7 @@ async def delete_role(role_id: str, current_user: dict = Depends(get_current_use
         raise HTTPException(status_code=403, detail="Seuls les administrateurs peuvent supprimer des rôles")
     
     # Récupérer le rôle
-    role = await db.roles.find_one({"id": role_id})
+    role = await _find_role(role_id)
     if not role:
         raise HTTPException(status_code=404, detail="Rôle non trouvé")
     
@@ -300,7 +337,11 @@ async def delete_role(role_id: str, current_user: dict = Depends(get_current_use
             detail=f"Impossible de supprimer ce rôle: {users_with_role} utilisateur(s) l'utilisent encore"
         )
     
-    await db.roles.delete_one({"id": role_id})
+    # Supprimer par le bon filtre
+    role_filter = {"id": role_id}
+    if "id" not in role or role.get("id") != role_id:
+        role_filter = {"_id": role["_id"]}
+    await db.roles.delete_one(role_filter)
     
     return {"success": True, "message": "Rôle supprimé avec succès"}
 

@@ -104,7 +104,7 @@ const Sidebar = ({
             if (categoryMenus.length === 0) return null;
             
             const CategoryIcon = iconMap[category.icon] || Folder;
-            const isExpanded = expandedCategories[category.id] !== false;
+            const isExpanded = expandedCategories[category.id] === true;
             const hasActiveMenu = categoryHasActiveMenu(category.id);
 
             return (

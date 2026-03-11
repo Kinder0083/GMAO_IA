@@ -151,10 +151,10 @@ const MenuOrganizationSection = () => {
     const loadedCategories = preferences?.menu_categories || [];
     setCategories(loadedCategories);
     
-    // Initialiser les catégories comme expandées
+    // Initialiser les catégories comme repliées par défaut
     const initialExpanded = {};
     loadedCategories.forEach(cat => {
-      initialExpanded[cat.id] = true;
+      initialExpanded[cat.id] = false;
     });
     setExpandedCategories(initialExpanded);
   }, [preferences]);
