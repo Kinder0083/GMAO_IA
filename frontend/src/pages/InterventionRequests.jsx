@@ -42,6 +42,11 @@ const InterventionRequests = () => {
     refresh: refreshRequests 
   } = useInterventionRequests();
 
+  const handleRefreshAndNotify = () => {
+    refreshRequests();
+    window.dispatchEvent(new CustomEvent('gmao-data-refresh', { detail: { entity: 'intervention_requests' } }));
+  };
+
   const handleDelete = async (id) => {
     setItemToDelete(id);
     setDeleteDialogOpen(true);
@@ -56,7 +61,7 @@ const InterventionRequests = () => {
         title: 'Succès',
         description: 'Demande supprimée'
       });
-      refreshRequests();
+      handleRefreshAndNotify();
     } catch (error) {
       toast({
         title: 'Erreur',
@@ -429,14 +434,14 @@ const InterventionRequests = () => {
         open={formDialogOpen}
         onOpenChange={setFormDialogOpen}
         request={selectedRequest}
-        onSuccess={refreshRequests}
+        onSuccess={handleRefreshAndNotify}
       />
 
       <ConvertToWorkOrderDialog
         open={convertDialogOpen}
         onOpenChange={setConvertDialogOpen}
         request={selectedRequest}
-        onSuccess={refreshRequests}
+        onSuccess={handleRefreshAndNotify}
       />
 
       <DeleteConfirmDialog
@@ -451,7 +456,7 @@ const InterventionRequests = () => {
         open={refuseDialogOpen}
         onOpenChange={setRefuseDialogOpen}
         request={selectedRequest}
-        onSuccess={refreshRequests}
+        onSuccess={handleRefreshAndNotify}
       />
     </div>
   );

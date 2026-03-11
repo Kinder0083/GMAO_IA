@@ -7322,11 +7322,13 @@ async def create_intervention_request(
         await db.intervention_requests.insert_one(request_data)
         
         # Broadcast WebSocket pour la synchronisation temps réel
+        # Ne pas exclure l'utilisateur pour permettre la sync multi-appareils
+        broadcast_data = {k: v for k, v in request_data.items() if k != '_id'}
+        broadcast_data = _clean_ir_attachments(broadcast_data)
         await realtime_manager.emit_event(
             "intervention_requests",
             "created",
-            request_data,
-            user_id=current_user["id"]
+            broadcast_data
         )
         
         # Audit log
@@ -7422,11 +7424,12 @@ async def update_intervention_request(
     updated_req = await db.intervention_requests.find_one({"id": request_id})
     
     # Broadcast WebSocket pour la synchronisation temps réel
+    broadcast_data = {k: v for k, v in dict(updated_req).items() if k != '_id'}
+    broadcast_data = _clean_ir_attachments(broadcast_data)
     await realtime_manager.emit_event(
         "intervention_requests",
         "updated",
-        dict(updated_req),
-        user_id=current_user["id"]
+        broadcast_data
     )
     
     # Audit log
@@ -7459,8 +7462,7 @@ async def delete_intervention_request(request_id: str, current_user: dict = Depe
     await realtime_manager.emit_event(
         "intervention_requests",
         "deleted",
-        {"id": request_id, "titre": req_title},
-        user_id=current_user["id"]
+        {"id": request_id, "titre": req_title}
     )
     
     # Audit log
@@ -7689,12 +7691,12 @@ async def refuse_intervention_request(
         
         # Broadcast WebSocket
         updated_req = await db.intervention_requests.find_one({"id": request_id})
-        updated_req = _clean_ir_attachments(updated_req)
+        broadcast_data = {k: v for k, v in dict(updated_req).items() if k != '_id'}
+        broadcast_data = _clean_ir_attachments(broadcast_data)
         await realtime_manager.emit_event(
             "intervention_requests",
             "updated",
-            dict(updated_req),
-            user_id=current_user["id"]
+            broadcast_data
         )
         
         return {"message": "Demande d'intervention refusee", "request_id": request_id}
