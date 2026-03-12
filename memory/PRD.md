@@ -13,6 +13,16 @@ Application GMAO (Gestion de Maintenance Assistee par Ordinateur) pour la gestio
 
 ## Session 12 Mars 2026
 
+### Phase 11 - Drag & Drop pour pièces jointes (3 formulaires)
+- **Fonctionnalité**: Zone de glisser-déposer ajoutée aux 3 formulaires de l'application
+  - Formulaire OT (WorkOrderFormDialog.jsx) - `data-testid="wo-drop-zone"`
+  - Formulaire DI (InterventionRequestFormDialog.jsx) - `data-testid="di-drop-zone"`
+  - Formulaire public DI via QR (PublicInterventionForm.jsx) - `data-testid="public-di-drop-zone"`
+- **Implémentation**: état `isDragging`, `dragCounter` ref, handlers `handleDragEnter/Leave/Over/Drop`
+- **UX**: Bordure pointillée, feedback visuel bleu au survol, icône Upload, texte "Glissez-deposez"
+- **Boutons existants conservés**: Parcourir + Appareil photo (OT/DI), Prendre photo + Galerie (Public)
+- **Testing**: 100% - 13 tests frontend passés (iteration_125), régression miniatures OT validée
+
 ### Phase 10 - Bug Fix: Miniatures photos dans formulaire modification OT
 - **Probleme**: Les photos transferees d'une DI vers un OT n'etaient visibles que dans le dialogue de visualisation (oeil) et pas dans le dialogue de modification (crayon)
 - **Cause racine**: Le chargement async des blob URLs pour les miniatures etait fonctionnel mais manquait de robustesse (pas de nettoyage, pas de protection contre les races conditions)
@@ -75,6 +85,7 @@ Application GMAO (Gestion de Maintenance Assistee par Ordinateur) pour la gestio
 ## Prioritized Backlog
 ### P0
 - (RESOLU) Miniatures photos dans formulaire modification OT
+- (RESOLU) Drag & Drop pièces jointes (OT, DI, Public DI)
 
 ### P1
 - Validation utilisateur de tous les bugs DI/OT corriges
