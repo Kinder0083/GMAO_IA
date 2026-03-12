@@ -96,7 +96,12 @@ Application GMAO (Gestion de Maintenance Assistee par Ordinateur) pour la gestio
 - Filtres avances sur la page DI (date, priorite, statut, createur)
 
 ## Key Files Modified (Session 12 Mars)
-- `/app/frontend/src/components/WorkOrders/WorkOrderFormDialog.jsx` - Fix chargement miniatures + cleanup blob URLs
+- `/app/frontend/src/components/WorkOrders/WorkOrderFormDialog.jsx` - Fix chargement miniatures + cleanup blob URLs + drag & drop
+- `/app/frontend/src/components/InterventionRequests/InterventionRequestFormDialog.jsx` - Drag & drop
+- `/app/frontend/src/components/QR/PublicInterventionForm.jsx` - Drag & drop
+- `/app/README.md` - Mise a jour version 1.10.0 avec toutes les nouvelles fonctionnalites
+- `/app/CHANGELOG.md` - Ajout version 1.10.0
+- Base de donnees `manual_sections` - 6 nouvelles sections ajoutees (drag & drop OT/DI, DI publique QR, KPI dashboard, IA achats, cache-busting)
 
 ## Credentials
 - Admin: buenogy@gmail.com / Admin2024!

@@ -1,5 +1,54 @@
 # GMAO Iris - Notes de Version
 
+## Version 1.10.0 - Demandes d'Intervention, Drag & Drop, IA Achats (Mars 2026)
+
+### Glisser-Deposer (Drag & Drop) pour les Pieces Jointes
+- **Zone de depot visuelle** ajoutee aux 3 formulaires de l'application : Ordres de Travail, Demandes d'Intervention et formulaire public DI via QR Code
+- Les utilisateurs peuvent desormais glisser-deposer des fichiers depuis leur bureau directement dans les formulaires
+- Feedback visuel : bordure en pointilles qui devient bleue au survol, avec icone et message "Deposez vos fichiers ici"
+- Les boutons existants "Parcourir" et "Appareil photo" sont conserves a l'interieur de la zone de depot
+- Validation automatique de la taille des fichiers (max 25 Mo)
+
+### Miniatures des Pieces Jointes dans les Ordres de Travail
+- Les photos et images sont desormais affichees en miniatures dans le formulaire de **modification** des Ordres de Travail (icone crayon), en plus du dialogue de visualisation (icone oeil)
+- Les images protegees sont chargees via des blob URLs authentifies avec nettoyage automatique de la memoire a la fermeture du formulaire
+- Protection contre les mises a jour d'etat asynchrones perimees (race condition)
+
+### Creation de Demandes d'Intervention Publiques via QR Code
+- **Formulaire mobile epure** : les utilisateurs non authentifies (operateurs, sous-traitants, visiteurs) peuvent creer une Demande d'Intervention directement depuis la page QR d'un equipement
+- Photos joignables par glisser-deposer, appareil photo ou galerie
+- Le formulaire requiert uniquement : nom du demandeur, titre et description
+
+### Notifications Email pour DI Publiques
+- **Email automatique** envoye aux responsables maintenance lors de la creation d'une DI publique
+- L'email contient les details de la demande et deux boutons d'action integres :
+  - **"Convertir en OT"** : ouvre l'application sur la page des DI et declenche la conversion en Ordre de Travail
+  - **"Refuser"** : ouvre l'application et declenche le refus de la demande
+
+### KPI Demandes d'Intervention sur le Dashboard
+- **Deux nouveaux indicateurs** sur le tableau de bord principal :
+  - Nombre de DI en attente de traitement
+  - Temps de reponse moyen des DI
+- Mise a jour en temps reel via l'endpoint `/api/stats/intervention-requests`
+
+### IA - Analyse de l'Historique des Achats
+- **Analyse IA des achats** : Bouton "Analyse IA" sur la page Historique Achat pour analyser automatiquement les tendances de depenses, fournisseurs recurrents et optimisations
+- **Archives IA** : Consultation de l'historique de toutes les analyses IA effectuees sur les achats
+
+### Cache-Busting Automatique
+- Plus besoin de `CTRL+MAJ+F5` apres une mise a jour : le navigateur detecte automatiquement les nouvelles versions
+- Un fichier `version.json` est mis a jour a chaque build
+- Le hook React `useVersionCheck` verifie toutes les 5 minutes + au retour sur l'onglet et recharge la page automatiquement
+
+### Corrections de Bugs
+- **Permissions admin** : les administrateurs peuvent desormais modifier leurs propres permissions
+- **Suppression DI** : la suppression des Demandes d'Intervention est de nouveau possible pour les utilisateurs autorises
+- **Logique des icones DI** : le crayon (modifier) disparait apres conversion en OT, remplace par l'oeil (visualiser)
+- **Photos DI avant conversion** : les miniatures sont visibles dans le formulaire de modification AVANT la conversion en OT
+- **Transfert photos DI vers OT** : la copie des pieces jointes lors de la conversion DI vers OT est fiabilisee avec support des anciens et nouveaux formats
+
+---
+
 ## Version 1.6.0 - MISE A JOUR MAJEURE IA & QHSE (Fevrier 2026)
 
 ### Intelligence Artificielle - Checklists & Maintenance

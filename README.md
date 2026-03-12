@@ -2,7 +2,7 @@
 
 Application de Fonctionnement des Services Assistee par Ordinateur (FSAO) complete et auto-hebergee.
 
-**Version :** 1.9.0
+**Version :** 1.10.0
 **Concepteur :** Greg
 **Derniere mise a jour :** Mars 2026
 
@@ -32,6 +32,11 @@ FSAO Iris integre des fonctionnalites d'IA generative (Gemini Pro) pour automati
 - **Detection d'incidents similaires** : Lors de la creation d'un presqu'accident, l'IA recherche automatiquement les incidents similaires dans l'historique pour capitaliser sur les actions deja entreprises
 - **Analyse IA des tendances** : Analyse globale de tous les presqu'accidents pour identifier les patterns recurrents, zones a risque, predictions de risques futurs, avec envoi d'alertes email aux responsables
 - **Rapport de synthese QHSE** : Generation automatique d'un rapport structure (resume executif, KPIs, analyse par service, top risques, plan d'action) pret pour presentation en reunion QHSE, avec option d'impression
+
+#### IA - Historique Achat
+- **Analyse IA des achats** : Analyse automatique de l'historique des achats pour identifier les tendances de depenses, fournisseurs les plus sollicites, categories d'achat recurrentes et optimisations possibles
+- **Archives IA** : Consultation de l'historique de toutes les analyses IA effectuees sur les achats, avec possibilite de comparer les resultats dans le temps
+- Acces depuis le module "Historique Achat" via les boutons "Analyse IA" et "Archives IA"
 
 #### IA - Assistant (Adria)
 - Assistant IA conversationnel integre (personnalisable : nom, genre, modele LLM)
@@ -70,6 +75,8 @@ FSAO Iris integre des fonctionnalites d'IA generative (Gemini Pro) pour automati
 - Creation, assignation, suivi et historique complet
 - Gestion des priorites, statuts et temps (estime vs reel)
 - Pieces jointes multiples (photos, videos, documents jusqu'a 25 Mo)
+- **Glisser-deposer (drag & drop)** : zone de depot visuelle avec feedback (bordure en pointilles, surbrillance bleue au survol) pour ajouter des fichiers par simple glisser-deposer depuis le bureau, en plus des boutons "Parcourir" et "Appareil photo"
+- **Miniatures des pieces jointes** : affichage des miniatures d'images directement dans les formulaires de creation, modification et visualisation des ordres de travail. Les images protegees sont chargees via des blob URLs authentifies
 - **Previsualisation des pieces jointes** : ouverture directe des fichiers (PDF, images, videos) dans le navigateur sans telechargement force
 - **Galerie de pieces jointes** : miniatures cliquables avec lightbox plein ecran (navigation clavier, support images/PDF/videos/texte)
 - Filtrage avance par date, periode, statut, priorite
@@ -82,6 +89,7 @@ FSAO Iris integre des fonctionnalites d'IA generative (Gemini Pro) pour automati
 - Gestion des garanties, couts et compteurs (metres)
 - Vues en liste et en arborescence
 - **QR Codes** : Generation de QR codes et d'etiquettes imprimables pour chaque equipement. Le scan d'un QR code mene a une page publique affichant les informations de l'equipement et des actions rapides configurables (creation d'OT, signalement, demande, etc.). Les actions sont gerees depuis l'interface d'administration (Parametres > Actions QR)
+- **Creation de Demande d'Intervention publique via QR Code** : Les utilisateurs non authentifies (operateurs, sous-traitants) peuvent creer une Demande d'Intervention directement depuis la page QR d'un equipement, via un formulaire mobile epure. Les photos peuvent etre jointes par glisser-deposer, appareil photo ou galerie. Une notification email est automatiquement envoyee aux responsables maintenance avec des boutons d'action "Convertir en OT" et "Refuser" integres
 
 ### Maintenance preventive
 - Planification recurrente (hebdomadaire, mensuel, trimestriel, annuel)
@@ -117,7 +125,7 @@ FSAO Iris integre des fonctionnalites d'IA generative (Gemini Pro) pour automati
   - **iOS** : Via Safari, bouton Partager → "Sur l'ecran d'accueil"
 - **Notifications push navigateur** (Web Push via VAPID/pywebpush) : alertes automatiques envoyees sur les appareils mobiles et desktop lors de l'assignation d'un OT, changement de statut, panne equipement ou message prive
 - **Fonctionnement hors-ligne partiel** : cache intelligent des ressources statiques via Service Worker
-- **Mise a jour automatique** : le Service Worker detecte les nouvelles versions et met a jour le cache
+- **Mise a jour automatique et cache-busting** : le Service Worker detecte les nouvelles versions et met a jour le cache. Un fichier `version.json` est mis a jour a chaque build. Un hook React (`useVersionCheck`) verifie periodiquement ce fichier (toutes les 5 minutes + au retour sur l'onglet) et declenche un rechargement automatique de la page si une nouvelle version est detectee, eliminant le besoin de `CTRL+MAJ+F5`
 
 ### Interface mobile responsive
 - **Header adaptatif** : les icones secondaires (backup, cameras, M.E.S., alertes MQTT, surveillance, inventaire) sont masquees sur mobile pour ne garder que les icones essentielles (chat, echeances, notifications, OT, profil)
@@ -208,7 +216,8 @@ FSAO Iris integre des fonctionnalites d'IA generative (Gemini Pro) pour automati
 ### Autres
 - Demandes d'arret de maintenance avec workflow email
 - Demandes d'amelioration avec suivi
-- Demandes d'intervention
+- Demandes d'intervention avec pieces jointes, glisser-deposer, conversion en OT et transfert automatique des photos
+- **KPI Demandes d'Intervention sur le Dashboard** : indicateurs en temps reel affichant le nombre de DI en attente et le temps de reponse moyen, mis a jour automatiquement
 - Acces SSH distant depuis l'interface (admin)
 - Configuration Tailscale depuis l'interface web
 - Gestion des fuseaux horaires
@@ -523,6 +532,11 @@ Pour utiliser Google Drive comme destination de sauvegarde :
 | POST | `/api/surveillance/create-batch-from-ai` | Correspondance intelligente Plan de Surveillance |
 | POST | `/api/surveillance/confirm-match` | Confirmation manuelle d'une correspondance |
 | GET | `/api/surveillance/rapport-stats` | KPIs du rapport de surveillance |
+| POST | `/api/qr/public/intervention-request` | Creation d'une DI publique (sans authentification) depuis le QR code |
+| POST | `/api/qr/public/intervention-request/{id}/attachments` | Ajout de pieces jointes a une DI publique |
+| GET | `/api/stats/intervention-requests` | Statistiques et KPIs des demandes d'intervention (en attente, temps de reponse) |
+| GET | `/api/intervention-requests/{id}/attachments/{att_id}` | Telecharger une piece jointe de DI (authentifie) |
+| GET | `/api/work-orders/{id}/attachments/{att_id}` | Telecharger une piece jointe d'OT (authentifie) |
 | GET | `/api/loto/` | Liste des consignations LOTO |
 | POST | `/api/loto/` | Creer une consignation LOTO |
 | GET | `/api/loto/{id}` | Detail d'une consignation |
@@ -785,4 +799,4 @@ Ce projet est sous licence Proprietaire.
 ---
 
 **Developpe par Greg**
-**Version 1.9.0 - Mars 2026**
+**Version 1.10.0 - Mars 2026**
