@@ -56,16 +56,33 @@ const InterventionRequestFormDialog = ({ open, onOpenChange, request, onSuccess 
         });
         // Load existing attachments from the request
         if (request.attachments && request.attachments.length > 0) {
-          const existing = request.attachments.map(att => ({
-            name: att.original_filename || att.filename,
-            size: att.size || 0,
-            isExisting: true,
-            id: att.id,
-            url: att.url,
-            mime_type: att.mime_type,
-            preview: att.mime_type?.startsWith('image/') ? `${process.env.REACT_APP_BACKEND_URL}${att.url}` : null
-          }));
-          setAttachments(existing);
+          const loadExistingAttachments = async () => {
+            const loaded = [];
+            for (const att of request.attachments) {
+              const item = {
+                name: att.original_filename || att.filename,
+                size: att.size || 0,
+                isExisting: true,
+                id: att.id,
+                url: att.url,
+                mime_type: att.mime_type,
+                preview: null
+              };
+              // Load image preview via authenticated fetch
+              if (att.mime_type?.startsWith('image/') && att.url) {
+                try {
+                  const res = await interventionRequestsAPI.downloadAttachment(request.id, att.id);
+                  const blob = new Blob([res.data], { type: att.mime_type });
+                  item.preview = URL.createObjectURL(blob);
+                } catch (err) {
+                  console.warn('Preview load failed for', att.filename, err);
+                }
+              }
+              loaded.push(item);
+            }
+            setAttachments(loaded);
+          };
+          loadExistingAttachments();
         } else {
           setAttachments([]);
         }
