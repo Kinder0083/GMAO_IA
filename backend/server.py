@@ -4272,10 +4272,6 @@ async def update_user_permissions(
         if not user:
             raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
         
-        # Empêcher de modifier ses propres permissions
-        if str(user_id) == str(current_user.get('id')):
-            raise HTTPException(status_code=400, detail="Vous ne pouvez pas modifier vos propres permissions")
-        
         permissions_dict = permissions_update.permissions.model_dump()
         
         await db.users.update_one(

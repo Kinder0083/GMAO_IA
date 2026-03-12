@@ -13,6 +13,12 @@ Application GMAO (Gestion de Maintenance Assistee par Ordinateur) pour la gestio
 
 ## Session 11 Mars 2026
 
+### Phase 9 - Admin peut modifier ses propres permissions
+- Suppression de la restriction backend qui empechait un admin de modifier ses propres permissions
+- Ligne supprimee: `if str(user_id) == str(current_user.get('id')): raise HTTPException("Vous ne pouvez pas modifier vos propres permissions")`
+- La restriction sur la suppression de soi-meme est conservee (securite)
+- Testing: curl valide (200 OK au lieu de 400)
+
 ### Phase 8 - Corrections Demandes d'Intervention (icones, photos, transfert)
 - **Logique icones**: Crayon seul si DI en attente, Oeil seul si convertie/refusee. Supprimer masque aussi.
 - **Photos DI dans visualisation**: AttachmentGallery integre au dialogue (miniatures + lightbox plein ecran)
