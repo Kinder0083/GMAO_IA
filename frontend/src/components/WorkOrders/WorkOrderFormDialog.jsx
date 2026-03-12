@@ -12,7 +12,7 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Textarea } from '../ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Paperclip, Camera } from 'lucide-react';
+import { Paperclip, Camera, X, Eye } from 'lucide-react';
 import { useToast } from '../../hooks/use-toast';
 import { workOrdersAPI, equipmentsAPI, locationsAPI, usersAPI, workOrderTemplatesAPI } from '../../services/api';
 import StatusChangeDialog from './StatusChangeDialog';
@@ -42,6 +42,7 @@ const WorkOrderFormDialog = ({ open, onOpenChange, workOrder, prefillData, onSuc
   const [attachments, setAttachments] = useState([]);
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
+  const [previewImage, setPreviewImage] = useState(null);
   const [showStatusDialog, setShowStatusDialog] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
   const [savedWorkOrderId, setSavedWorkOrderId] = useState(null);
@@ -50,9 +51,12 @@ const WorkOrderFormDialog = ({ open, onOpenChange, workOrder, prefillData, onSuc
   const submitSuccessfulRef = useRef(false);
 
   useEffect(() => {
+    let cancelled = false;
+
     if (open) {
       loadData();
       setIsClosing(false);
+      setPreviewImage(null);
       submitSuccessfulRef.current = false; // Reset le flag à l'ouverture
       if (workOrder) {
         // Mode édition d'un OT existant
@@ -71,6 +75,43 @@ const WorkOrderFormDialog = ({ open, onOpenChange, workOrder, prefillData, onSuc
         setSavedWorkOrderId(workOrder.id);
         setSavedWorkOrderStatus(workOrder.statut);
         setTemplateId(null);
+
+        // Load existing attachments with previews
+        if (workOrder.attachments && workOrder.attachments.length > 0) {
+          setAttachments([]); // Reset avant chargement async
+          const loadExisting = async () => {
+            const loaded = [];
+            for (const att of workOrder.attachments) {
+              if (cancelled) return;
+              const item = {
+                name: att.original_filename || att.filename || att.nom || 'fichier',
+                size: att.size || att.taille || 0,
+                isExisting: true,
+                id: att.id || String(att._id || ''),
+                mime_type: att.mime_type || att.type,
+                preview: null
+              };
+              if (item.mime_type?.startsWith('image/')) {
+                try {
+                  const res = await workOrdersAPI.downloadAttachment(workOrder.id, item.id);
+                  if (!cancelled) {
+                    const blob = new Blob([res.data], { type: item.mime_type });
+                    item.preview = URL.createObjectURL(blob);
+                  }
+                } catch (err) {
+                  console.warn('Preview load failed:', att.filename || att.nom);
+                }
+              }
+              loaded.push(item);
+            }
+            if (!cancelled) {
+              setAttachments(loaded);
+            }
+          };
+          loadExisting();
+        } else {
+          setAttachments([]);
+        }
       } else if (prefillData) {
         // Mode création avec données pré-remplies (depuis un template)
         const today = new Date().toISOString().split('T')[0];
@@ -98,6 +139,7 @@ const WorkOrderFormDialog = ({ open, onOpenChange, workOrder, prefillData, onSuc
           dateLimite: today,
           tempsEstime: tempsEstime
         });
+        setAttachments([]);
         setSavedWorkOrderId(null);
         setSavedWorkOrderStatus(null);
         setTemplateId(prefillData.template_id || null);
@@ -121,7 +163,16 @@ const WorkOrderFormDialog = ({ open, onOpenChange, workOrder, prefillData, onSuc
         setSavedWorkOrderStatus(null);
         setTemplateId(null);
       }
+    } else {
+      // Cleanup : révoquer les blob URLs et réinitialiser
+      attachments.forEach(att => {
+        if (att?.preview) URL.revokeObjectURL(att.preview);
+      });
+      setAttachments([]);
+      setPreviewImage(null);
     }
+
+    return () => { cancelled = true; };
   }, [open, workOrder, prefillData]);
 
   // Auto-remplir l'emplacement quand un équipement est sélectionné
@@ -160,10 +211,13 @@ const WorkOrderFormDialog = ({ open, onOpenChange, workOrder, prefillData, onSuc
     const newAttachments = files.map(file => ({
       file,
       name: file.name,
-      size: file.size
+      size: file.size,
+      isExisting: false,
+      mime_type: file.type,
+      preview: file.type?.startsWith('image/') ? URL.createObjectURL(file) : null
     }));
-    setAttachments([...attachments, ...newAttachments]);
-    event.target.value = ''; // Reset input
+    setAttachments(prev => [...prev, ...newAttachments]);
+    event.target.value = '';
   };
 
   const handleCameraCapture = () => {
@@ -174,6 +228,8 @@ const WorkOrderFormDialog = ({ open, onOpenChange, workOrder, prefillData, onSuc
   };
 
   const handleRemoveAttachment = (index) => {
+    const att = attachments[index];
+    if (att?.preview) URL.revokeObjectURL(att.preview);
     setAttachments(attachments.filter((_, i) => i !== index));
   };
 
@@ -251,9 +307,10 @@ const WorkOrderFormDialog = ({ open, onOpenChange, workOrder, prefillData, onSuc
       if (workOrder) {
         await workOrdersAPI.update(workOrder.id, submitData);
         
-        // Upload des fichiers si présents
-        if (attachments.length > 0) {
-          for (const attachment of attachments) {
+        // Upload des NOUVEAUX fichiers uniquement (pas les existants)
+        const newAttachments = attachments.filter(a => !a.isExisting && a.file);
+        if (newAttachments.length > 0) {
+          for (const attachment of newAttachments) {
             try {
               await workOrdersAPI.uploadAttachment(workOrder.id, attachment.file);
             } catch (err) {
@@ -541,28 +598,51 @@ const WorkOrderFormDialog = ({ open, onOpenChange, workOrder, prefillData, onSuc
             {attachments.length > 0 && (
               <div className="mt-3 space-y-2">
                 <p className="text-sm font-medium text-gray-700">
-                  {attachments.length} fichier(s) sélectionné(s) :
+                  {attachments.length} fichier(s) :
                 </p>
-                {attachments.map((attachment, index) => (
-                  <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                    <div className="flex items-center gap-2">
-                      <Paperclip size={14} className="text-gray-500" />
-                      <span className="text-sm text-gray-700">{attachment.name}</span>
-                      <span className="text-xs text-gray-500">
-                        ({(attachment.size / 1024 / 1024).toFixed(2)} MB)
-                      </span>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {attachments.map((attachment, index) => (
+                    <div key={index} className="relative group border border-gray-200 rounded-lg overflow-hidden bg-gray-50">
+                      {attachment.preview ? (
+                        <div className="aspect-square relative">
+                          <img
+                            src={attachment.preview}
+                            alt={attachment.name}
+                            className="w-full h-full object-cover"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setPreviewImage(attachment.preview)}
+                            className="absolute inset-0 bg-black/0 hover:bg-black/20 transition-colors flex items-center justify-center"
+                          >
+                            <Eye size={20} className="text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="aspect-square flex items-center justify-center">
+                          <Paperclip size={24} className="text-gray-400" />
+                        </div>
+                      )}
+                      <div className="p-1.5 flex items-center justify-between gap-1">
+                        <span className="text-xs text-gray-600 truncate flex-1">{attachment.name}</span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRemoveAttachment(index)}
+                          className="h-6 w-6 p-0 text-red-500 hover:text-red-700 hover:bg-red-50 flex-shrink-0"
+                        >
+                          <X size={14} />
+                        </Button>
+                      </div>
+                      {attachment.isExisting && (
+                        <div className="absolute top-1 left-1 bg-blue-500 text-white text-[10px] px-1.5 py-0.5 rounded-full">
+                          Existant
+                        </div>
+                      )}
                     </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleRemoveAttachment(index)}
-                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                    >
-                      Supprimer
-                    </Button>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -593,6 +673,27 @@ const WorkOrderFormDialog = ({ open, onOpenChange, workOrder, prefillData, onSuc
       onStatusChange={handleStatusChange}
       onSkip={handleSkipStatusChange}
     />
+
+    {/* Lightbox preview plein écran */}
+    {previewImage && (
+      <div
+        className="fixed inset-0 z-[9999] bg-black/90 flex items-center justify-center p-4 cursor-pointer"
+        onClick={() => setPreviewImage(null)}
+      >
+        <button
+          className="absolute top-4 right-4 p-2 bg-white/20 rounded-full hover:bg-white/40 transition-colors"
+          onClick={() => setPreviewImage(null)}
+        >
+          <X size={24} className="text-white" />
+        </button>
+        <img
+          src={previewImage}
+          alt="Preview"
+          className="max-w-full max-h-full object-contain rounded-lg"
+          onClick={e => e.stopPropagation()}
+        />
+      </div>
+    )}
     </>
   );
 };
