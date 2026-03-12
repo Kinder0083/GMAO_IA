@@ -171,6 +171,7 @@ const InterventionRequests = () => {
   };
 
   const canConvert = user && (user.role === 'ADMIN' || user.role === 'TECHNICIEN');
+  const canDelete = user && (user.role === 'ADMIN' || (user.permissions && user.permissions.interventionRequests && user.permissions.interventionRequests.delete));
 
   return (
     <div className="space-y-6">
@@ -347,8 +348,8 @@ const InterventionRequests = () => {
                             </Tooltip>
                             )}
                             
-                            {/* Supprimer: seulement si pas convertie */}
-                            {!req.work_order_id && !req.refused && (
+                            {/* Supprimer: selon permission utilisateur */}
+                            {canDelete && (
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Button
