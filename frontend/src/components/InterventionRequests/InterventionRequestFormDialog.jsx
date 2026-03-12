@@ -17,7 +17,7 @@ import { interventionRequestsAPI, equipmentsAPI, locationsAPI } from '../../serv
 import api from '../../services/api';
 import { validateDateNotPast } from '../../utils/dateValidation';
 import { formatErrorMessage } from '../../utils/errorFormatter';
-import { Paperclip, Camera, Loader2, X, Eye } from 'lucide-react';
+import { Paperclip, Camera, Loader2, X, Eye, Upload } from 'lucide-react';
 
 const InterventionRequestFormDialog = ({ open, onOpenChange, request, onSuccess }) => {
   const { toast } = useToast();
@@ -29,6 +29,8 @@ const InterventionRequestFormDialog = ({ open, onOpenChange, request, onSuccess 
   const [loadingChildren, setLoadingChildren] = useState(false);
   const [attachments, setAttachments] = useState([]);
   const [previewImage, setPreviewImage] = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragCounter = useRef(0);
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
   const [formData, setFormData] = useState({
@@ -174,6 +176,54 @@ const InterventionRequestFormDialog = ({ open, onOpenChange, request, onSuccess 
     }));
     setAttachments(prev => [...prev, ...newAttachments]);
     event.target.value = '';
+  };
+
+  const handleDragEnter = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current++;
+    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+      setIsDragging(true);
+    }
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current--;
+    if (dragCounter.current === 0) {
+      setIsDragging(false);
+    }
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    dragCounter.current = 0;
+    const files = Array.from(e.dataTransfer.files || []);
+    if (files.length === 0) return;
+    const maxSize = 25 * 1024 * 1024;
+    const validFiles = files.filter(f => {
+      if (f.size > maxSize) {
+        toast({ title: 'Fichier trop volumineux', description: `${f.name} depasse 25MB`, variant: 'destructive' });
+        return false;
+      }
+      return true;
+    });
+    const newAttachments = validFiles.map(file => ({
+      file,
+      name: file.name,
+      size: file.size,
+      isExisting: false,
+      preview: file.type.startsWith('image/') ? URL.createObjectURL(file) : null
+    }));
+    setAttachments(prev => [...prev, ...newAttachments]);
   };
 
   const handleCameraCapture = () => {
@@ -392,49 +442,71 @@ const InterventionRequestFormDialog = ({ open, onOpenChange, request, onSuccess 
               Joindre des fichiers
             </Label>
             
-            <div className="flex gap-2">
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                onChange={handleFileSelect}
-                className="hidden"
-              />
-              <input
-                ref={cameraInputRef}
-                type="file"
-                accept="image/*"
-                capture="environment"
-                onChange={handleFileSelect}
-                className="hidden"
-              />
-              
-              <Button
-                type="button"
-                variant="outline"
-                data-testid="browse-files-btn"
-                onClick={() => fileInputRef.current?.click()}
-                className="flex-1"
-              >
-                <Paperclip size={16} className="mr-2" />
-                Parcourir
-              </Button>
-              
-              <Button
-                type="button"
-                variant="outline"
-                data-testid="open-camera-btn"
-                onClick={handleCameraCapture}
-                className="flex-1"
-              >
-                <Camera size={16} className="mr-2" />
-                Appareil photo
-              </Button>
+            {/* Zone de drag & drop */}
+            <div
+              data-testid="di-drop-zone"
+              onDragEnter={handleDragEnter}
+              onDragLeave={handleDragLeave}
+              onDragOver={handleDragOver}
+              onDrop={handleDrop}
+              className={`relative rounded-lg border-2 border-dashed transition-colors duration-200 ${
+                isDragging
+                  ? 'border-blue-500 bg-blue-50'
+                  : 'border-gray-300 bg-white hover:border-gray-400'
+              }`}
+            >
+              {isDragging && (
+                <div className="absolute inset-0 z-10 flex flex-col items-center justify-center rounded-lg bg-blue-50/90">
+                  <Upload size={32} className="text-blue-500 mb-2" />
+                  <p className="text-sm font-medium text-blue-600">Deposez vos fichiers ici</p>
+                </div>
+              )}
+              <div className="p-3 space-y-2">
+                <div className="flex gap-2">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    onChange={handleFileSelect}
+                    className="hidden"
+                  />
+                  <input
+                    ref={cameraInputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={handleFileSelect}
+                    className="hidden"
+                  />
+                  
+                  <Button
+                    type="button"
+                    variant="outline"
+                    data-testid="browse-files-btn"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex-1"
+                  >
+                    <Paperclip size={16} className="mr-2" />
+                    Parcourir
+                  </Button>
+                  
+                  <Button
+                    type="button"
+                    variant="outline"
+                    data-testid="open-camera-btn"
+                    onClick={handleCameraCapture}
+                    className="flex-1"
+                  >
+                    <Camera size={16} className="mr-2" />
+                    Appareil photo
+                  </Button>
+                </div>
+                
+                <p className="text-xs text-gray-500 text-center">
+                  Glissez-deposez vos fichiers ici ou utilisez les boutons ci-dessus (max 25MB)
+                </p>
+              </div>
             </div>
-            
-            <p className="text-xs text-gray-500">
-              Formats acceptes : images, videos, documents (max 25MB par fichier)
-            </p>
             
             {/* Miniatures des photos + liste des fichiers */}
             {attachments.length > 0 && (

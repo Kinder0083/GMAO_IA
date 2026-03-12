@@ -12,7 +12,7 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Textarea } from '../ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Paperclip, Camera, X, Eye } from 'lucide-react';
+import { Paperclip, Camera, X, Eye, Upload } from 'lucide-react';
 import { useToast } from '../../hooks/use-toast';
 import { workOrdersAPI, equipmentsAPI, locationsAPI, usersAPI, workOrderTemplatesAPI } from '../../services/api';
 import StatusChangeDialog from './StatusChangeDialog';
@@ -43,6 +43,8 @@ const WorkOrderFormDialog = ({ open, onOpenChange, workOrder, prefillData, onSuc
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
   const [previewImage, setPreviewImage] = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragCounter = useRef(0);
   const [showStatusDialog, setShowStatusDialog] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
   const [savedWorkOrderId, setSavedWorkOrderId] = useState(null);
@@ -218,6 +220,47 @@ const WorkOrderFormDialog = ({ open, onOpenChange, workOrder, prefillData, onSuc
     }));
     setAttachments(prev => [...prev, ...newAttachments]);
     event.target.value = '';
+  };
+
+  const handleDragEnter = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current++;
+    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+      setIsDragging(true);
+    }
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current--;
+    if (dragCounter.current === 0) {
+      setIsDragging(false);
+    }
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    dragCounter.current = 0;
+    const files = Array.from(e.dataTransfer.files || []);
+    if (files.length === 0) return;
+    const newAttachments = files.map(file => ({
+      file,
+      name: file.name,
+      size: file.size,
+      isExisting: false,
+      mime_type: file.type,
+      preview: file.type?.startsWith('image/') ? URL.createObjectURL(file) : null
+    }));
+    setAttachments(prev => [...prev, ...newAttachments]);
   };
 
   const handleCameraCapture = () => {
@@ -553,47 +596,69 @@ const WorkOrderFormDialog = ({ open, onOpenChange, workOrder, prefillData, onSuc
               Joindre des fichiers
             </Label>
             
-            <div className="flex gap-2">
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                onChange={handleFileSelect}
-                className="hidden"
-              />
-              <input
-                ref={cameraInputRef}
-                type="file"
-                accept="image/*"
-                capture="environment"
-                onChange={handleFileSelect}
-                className="hidden"
-              />
-              
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => fileInputRef.current?.click()}
-                className="flex-1"
-              >
-                <Paperclip size={16} className="mr-2" />
-                Parcourir
-              </Button>
-              
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleCameraCapture}
-                className="flex-1"
-              >
-                <Camera size={16} className="mr-2" />
-                Appareil photo
-              </Button>
+            {/* Zone de drag & drop */}
+            <div
+              data-testid="wo-drop-zone"
+              onDragEnter={handleDragEnter}
+              onDragLeave={handleDragLeave}
+              onDragOver={handleDragOver}
+              onDrop={handleDrop}
+              className={`relative rounded-lg border-2 border-dashed transition-colors duration-200 ${
+                isDragging
+                  ? 'border-blue-500 bg-blue-50'
+                  : 'border-gray-300 bg-white hover:border-gray-400'
+              }`}
+            >
+              {isDragging && (
+                <div className="absolute inset-0 z-10 flex flex-col items-center justify-center rounded-lg bg-blue-50/90">
+                  <Upload size={32} className="text-blue-500 mb-2" />
+                  <p className="text-sm font-medium text-blue-600">Deposez vos fichiers ici</p>
+                </div>
+              )}
+              <div className="p-3 space-y-2">
+                <div className="flex gap-2">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    onChange={handleFileSelect}
+                    className="hidden"
+                  />
+                  <input
+                    ref={cameraInputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={handleFileSelect}
+                    className="hidden"
+                  />
+                  
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex-1"
+                  >
+                    <Paperclip size={16} className="mr-2" />
+                    Parcourir
+                  </Button>
+                  
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleCameraCapture}
+                    className="flex-1"
+                  >
+                    <Camera size={16} className="mr-2" />
+                    Appareil photo
+                  </Button>
+                </div>
+                
+                <p className="text-xs text-gray-500 text-center">
+                  Glissez-deposez vos fichiers ici ou utilisez les boutons ci-dessus (max 25MB)
+                </p>
+              </div>
             </div>
-            
-            <p className="text-xs text-gray-500">
-              Formats acceptés : images, vidéos, documents (max 25MB par fichier)
-            </p>
             
             {attachments.length > 0 && (
               <div className="mt-3 space-y-2">

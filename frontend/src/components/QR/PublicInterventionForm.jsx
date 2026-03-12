@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Camera, Paperclip, X, ChevronLeft, Loader2, CheckCircle2, AlertTriangle, Eye, Send } from 'lucide-react';
+import { Camera, Paperclip, X, ChevronLeft, Loader2, CheckCircle2, AlertTriangle, Eye, Send, Upload } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
@@ -22,6 +22,8 @@ const PublicInterventionForm = ({ equipment, onClose }) => {
   const [photos, setPhotos] = useState([]);
   const [previewImg, setPreviewImg] = useState(null);
   const [errorMsg, setErrorMsg] = useState('');
+  const [isDragging, setIsDragging] = useState(false);
+  const dragCounter = useRef(0);
   const cameraRef = useRef(null);
   const fileRef = useRef(null);
 
@@ -35,6 +37,45 @@ const PublicInterventionForm = ({ equipment, onClose }) => {
     }));
     setPhotos(prev => [...prev, ...newPhotos]);
     e.target.value = '';
+  };
+
+  const handleDragEnter = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current++;
+    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+      setIsDragging(true);
+    }
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current--;
+    if (dragCounter.current === 0) {
+      setIsDragging(false);
+    }
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    dragCounter.current = 0;
+    const files = Array.from(e.dataTransfer.files || []);
+    if (files.length === 0) return;
+    const valid = files.filter(f => f.size <= 25 * 1024 * 1024);
+    const newPhotos = valid.map(f => ({
+      file: f,
+      name: f.name,
+      preview: URL.createObjectURL(f),
+    }));
+    setPhotos(prev => [...prev, ...newPhotos]);
   };
 
   const removePhoto = (idx) => {
@@ -259,25 +300,50 @@ const PublicInterventionForm = ({ equipment, onClose }) => {
           <input ref={cameraRef} type="file" accept="image/*" capture="environment" onChange={handlePhoto} className="hidden" />
           <input ref={fileRef} type="file" accept="image/*" multiple onChange={handlePhoto} className="hidden" />
 
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              type="button"
-              onClick={() => cameraRef.current?.click()}
-              className="flex flex-col items-center justify-center py-4 rounded-xl border-2 border-dashed border-blue-300 bg-blue-50 active:bg-blue-100 transition-colors"
-              data-testid="public-di-camera-btn"
-            >
-              <Camera size={28} className="text-blue-600 mb-1" />
-              <span className="text-sm font-medium text-blue-700">Prendre photo</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => fileRef.current?.click()}
-              className="flex flex-col items-center justify-center py-4 rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 active:bg-gray-100 transition-colors"
-              data-testid="public-di-file-btn"
-            >
-              <Paperclip size={28} className="text-gray-500 mb-1" />
-              <span className="text-sm font-medium text-gray-600">Galerie</span>
-            </button>
+          {/* Zone de drag & drop */}
+          <div
+            data-testid="public-di-drop-zone"
+            onDragEnter={handleDragEnter}
+            onDragLeave={handleDragLeave}
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
+            className={`relative rounded-xl border-2 border-dashed transition-colors duration-200 ${
+              isDragging
+                ? 'border-blue-500 bg-blue-50'
+                : 'border-gray-200 bg-white'
+            }`}
+          >
+            {isDragging && (
+              <div className="absolute inset-0 z-10 flex flex-col items-center justify-center rounded-xl bg-blue-50/90">
+                <Upload size={32} className="text-blue-500 mb-2" />
+                <p className="text-sm font-medium text-blue-600">Deposez vos photos ici</p>
+              </div>
+            )}
+            <div className="p-3">
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => cameraRef.current?.click()}
+                  className="flex flex-col items-center justify-center py-4 rounded-xl border-2 border-dashed border-blue-300 bg-blue-50 active:bg-blue-100 transition-colors"
+                  data-testid="public-di-camera-btn"
+                >
+                  <Camera size={28} className="text-blue-600 mb-1" />
+                  <span className="text-sm font-medium text-blue-700">Prendre photo</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => fileRef.current?.click()}
+                  className="flex flex-col items-center justify-center py-4 rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 active:bg-gray-100 transition-colors"
+                  data-testid="public-di-file-btn"
+                >
+                  <Paperclip size={28} className="text-gray-500 mb-1" />
+                  <span className="text-sm font-medium text-gray-600">Galerie</span>
+                </button>
+              </div>
+              <p className="text-xs text-gray-400 text-center mt-2">
+                Glissez-deposez vos photos ici ou utilisez les boutons
+              </p>
+            </div>
           </div>
 
           {/* Photo thumbnails */}
