@@ -8,6 +8,7 @@ import { AIContextMenuProvider } from "./contexts/AIContextMenuContext";
 import { AINavigationProvider } from "./contexts/AINavigationContext";
 import { GuidedTourProvider } from "./contexts/GuidedTourContext";
 import { GuidedTour } from "./components/GuidedTour";
+import useVersionCheck from "./hooks/useVersionCheck";
 import PWABanner from "./components/shared/PWABanner";
 import { initOfflineSync } from "./services/offlineSync";
 import { cleanOldCache } from "./services/offlineDb";
@@ -125,6 +126,9 @@ const ProtectedRoute = ({ children }) => {
 };
 
 function App() {
+  // Detection automatique des mises a jour
+  useVersionCheck();
+
   // Register Service Worker for PWA (notifications push uniquement)
   useEffect(() => {
     // Initialiser le service de synchronisation hors-ligne

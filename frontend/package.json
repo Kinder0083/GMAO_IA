@@ -82,7 +82,7 @@
   },
   "scripts": {
     "start": "craco start",
-    "build": "craco build",
+    "build": "craco build && bash post-build.sh build",
     "test": "craco test"
   },
   "browserslist": {

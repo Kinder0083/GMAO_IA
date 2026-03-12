@@ -13,6 +13,13 @@ Application GMAO (Gestion de Maintenance Assistee par Ordinateur) pour la gestio
 
 ## Session 11 Mars 2026
 
+### Phase 7 - Cache-busting automatique (plus besoin de CTRL+MAJ+F5)
+- **Service Worker**: `sw.js` modifie pour forcer `cache: 'no-store'` sur les navigation requests
+- **Detection de version**: Hook `useVersionCheck.js` verifie `/version.json` toutes les 5 min + au retour sur l'onglet. Recharge automatiquement si nouvelle version detectee
+- **Post-build script**: `post-build.sh` remplace les timestamps dans `sw.js` et `version.json` a chaque `yarn build`
+- **Nginx**: Header `no-cache` ajoute pour `version.json`
+- **Procedure de mise a jour**: `yarn build` execute automatiquement `post-build.sh`
+
 ### Phase 6 - Formulaire DI Public via QR Code + Photos + KPI
 - **Fonctionnalite**: "Creer une demande d'intervention" accessible SANS authentification depuis le QR code
 - **Backend**: POST /api/qr/public/intervention-request, POST /api/qr/public/intervention-request/{id}/attachments (meme format et chemin que standard)

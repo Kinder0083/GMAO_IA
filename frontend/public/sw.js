@@ -1,15 +1,17 @@
 // Service Worker FSAO Iris - Notifications push uniquement (pas de cache)
-// Version: 1772874752
 // Ce SW ne met RIEN en cache. NGINX sert les fichiers statiques directement.
-// Cela élimine les problèmes de cache stale après les mises à jour.
 
-// Installation : prise de contrôle immédiate
+const SW_VERSION = '__BUILD_TIMESTAMP__';
+
+// Installation : prise de controle immediate
 self.addEventListener('install', () => {
+  console.log('[SW] Install - version:', SW_VERSION);
   self.skipWaiting();
 });
 
-// Activation : nettoyage de TOUS les anciens caches et prise de contrôle
+// Activation : nettoyage de TOUS les anciens caches et prise de controle
 self.addEventListener('activate', (event) => {
+  console.log('[SW] Activate - version:', SW_VERSION);
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
@@ -26,10 +28,24 @@ self.addEventListener('message', (event) => {
   }
 });
 
-// PAS de cache - le SW redirige tout vers le réseau
-// Ce fetch handler est OBLIGATOIRE pour que Chrome Android permette l'installation PWA
+// Fetch handler - PAS de cache
+// Navigation requests (HTML pages) : TOUJOURS reseau avec cache: 'no-store'
+// Autres requests : reseau direct
 self.addEventListener('fetch', (event) => {
-  event.respondWith(fetch(event.request));
+  if (event.request.mode === 'navigate') {
+    // Force un fetch reseau sans cache HTTP pour les pages HTML
+    event.respondWith(
+      fetch(event.request, { cache: 'no-store' }).catch(() => {
+        // Fallback si offline
+        return caches.match('/index.html') || new Response('Hors ligne', {
+          status: 503,
+          headers: { 'Content-Type': 'text/plain' }
+        });
+      })
+    );
+  } else {
+    event.respondWith(fetch(event.request));
+  }
 });
 
 // Push notifications
