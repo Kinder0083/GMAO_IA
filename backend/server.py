@@ -7393,6 +7393,9 @@ def _clean_ir_attachments(req):
             if "_id" in att:
                 clean_att["id"] = str(att["_id"])
                 clean_att["url"] = f"/api/intervention-requests/{req.get('id', '')}/attachments/{str(att['_id'])}"
+            elif "id" in att and att["id"]:
+                # Old public format: keep the id, build url
+                clean_att["url"] = f"/api/intervention-requests/{req.get('id', '')}/attachments/{att['id']}"
             cleaned.append(clean_att)
         req["attachments"] = cleaned
     else:
@@ -7686,7 +7689,9 @@ async def download_ir_attachment(
         
         attachment = None
         for att in req.get("attachments", []):
-            if str(att.get("_id")) == attachment_id:
+            # Support both formats: _id (standard) and id (old public)
+            att_id_str = str(att.get("_id", "")) if att.get("_id") else att.get("id", "")
+            if att_id_str == attachment_id:
                 attachment = att
                 break
         
@@ -7694,6 +7699,13 @@ async def download_ir_attachment(
             raise HTTPException(status_code=404, detail="Piece jointe non trouvee")
         
         file_path = IR_UPLOAD_DIR / attachment["filename"]
+        
+        # Fallback: check old public upload path
+        if not file_path.exists():
+            old_path = Path(f"/app/backend/uploads/intervention_requests/{request_id}") / attachment["filename"]
+            if old_path.exists():
+                file_path = old_path
+        
         if not file_path.exists():
             raise HTTPException(status_code=404, detail="Fichier non trouve sur le disque")
         
@@ -7908,6 +7920,11 @@ async def convert_to_work_order(
             for att in ir_attachments:
                 try:
                     src_path = IR_UPLOAD_DIR / att["filename"]
+                    # Fallback: check old public upload path
+                    if not src_path.exists():
+                        old_path = Path(f"/app/backend/uploads/intervention_requests/{request_id}") / att["filename"]
+                        if old_path.exists():
+                            src_path = old_path
                     if src_path.exists():
                         new_filename = f"{uuid.uuid4()}{Path(att['filename']).suffix}"
                         dst_path = WO_UPLOAD_DIR / new_filename
@@ -7921,6 +7938,8 @@ async def convert_to_work_order(
                             "uploaded_at": datetime.utcnow()
                         }
                         work_order_data["attachments"].append(wo_attachment)
+                    else:
+                        logger.warning(f"Piece jointe DI introuvable: {att['filename']}")
                 except Exception as copy_err:
                     logger.warning(f"Erreur copie piece jointe DI->OT: {str(copy_err)}")
         

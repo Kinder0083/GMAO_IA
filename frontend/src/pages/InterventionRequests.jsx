@@ -307,23 +307,8 @@ const InterventionRequests = () => {
                       <td className="py-3 px-4">
                         <TooltipProvider>
                           <div className="flex gap-1">
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => {
-                                    setSelectedRequest(req);
-                                    setDialogOpen(true);
-                                  }}
-                                  className="hover:bg-blue-50 hover:text-blue-600"
-                                >
-                                  <Eye size={16} />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>Voir les détails</TooltipContent>
-                            </Tooltip>
-                            
+                            {/* Crayon: seulement si PAS convertie en OT et PAS refusee */}
+                            {!req.work_order_id && !req.refused && (
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Button
@@ -340,7 +325,30 @@ const InterventionRequests = () => {
                               </TooltipTrigger>
                               <TooltipContent>Modifier la demande</TooltipContent>
                             </Tooltip>
+                            )}
+
+                            {/* Oeil: seulement si convertie en OT OU refusee */}
+                            {(req.work_order_id || req.refused) && (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    setSelectedRequest(req);
+                                    setDialogOpen(true);
+                                  }}
+                                  className="hover:bg-blue-50 hover:text-blue-600"
+                                >
+                                  <Eye size={16} />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Voir les details</TooltipContent>
+                            </Tooltip>
+                            )}
                             
+                            {/* Supprimer: seulement si pas convertie */}
+                            {!req.work_order_id && !req.refused && (
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Button
@@ -354,6 +362,7 @@ const InterventionRequests = () => {
                               </TooltipTrigger>
                               <TooltipContent>Supprimer la demande</TooltipContent>
                             </Tooltip>
+                            )}
                             
                             {canConvert && !req.work_order_id && (
                               <Tooltip>
