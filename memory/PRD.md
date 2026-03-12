@@ -20,11 +20,12 @@ Application GMAO (Gestion de Maintenance Assistee par Ordinateur) pour la gestio
 - Testing: curl valide (200 OK au lieu de 400)
 
 ### Phase 8 - Corrections Demandes d'Intervention (icones, photos, transfert)
-- **Logique icones**: Crayon seul si DI en attente, Oeil seul si convertie/refusee. Supprimer masque aussi.
-- **Photos DI dans visualisation**: AttachmentGallery integre au dialogue (miniatures + lightbox plein ecran)
+- **Logique icones**: Crayon seul si DI en attente, Oeil seul si convertie/refusee. Corbeille toujours visible selon permissions.
+- **Photos DI dans formulaire (Crayon)**: Miniatures chargees via fetch authentifie avec blob URLs (avant conversion)
+- **Photos DI dans visualisation (Oeil)**: AttachmentGallery integre au dialogue (miniatures + lightbox plein ecran)
 - **Compatibilite PJ**: Support ancien format (id string, chemin uploads/intervention_requests/) et nouveau (ObjectId, uploads/intervention-requests/)
 - **Transfert DI->OT**: Photos copiees vers le dossier OT avec fallback ancien chemin
-- Testing: 100% (iteration_123 - 10/10 backend, tous tests frontend)
+- Testing: 100% (iteration_123, iteration_124 - 10/10 backend + Playwright frontend)
 
 ### Phase 7 - Cache-busting automatique (plus besoin de CTRL+MAJ+F5)
 - **Service Worker**: `sw.js` modifie pour forcer `cache: 'no-store'` sur les navigation requests
