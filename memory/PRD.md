@@ -13,6 +13,13 @@ Application GMAO (Gestion de Maintenance Assistee par Ordinateur) pour la gestio
 
 ## Session 11 Mars 2026
 
+### Phase 8 - Corrections Demandes d'Intervention (icones, photos, transfert)
+- **Logique icones**: Crayon seul si DI en attente, Oeil seul si convertie/refusee. Supprimer masque aussi.
+- **Photos DI dans visualisation**: AttachmentGallery integre au dialogue (miniatures + lightbox plein ecran)
+- **Compatibilite PJ**: Support ancien format (id string, chemin uploads/intervention_requests/) et nouveau (ObjectId, uploads/intervention-requests/)
+- **Transfert DI->OT**: Photos copiees vers le dossier OT avec fallback ancien chemin
+- Testing: 100% (iteration_123 - 10/10 backend, tous tests frontend)
+
 ### Phase 7 - Cache-busting automatique (plus besoin de CTRL+MAJ+F5)
 - **Service Worker**: `sw.js` modifie pour forcer `cache: 'no-store'` sur les navigation requests
 - **Detection de version**: Hook `useVersionCheck.js` verifie `/version.json` toutes les 5 min + au retour sur l'onglet. Recharge automatiquement si nouvelle version detectee
