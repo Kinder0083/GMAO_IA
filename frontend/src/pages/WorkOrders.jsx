@@ -653,6 +653,7 @@ const WorkOrders = () => {
                           <TooltipProvider delayDuration={300}>
                             <Tooltip>
                               <TooltipTrigger asChild>
+                                <span tabIndex={0} className="inline-flex">
                                 <Button
                                   variant="ghost"
                                   size="sm"
@@ -686,6 +687,7 @@ const WorkOrders = () => {
                                 >
                                   <BookOpen size={16} />
                                 </Button>
+                                </span>
                               </TooltipTrigger>
                               <TooltipContent side="top">
                                 <p>{wo.checklist_id ? 'Exécuter la checklist' : 'Aucune checklist associée'}</p>
