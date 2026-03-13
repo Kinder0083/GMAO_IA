@@ -6,19 +6,29 @@ import { usersAPI } from '../../services/api';
 const PermissionsGrid = ({ role, permissions, onChange }) => {
   const [defaultPermissions, setDefaultPermissions] = useState(null);
 
-  // Charger les permissions par défaut quand le rôle change
+  // Deep clone pour eviter les mutations d'objets imbriques
+  const deepClonePermissions = (perms) => {
+    if (!perms) return {};
+    const clone = {};
+    for (const key of Object.keys(perms)) {
+      clone[key] = { ...perms[key] };
+    }
+    return clone;
+  };
+
+  // Charger les permissions par defaut quand le role change
   useEffect(() => {
     const loadDefaultPermissions = async () => {
       if (role) {
         try {
           const response = await usersAPI.getDefaultPermissionsByRole(role);
-          setDefaultPermissions(response.data.permissions);
-          // Si aucune permission n'est définie, utiliser les permissions par défaut
+          const defaults = deepClonePermissions(response.data.permissions);
+          setDefaultPermissions(defaults);
           if (!permissions || Object.keys(permissions).length === 0) {
-            onChange(response.data.permissions);
+            onChange(deepClonePermissions(defaults));
           }
         } catch (error) {
-          console.error('Erreur chargement permissions par défaut:', error);
+          console.error('Erreur chargement permissions par defaut:', error);
         }
       }
     };
@@ -73,7 +83,7 @@ const PermissionsGrid = ({ role, permissions, onChange }) => {
   ];
 
   const handlePermissionChange = (moduleKey, permissionType, checked) => {
-    const newPermissions = { ...permissions };
+    const newPermissions = deepClonePermissions(permissions);
     if (!newPermissions[moduleKey]) {
       newPermissions[moduleKey] = { view: false, edit: false, delete: false };
     }
@@ -93,7 +103,8 @@ const PermissionsGrid = ({ role, permissions, onChange }) => {
           <button
             type="button"
             className="text-sm text-blue-600 hover:text-blue-800"
-            onClick={() => onChange(defaultPermissions)}
+            onClick={() => onChange(deepClonePermissions(defaultPermissions))}
+            data-testid="reset-permissions-btn"
           >
             Réinitialiser par défaut
           </button>

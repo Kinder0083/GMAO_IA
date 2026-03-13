@@ -134,6 +134,7 @@ Application GMAO (Gestion de Maintenance Assistee par Ordinateur) pour la gestio
 - (RESOLU) Drag & Drop pieces jointes (OT, DI, Public DI)
 - (RESOLU) Affichage OT supprime dans la liste DI
 - (RESOLU) Mode Offline Complet PWA (App Shell, Sync fichiers, UX offline)
+- (RESOLU) Bug reinitialisation permissions par defaut (mutation d'objets imbriques)
 
 ### P1
 - Validation utilisateur de tous les bugs DI/OT corriges
