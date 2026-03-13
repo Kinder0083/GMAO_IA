@@ -15,10 +15,17 @@ if [ -f "$BUILD_DIR/version.json" ]; then
   echo "[post-build] version.json mis a jour"
 fi
 
-# Mettre a jour sw.js
+# Mettre a jour sw.js avec le timestamp de build
 if [ -f "$BUILD_DIR/sw.js" ]; then
   sed -i "s/__BUILD_TIMESTAMP__/$TIMESTAMP/g" "$BUILD_DIR/sw.js"
-  echo "[post-build] sw.js mis a jour"
+  echo "[post-build] sw.js mis a jour (version: $TIMESTAMP)"
 fi
 
-echo "[post-build] Cache-busting configure avec succes"
+# Verifier que offline.html est present dans le build
+if [ -f "$BUILD_DIR/offline.html" ]; then
+  echo "[post-build] offline.html present"
+else
+  echo "[post-build] ATTENTION: offline.html manquant!"
+fi
+
+echo "[post-build] Cache-busting + offline configure avec succes"

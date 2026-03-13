@@ -1,54 +1,135 @@
-// Service Worker FSAO Iris - Notifications push uniquement (pas de cache)
-// Ce SW ne met RIEN en cache. NGINX sert les fichiers statiques directement.
+// Service Worker FSAO Iris - Mode Offline Complet + Push Notifications
+// Gère le cache de l'App Shell, les assets statiques, et les notifications push.
 
 const SW_VERSION = '__BUILD_TIMESTAMP__';
+const CACHE_NAME = `fsao-iris-v${SW_VERSION}`;
+const STATIC_CACHE = `fsao-static-v${SW_VERSION}`;
 
-// Installation : prise de controle immediate
-self.addEventListener('install', () => {
+// Assets critiques à pré-cacher à l'installation
+const PRECACHE_URLS = [
+  '/',
+  '/index.html',
+  '/manifest.json',
+  '/offline.html',
+  '/logo-iris.png',
+  '/icon-192.png',
+  '/icon-512.png'
+];
+
+// Patterns à ne JAMAIS cacher dans le SW (gérés par IndexedDB/axios)
+const NETWORK_ONLY_PATTERNS = ['/api/', '/ws', '/socket', 'hot-update', '__webpack'];
+const isNetworkOnly = (url) => NETWORK_ONLY_PATTERNS.some(p => url.includes(p));
+
+// Assets statiques immutables (hashés par CRA)
+const isStaticAsset = (url) => url.includes('/static/');
+
+// ============ INSTALLATION ============
+self.addEventListener('install', (event) => {
   console.log('[SW] Install - version:', SW_VERSION);
-  self.skipWaiting();
+  event.waitUntil(
+    caches.open(CACHE_NAME)
+      .then(cache => {
+        console.log('[SW] Pre-caching app shell');
+        return cache.addAll(PRECACHE_URLS).catch(err => {
+          console.warn('[SW] Pre-cache partiel:', err);
+        });
+      })
+      .then(() => self.skipWaiting())
+  );
 });
 
-// Activation : nettoyage de TOUS les anciens caches et prise de controle
+// ============ ACTIVATION ============
 self.addEventListener('activate', (event) => {
   console.log('[SW] Activate - version:', SW_VERSION);
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
+    caches.keys().then(cacheNames => {
       return Promise.all(
-        cacheNames.map((name) => caches.delete(name))
+        cacheNames
+          .filter(name => name !== CACHE_NAME && name !== STATIC_CACHE)
+          .map(name => {
+            console.log('[SW] Suppression ancien cache:', name);
+            return caches.delete(name);
+          })
       );
     }).then(() => self.clients.claim())
   );
 });
 
-// Message handler
+// ============ MESSAGE HANDLER ============
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();
   }
 });
 
-// Fetch handler - PAS de cache
-// Navigation requests (HTML pages) : TOUJOURS reseau avec cache: 'no-store'
-// Autres requests : reseau direct
+// ============ FETCH HANDLER ============
 self.addEventListener('fetch', (event) => {
-  if (event.request.mode === 'navigate') {
-    // Force un fetch reseau sans cache HTTP pour les pages HTML
+  const url = event.request.url;
+
+  // 1. Requêtes API et WebSocket → réseau uniquement (IndexedDB gère le cache)
+  if (isNetworkOnly(url)) {
+    return;
+  }
+
+  // 2. Assets statiques (JS/CSS hashés) → Cache First (immutables)
+  if (isStaticAsset(url)) {
     event.respondWith(
-      fetch(event.request, { cache: 'no-store' }).catch(() => {
-        // Fallback si offline
-        return caches.match('/index.html') || new Response('Hors ligne', {
-          status: 503,
-          headers: { 'Content-Type': 'text/plain' }
-        });
+      caches.match(event.request).then(cached => {
+        if (cached) return cached;
+        return fetch(event.request).then(response => {
+          if (response.ok) {
+            const clone = response.clone();
+            caches.open(STATIC_CACHE).then(cache => cache.put(event.request, clone));
+          }
+          return response;
+        }).catch(() => caches.match('/offline.html'));
       })
     );
-  } else {
-    event.respondWith(fetch(event.request));
+    return;
   }
+
+  // 3. Navigation (pages HTML) → Network First, fallback cache, puis offline.html
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request)
+        .then(response => {
+          // Mettre en cache la page pour utilisation offline
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+          return response;
+        })
+        .catch(() => {
+          return caches.match(event.request)
+            .then(cached => cached || caches.match('/index.html'))
+            .then(cached => cached || caches.match('/offline.html'))
+            .then(cached => cached || new Response(
+              '<html><body><h1>Hors ligne</h1><p>Veuillez vous connecter au moins une fois pour activer le mode hors ligne.</p></body></html>',
+              { status: 503, headers: { 'Content-Type': 'text/html' } }
+            ));
+        })
+    );
+    return;
+  }
+
+  // 4. Autres ressources (images, fonts, etc.) → Stale While Revalidate
+  event.respondWith(
+    caches.match(event.request).then(cached => {
+      const fetchPromise = fetch(event.request).then(response => {
+        if (response.ok) {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+        }
+        return response;
+      }).catch(() => {
+        // Si pas en cache et pas de réseau, retourner undefined (laisse le cached ou rien)
+        return cached;
+      });
+      return cached || fetchPromise;
+    })
+  );
 });
 
-// Push notifications
+// ============ PUSH NOTIFICATIONS ============
 self.addEventListener('push', (event) => {
   let data = { title: 'FSAO Iris', body: 'Nouvelle notification', type: 'general' };
   try {
@@ -69,7 +150,7 @@ self.addEventListener('push', (event) => {
   event.waitUntil(self.registration.showNotification(data.title, options));
 });
 
-// Notification click
+// ============ NOTIFICATION CLICK ============
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const data = event.notification.data || {};

@@ -3,61 +3,97 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FSAO Iris - Hors ligne</title>
+  <title>FSAO Iris - Hors Ligne</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: #1e293b;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0f172a;
       color: #e2e8f0;
+      min-height: 100vh;
       display: flex;
       align-items: center;
       justify-content: center;
-      min-height: 100vh;
-      padding: 2rem;
     }
     .container {
       text-align: center;
-      max-width: 400px;
+      padding: 2rem;
+      max-width: 480px;
     }
     .icon {
-      font-size: 4rem;
-      margin-bottom: 1.5rem;
-      opacity: 0.6;
+      width: 80px;
+      height: 80px;
+      margin: 0 auto 1.5rem;
+      background: #1e293b;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 2px solid #334155;
     }
+    .icon svg { width: 40px; height: 40px; stroke: #f59e0b; fill: none; }
     h1 {
       font-size: 1.5rem;
+      font-weight: 700;
       margin-bottom: 0.75rem;
       color: #f8fafc;
     }
     p {
-      font-size: 1rem;
+      color: #94a3b8;
       line-height: 1.6;
-      opacity: 0.7;
-      margin-bottom: 2rem;
+      margin-bottom: 1rem;
+      font-size: 0.95rem;
     }
-    button {
+    .hint {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 1rem 1.25rem;
+      margin-top: 1.5rem;
+    }
+    .hint p { margin: 0; font-size: 0.85rem; color: #cbd5e1; }
+    .retry-btn {
+      margin-top: 1.5rem;
       background: #2563eb;
       color: white;
       border: none;
       padding: 0.75rem 2rem;
       border-radius: 8px;
       font-size: 1rem;
+      font-weight: 600;
       cursor: pointer;
       transition: background 0.2s;
     }
-    button:hover { background: #1d4ed8; }
+    .retry-btn:hover { background: #1d4ed8; }
+    .retry-btn:active { transform: scale(0.98); }
   </style>
 </head>
 <body>
   <div class="container">
-    <div class="icon">&#x1F50C;</div>
-    <h1>Connexion perdue</h1>
+    <div class="icon">
+      <svg viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="1" y1="1" x2="23" y2="23"/>
+        <path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/>
+        <path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/>
+        <path d="M10.71 5.05A16 16 0 0 1 22.56 9"/>
+        <path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/>
+        <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/>
+        <line x1="12" y1="20" x2="12.01" y2="20"/>
+      </svg>
+    </div>
+    <h1>Pas de connexion internet</h1>
     <p>
-      FSAO Iris n'est pas accessible pour le moment.
-      Verifiez votre connexion internet et reessayez.
+      L'application FSAO Iris necessite une premiere connexion pour activer le mode hors ligne.
     </p>
-    <button onclick="window.location.reload()">Reessayer</button>
+    <p>
+      Une fois connecte, toutes les pages visitees seront disponibles sans internet.
+    </p>
+    <div class="hint">
+      <p>Connectez-vous au WiFi ou activez les donnees mobiles, puis appuyez sur le bouton ci-dessous.</p>
+    </div>
+    <button class="retry-btn" onclick="window.location.reload()">
+      Reessayer
+    </button>
   </div>
 </body>
 </html>

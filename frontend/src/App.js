@@ -10,6 +10,8 @@ import { GuidedTourProvider } from "./contexts/GuidedTourContext";
 import { GuidedTour } from "./components/GuidedTour";
 import useVersionCheck from "./hooks/useVersionCheck";
 import PWABanner from "./components/shared/PWABanner";
+import OfflineBanner from "./components/Common/OfflineBanner";
+import GlobalToastListener from "./components/Common/GlobalToastListener";
 import { initOfflineSync } from "./services/offlineSync";
 import { cleanOldCache } from "./services/offlineDb";
 
@@ -130,31 +132,28 @@ function App() {
   // Detection automatique des mises a jour
   useVersionCheck();
 
-  // Register Service Worker for PWA (notifications push uniquement)
+  // Register Service Worker for PWA - Mode offline complet
   useEffect(() => {
     // Initialiser le service de synchronisation hors-ligne
     const cleanupSync = initOfflineSync();
-    // Nettoyer le cache ancien au démarrage
+    // Nettoyer le cache IndexedDB ancien au demarrage (>48h)
     cleanOldCache().catch(() => {});
 
-    // Nettoyage complet de tous les anciens caches (SW ou autre)
-    if ('caches' in window) {
-      caches.keys().then(names => {
-        names.forEach(name => caches.delete(name));
-      });
-    }
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js').then((registration) => {
-        // Vérifier les mises à jour du SW toutes les 60 secondes
+        // Verifier les mises a jour du SW toutes les 60 secondes
         setInterval(() => registration.update(), 60000);
-        // Quand un nouveau SW est détecté, forcer la prise de contrôle
+        // Quand un nouveau SW est detecte, forcer la prise de controle
         registration.addEventListener('updatefound', () => {
           const newWorker = registration.installing;
           if (newWorker) {
             newWorker.addEventListener('statechange', () => {
               if (newWorker.state === 'activated') {
-                console.log('[SW] Nouveau Service Worker activé, rechargement...');
-                window.location.reload();
+                console.log('[SW] Nouveau Service Worker active');
+                // Ne pas recharger automatiquement si hors-ligne
+                if (navigator.onLine) {
+                  window.location.reload();
+                }
               }
             });
           }
@@ -168,14 +167,59 @@ function App() {
       });
     }
 
+    // Ecouter les actions bloquees en mode offline pour afficher un toast
+    const handleOfflineBlocked = () => {
+      window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: {
+          title: 'Action non disponible',
+          description: 'Cette fonctionnalite necessite une connexion internet.',
+          variant: 'destructive'
+        }
+      }));
+    };
+
+    // Toast quand une mutation offline est mise en file d'attente
+    const handleOfflineQueued = (e) => {
+      const hasFiles = e.detail?._has_files;
+      window.dispatchEvent(new CustomEvent('show-toast', {
+        detail: {
+          title: 'Enregistre localement',
+          description: hasFiles
+            ? 'Les fichiers ont ete stockes et seront envoyes au retour en ligne.'
+            : 'L\'action sera synchronisee au retour en ligne.',
+        }
+      }));
+    };
+
+    // Toast de synchronisation terminee
+    const handleSyncComplete = (e) => {
+      const { synced, failed } = e.detail || {};
+      if (synced > 0) {
+        window.dispatchEvent(new CustomEvent('show-toast', {
+          detail: {
+            title: 'Synchronisation terminee',
+            description: `${synced} element(s) synchronise(s)${failed > 0 ? `, ${failed} en echec` : ''}.`,
+          }
+        }));
+      }
+    };
+
+    window.addEventListener('offline-action-blocked', handleOfflineBlocked);
+    window.addEventListener('offline-file-queued', handleOfflineQueued);
+    window.addEventListener('sync-complete', handleSyncComplete);
+
     return () => {
       if (cleanupSync) cleanupSync();
+      window.removeEventListener('offline-action-blocked', handleOfflineBlocked);
+      window.removeEventListener('offline-file-queued', handleOfflineQueued);
+      window.removeEventListener('sync-complete', handleSyncComplete);
     };
   }, []);
 
   return (
     <PreferencesProvider>
       <div className="App">
+        <OfflineBanner />
         <BrowserRouter>
           <Routes>
           <Route path="/login" element={<Login />} />
@@ -286,6 +330,7 @@ function App() {
         </Routes>
       </BrowserRouter>
       <Toaster />
+      <GlobalToastListener />
     </div>
     </PreferencesProvider>
   );

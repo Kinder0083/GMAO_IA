@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { BACKEND_URL } from '../utils/config';
-import { cacheApiResponse, getCachedResponse, addToSyncQueue } from './offlineDb';
+import { cacheApiResponse, getCachedResponse, addToSyncQueue, storeOfflineFile } from './offlineDb';
 
 const API_BASE = `${BACKEND_URL}/api`;
 
@@ -9,6 +9,39 @@ const CACHE_EXCLUDE_PATTERNS = ['/auth/', '/chat/', '/mqtt/', '/ai/chat', '/voic
 const shouldCache = (url) => {
   if (!url) return false;
   return !CACHE_EXCLUDE_PATTERNS.some(p => url.includes(p));
+};
+
+// URLs a ne pas mettre en queue offline (IA, websocket)
+const SKIP_QUEUE_PATTERNS = ['/ai/', '/chat/', '/mqtt/', '/voice/', '/websocket'];
+const shouldSkipQueue = (url) => {
+  if (!url) return true;
+  return SKIP_QUEUE_PATTERNS.some(p => url.includes(p));
+};
+
+/**
+ * Serialise un FormData en objets stockables dans IndexedDB.
+ * Les fichiers (File/Blob) sont stockes separement dans le fileStore.
+ */
+const serializeFormData = async (formData) => {
+  const fileRefs = [];
+  const formFields = {};
+
+  for (const [key, value] of formData.entries()) {
+    if (value instanceof File || value instanceof Blob) {
+      const fileId = `offline_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      await storeOfflineFile(fileId, value, {
+        name: value.name || 'file',
+        type: value.type || 'application/octet-stream',
+        size: value.size,
+        fieldName: key
+      });
+      fileRefs.push({ fileId, fieldName: key, name: value.name, type: value.type, size: value.size });
+    } else {
+      formFields[key] = value;
+    }
+  }
+
+  return { fileRefs, formFields };
 };
 
 // Axios instance avec intercepteurs
@@ -26,7 +59,7 @@ api.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
-    // Anti-cache : forcer le navigateur à ne jamais utiliser de réponse en cache
+    // Anti-cache : forcer le navigateur a ne jamais utiliser de reponse en cache HTTP
     config.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate';
     config.headers['Pragma'] = 'no-cache';
     return config;
@@ -34,10 +67,10 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Intercepteur pour gérer les réponses et le cache offline
+// Intercepteur pour gerer les reponses et le cache offline
 api.interceptors.response.use(
   (response) => {
-    // Cache les réponses GET réussies dans IndexedDB pour le mode hors-ligne
+    // Cache les reponses GET reussies dans IndexedDB pour le mode hors-ligne
     if (response.config.method === 'get' && shouldCache(response.config.url)) {
       const cacheKey = response.config.url + (response.config.params ? '?' + new URLSearchParams(response.config.params).toString() : '');
       cacheApiResponse(cacheKey, response.data).catch(() => {});
@@ -45,7 +78,7 @@ api.interceptors.response.use(
     return response;
   },
   async (error) => {
-    // 401 → déconnexion
+    // 401 -> deconnexion
     if (error.response?.status === 401) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
@@ -53,11 +86,11 @@ api.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    // Si hors-ligne (pas de réponse réseau)
+    // Si hors-ligne (pas de reponse reseau)
     if (!error.response && !navigator.onLine) {
       const config = error.config;
 
-      // GET → servir depuis le cache IndexedDB
+      // GET -> servir depuis le cache IndexedDB
       if (config.method === 'get' && shouldCache(config.url)) {
         const cacheKey = config.url + (config.params ? '?' + new URLSearchParams(config.params).toString() : '');
         const cached = await getCachedResponse(cacheKey);
@@ -67,16 +100,63 @@ api.interceptors.response.use(
         }
       }
 
-      // POST/PUT/DELETE → mettre en file d'attente de synchronisation
+      // POST/PUT/DELETE -> mettre en file d'attente de synchronisation
       if (['post', 'put', 'delete', 'patch'].includes(config.method)) {
-        // Ne pas mettre en queue les uploads de fichiers ou les appels IA
-        const skipQueue = config.headers?.['Content-Type']?.includes('multipart') || config.url?.includes('/ai/');
-        if (!skipQueue) {
+        if (shouldSkipQueue(config.url)) {
+          // Emettre un evenement pour afficher un toast dans l'UI
+          window.dispatchEvent(new CustomEvent('offline-action-blocked', {
+            detail: { url: config.url, method: config.method }
+          }));
+          return Promise.reject(error);
+        }
+
+        const isMultipart = config.data instanceof FormData;
+
+        if (isMultipart) {
+          // Upload de fichiers offline : stocker les fichiers dans IndexedDB
+          try {
+            const { fileRefs, formFields } = await serializeFormData(config.data);
+            await addToSyncQueue(
+              config.method,
+              config.url,
+              null,
+              { Authorization: config.headers?.Authorization },
+              fileRefs
+            );
+            // Stocker les formFields dans le syncQueue item
+            const db = (await import('./offlineDb')).getOfflineDb;
+            const idb = await db();
+            const items = await idb.getAllFromIndex('syncQueue', 'status', 'pending');
+            const lastItem = items[items.length - 1];
+            if (lastItem) {
+              lastItem.formFields = formFields;
+              await idb.put('syncQueue', lastItem);
+            }
+
+            console.log('[Offline] Upload fichier mis en attente:', fileRefs.length, 'fichier(s)');
+            window.dispatchEvent(new CustomEvent('offline-file-queued', { detail: { count: fileRefs.length } }));
+            return {
+              data: {
+                _offline_queued: true,
+                _has_files: true,
+                message: `${fileRefs.length} fichier(s) enregistre(s), sera synchronise au retour en ligne`
+              },
+              status: 202, config, headers: {}
+            };
+          } catch (e) {
+            console.error('[Offline] Erreur stockage fichier offline:', e);
+            return Promise.reject(error);
+          }
+        } else {
+          // Mutation JSON standard
           await addToSyncQueue(config.method, config.url, config.data, {
             Authorization: config.headers?.Authorization
           });
           console.log('[Offline] Mutation mise en file d\'attente:', config.method, config.url);
-          return { data: { _offline_queued: true, message: 'Action enregistree, sera synchronisee au retour en ligne' }, status: 202, config, headers: {} };
+          return {
+            data: { _offline_queued: true, message: 'Action enregistree, sera synchronisee au retour en ligne' },
+            status: 202, config, headers: {}
+          };
         }
       }
     }
