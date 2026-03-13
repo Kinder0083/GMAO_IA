@@ -86,6 +86,8 @@ export const useOverdueItems = () => {
             const items = await res.json();
             const overdue = items.filter(ir => {
               if (!ir.date_limite_desiree || ir.statut === 'TERMINE' || ir.statut === 'ANNULE' || ir.statut === 'REFUSE') return false;
+              // Exclure les DI converties en OT ou refusées
+              if (ir.work_order_id || ir.refused) return false;
               return new Date(ir.date_limite_desiree) < today;
             });
             if (overdue.length > 0) {
