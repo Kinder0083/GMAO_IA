@@ -113,6 +113,14 @@ Application GMAO (Gestion de Maintenance Assistee par Ordinateur) pour la gestio
 - **useOfflineCapabilities** : Hook de capacites disponibles selon le statut
 - **Testing** : 100% (iteration_127)
 
+### Phase 15 - Stockage Hors Ligne dans Sante Systeme + OfflineDisabled sur IA/Export
+- **Section SystemHealth** : Ajout d'une carte "Stockage Hors Ligne" avec KPIs (en attente, en echec, fichiers, espace), boutons Forcer sync et Vider cache, note explicative
+- **OfflineDisabled wrapper** applique sur 13 pages :
+  - IA : PurchaseHistory, PresquAccidentRapport, SurveillancePlan, Vendors, AnalyticsChecklistsPage, AISensorAnalysis
+  - Export : Journal, Reports, SurveillanceRapport, SurveillanceAIDashboard, IoTDashboard, MESReportsPage, ImportExportTab, Personnalisation
+- **Chat** : Avertissement offline dans ChatLive et icone WifiOff dans AIChatWidget
+- **Testing** : Screenshots OK (boutons visibles/cliquables en ligne, section Stockage Hors Ligne affichee)
+
 ### Phase 13 - Bug Fix: Affichage OT supprimé dans liste DI
 - **Probleme**: Quand un OT issu d'une DI est soft-deleted, le numero de l'OT restait affiché normalement dans la colonne "Ordre N°" de la liste des DI
 - **Fix Backend**: Modification de `GET /api/intervention-requests` pour vérifier si les OT liés sont soft-deleted via une requête batch sur `work_orders` avec `deleted_at`

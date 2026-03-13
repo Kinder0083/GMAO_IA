@@ -9,6 +9,7 @@ import CustomPeriodDialog from '../components/Common/CustomPeriodDialog';
 import TimeByCategoryChart from '../components/Reports/TimeByCategoryChart';
 import EquipmentPerformanceTree from '../components/Reports/EquipmentPerformanceTree';
 import UserTimeTrackingChart from '../components/Reports/UserTimeTrackingChart';
+import OfflineDisabled from '../components/Common/OfflineDisabled';
 
 const Reports = () => {
   const { toast } = useToast();
@@ -179,6 +180,7 @@ const Reports = () => {
             </Select>
           )}
           
+          <OfflineDisabled message="Export necessite une connexion">
           <Button 
             className="bg-blue-600 hover:bg-blue-700 text-white"
             onClick={handleExportReport}
@@ -186,6 +188,7 @@ const Reports = () => {
             <Download size={20} className="mr-2" />
             Exporter {userRole === 'ADMIN' ? exportFormat.toUpperCase() : 'PDF'}
           </Button>
+          </OfflineDisabled>
         </div>
       </div>
 

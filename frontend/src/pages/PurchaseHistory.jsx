@@ -8,6 +8,7 @@ import { useToast } from '../hooks/use-toast';
 import { useConfirmDialog } from '../components/ui/confirm-dialog';
 import PurchaseFormDialog from '../components/PurchaseHistory/PurchaseFormDialog';
 import AIPurchaseAnalyzer from '../components/AIPurchaseAnalyzer';
+import OfflineDisabled from '../components/Common/OfflineDisabled';
 import { ResponsiveBar } from '@nivo/bar';
 import { formatErrorMessage } from '../utils/errorFormatter';
 import { useNavigate } from 'react-router-dom';
@@ -212,6 +213,7 @@ const PurchaseHistory = () => {
           <p className="text-gray-600 mt-1">Gérez et analysez vos achats</p>
         </div>
         <div className="flex gap-2">
+          <OfflineDisabled>
           <Button
             variant="outline"
             className="border-purple-300 text-purple-700 hover:bg-purple-50"
@@ -220,6 +222,8 @@ const PurchaseHistory = () => {
           >
             <Brain size={16} className="mr-1" /> Analyse IA
           </Button>
+          </OfflineDisabled>
+          <OfflineDisabled>
           <Button
             variant="outline"
             className="border-amber-300 text-amber-700 hover:bg-amber-50"
@@ -228,6 +232,7 @@ const PurchaseHistory = () => {
           >
             <Archive size={16} className="mr-1" /> Archives IA
           </Button>
+          </OfflineDisabled>
           {currentUser?.role === 'ADMIN' && (
             <Button
               variant="outline"

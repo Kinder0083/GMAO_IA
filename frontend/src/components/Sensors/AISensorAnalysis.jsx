@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Button } from '../ui/button';
 import { Sparkles, ChevronDown, ChevronUp, Loader2, AlertTriangle, TrendingUp, TrendingDown, Minus, Shield } from 'lucide-react';
+import OfflineDisabled from '../Common/OfflineDisabled';
 
 export default function AISensorAnalysis({ sensorId, sensorsAPI }) {
   const [loading, setLoading] = useState(false);
@@ -24,9 +25,11 @@ export default function AISensorAnalysis({ sensorId, sensorsAPI }) {
 
   if (!data && !loading) {
     return (
+      <OfflineDisabled>
       <Button variant="outline" size="sm" onClick={runAnalysis} className="gap-2 text-violet-700 border-violet-200 hover:bg-violet-50" data-testid="ai-sensor-analyze-btn">
         <Sparkles className="h-4 w-4" /> Analyse predictive IA
       </Button>
+      </OfflineDisabled>
     );
   }
 

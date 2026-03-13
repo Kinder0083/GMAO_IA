@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useContext } from 'react';
-import { X, Send, Bot, User, Loader2, Trash2, Minimize2, Maximize2, Sparkles, Mic, MicOff, Volume2, VolumeX } from 'lucide-react';
+import { X, Send, Bot, User, Loader2, Trash2, Minimize2, Maximize2, Sparkles, Mic, MicOff, Volume2, VolumeX, WifiOff } from 'lucide-react';
 import { Button } from '../ui/button';
 import { usePreferences } from '../../contexts/PreferencesContext';
 import { useToast } from '../../hooks/use-toast';
@@ -8,6 +8,7 @@ import GuidedHighlight from './GuidedHighlight';
 import { AINavigationContext } from '../../contexts/AINavigationContext';
 import { executeCommand } from './adriaCommandHandlers';
 import useAdriaVoice from './useAdriaVoice';
+import useOnlineStatus from '../../hooks/useOnlineStatus';
 
 const QUICK_ACTIONS = [
   { id: 'creer-ot', label: 'Créer un OT', icon: '📋' },
@@ -44,6 +45,7 @@ const GUIDANCE_STEPS = {
 const AIChatWidget = ({ isOpen, onClose, initialContext = null, initialQuestion = null }) => {
   const { preferences } = usePreferences();
   const { toast } = useToast();
+  const { isOnline } = useOnlineStatus();
   const navigationContext = useContext(AINavigationContext);
   const executeAction = navigationContext?.executeAction;
   const navigateTo = navigationContext?.navigateTo;
@@ -261,6 +263,7 @@ const AIChatWidget = ({ isOpen, onClose, initialContext = null, initialQuestion 
             </div>
           </div>
           <div className="flex items-center gap-1">
+            {!isOnline && <div className="p-1.5 text-red-200" title="Hors ligne"><WifiOff size={14} /></div>}
             <button onClick={handleClearHistory} className="p-1.5 hover:bg-white/20 rounded transition-colors" title="Effacer l'historique" data-testid="adria-clear-btn"><Trash2 size={16} /></button>
             <button onClick={() => setMinimized(!minimized)} className="p-1.5 hover:bg-white/20 rounded transition-colors" data-testid="adria-minimize-btn">
               {minimized ? <Maximize2 size={16} /> : <Minimize2 size={16} />}

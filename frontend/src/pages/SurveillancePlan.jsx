@@ -20,6 +20,7 @@ import CalendarView from '../components/Surveillance/CalendarView';
 import SurveillanceItemForm from '../components/Surveillance/SurveillanceItemForm';
 import SurveillanceAIExtract from '../components/Surveillance/SurveillanceAIExtract';
 import CategoryOrderDialog from '../components/Surveillance/CategoryOrderDialog';
+import OfflineDisabled from '../components/Common/OfflineDisabled';
 
 function SurveillancePlan() {
   const { toast } = useToast();
@@ -306,9 +307,11 @@ function SurveillancePlan() {
           <Button variant="outline" size="icon" onClick={() => setShowSearch(!showSearch)} data-testid="toggle-search-btn">
             <Search className="h-4 w-4" />
           </Button>
+          <OfflineDisabled>
           <Button variant="outline" onClick={() => setOpenAIExtract(true)} data-testid="ai-extract-btn">
             <FileText className="mr-2 h-4 w-4" /> Analyse IA
           </Button>
+          </OfflineDisabled>
           <Button variant="outline" onClick={handleExportTemplate}>
             <Download className="mr-2 h-4 w-4" /> Template
           </Button>

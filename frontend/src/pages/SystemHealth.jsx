@@ -6,10 +6,12 @@ import { Alert, AlertDescription } from '../components/ui/alert';
 import {
   Activity, CheckCircle2, XCircle, AlertTriangle, RefreshCw,
   Shield, ShieldOff, Clock, HardDrive, Database, Cpu, Zap,
-  ChevronDown, ChevronUp, RotateCcw, Mail, Plus, X, Send, Bell, BellOff
+  ChevronDown, ChevronUp, RotateCcw, Mail, Plus, X, Send, Bell, BellOff,
+  Wifi, WifiOff, Trash2, Upload, FolderSync
 } from 'lucide-react';
 import { useToast } from '../hooks/use-toast';
 import api from '../services/api';
+import useOnlineStatus from '../hooks/useOnlineStatus';
 
 const LEVEL_CONFIG = {
   1: { name: 'SOFT', label: 'Restart services', color: '#22c55e', bg: '#f0fdf4' },
@@ -494,6 +496,9 @@ export default function SystemHealth() {
         </div>
       </div>
 
+      {/* ──── Stockage Hors Ligne Section ──── */}
+      <OfflineStorageSection />
+
       {/* ──── Alertes Email Section ──── */}
       <Card data-testid="health-alerts-card">
         <CardHeader className="py-3 px-4 border-b cursor-pointer select-none" onClick={() => setAlertsExpanded(e => !e)}>
@@ -623,6 +628,171 @@ export default function SystemHealth() {
         )}
       </Card>
     </div>
+  );
+}
+
+function OfflineStorageSection() {
+  const { toast } = useToast();
+  const {
+    isOnline,
+    lastSyncAt,
+    pendingSyncCount,
+    failedSyncCount,
+    syncInProgress,
+    storageInfo,
+    forceSyncNow
+  } = useOnlineStatus();
+  const [expanded, setExpanded] = useState(true);
+  const [clearing, setClearing] = useState(false);
+
+  const handleForceSync = async () => {
+    const result = await forceSyncNow();
+    if (result?.error) {
+      toast({ title: 'Erreur', description: result.error, variant: 'destructive' });
+    } else if (result?.synced > 0) {
+      toast({ title: 'Synchronisation terminee', description: `${result.synced} element(s) synchronise(s)` });
+    } else {
+      toast({ title: 'Rien a synchroniser' });
+    }
+  };
+
+  const handleClearCache = async () => {
+    if (!window.confirm('Supprimer toutes les donnees en cache hors ligne ?\n\nLes modifications non synchronisees seront perdues.')) return;
+    setClearing(true);
+    try {
+      const { getOfflineDb } = await import('../services/offlineDb');
+      const db = await getOfflineDb();
+      await db.clear('apiCache');
+      await db.clear('fileStore');
+      // Ne pas vider syncQueue si des items sont pending
+      if (pendingSyncCount === 0 && failedSyncCount === 0) {
+        await db.clear('syncQueue');
+      }
+      window.dispatchEvent(new Event('sync-queue-updated'));
+      toast({ title: 'Cache vide', description: 'Les donnees en cache ont ete supprimees' });
+    } catch (e) {
+      toast({ title: 'Erreur', description: 'Impossible de vider le cache', variant: 'destructive' });
+    } finally {
+      setClearing(false);
+    }
+  };
+
+  const handleRetryFailed = async () => {
+    try {
+      const { getFailedSyncItems, retrySyncItem } = await import('../services/offlineDb');
+      const failed = await getFailedSyncItems();
+      for (const item of failed) {
+        await retrySyncItem(item.id);
+      }
+      toast({ title: `${failed.length} element(s) remis en attente` });
+    } catch (e) {
+      toast({ title: 'Erreur', variant: 'destructive' });
+    }
+  };
+
+  const formatTime = (isoStr) => {
+    if (!isoStr) return 'Jamais';
+    try {
+      const d = new Date(isoStr);
+      return d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }) + ' ' +
+             d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    } catch { return isoStr; }
+  };
+
+  const totalPending = pendingSyncCount + failedSyncCount;
+
+  return (
+    <Card data-testid="offline-storage-card">
+      <CardHeader className="py-3 px-4 border-b cursor-pointer select-none" onClick={() => setExpanded(e => !e)}>
+        <CardTitle className="text-sm flex items-center justify-between">
+          <span className="flex items-center gap-2">
+            {isOnline ? <Wifi size={16} className="text-emerald-600" /> : <WifiOff size={16} className="text-red-500" />}
+            Stockage Hors Ligne
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+              isOnline ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'
+            }`}>
+              {isOnline ? 'EN LIGNE' : 'HORS LIGNE'}
+            </span>
+          </span>
+          {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+        </CardTitle>
+      </CardHeader>
+      {expanded && (
+        <CardContent className="p-4 space-y-5">
+          {/* Status Grid */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="bg-gray-50 rounded-lg p-3 text-center" data-testid="offline-pending-count">
+              <div className="text-2xl font-bold text-amber-600">{pendingSyncCount}</div>
+              <div className="text-xs text-gray-500 mt-0.5">En attente</div>
+            </div>
+            <div className="bg-gray-50 rounded-lg p-3 text-center" data-testid="offline-failed-count">
+              <div className={`text-2xl font-bold ${failedSyncCount > 0 ? 'text-red-600' : 'text-gray-400'}`}>{failedSyncCount}</div>
+              <div className="text-xs text-gray-500 mt-0.5">En echec</div>
+            </div>
+            <div className="bg-gray-50 rounded-lg p-3 text-center" data-testid="offline-files-count">
+              <div className="text-2xl font-bold text-blue-600">{storageInfo?.fileCount || 0}</div>
+              <div className="text-xs text-gray-500 mt-0.5">Fichiers stockes</div>
+            </div>
+            <div className="bg-gray-50 rounded-lg p-3 text-center" data-testid="offline-storage-size">
+              <div className="text-2xl font-bold text-violet-600">{storageInfo?.formattedSize || '0 o'}</div>
+              <div className="text-xs text-gray-500 mt-0.5">Espace utilise</div>
+            </div>
+          </div>
+
+          {/* Info */}
+          <div className="space-y-2">
+            <InfoRow label="Derniere synchronisation" value={formatTime(lastSyncAt)} />
+            <InfoRow label="Statut connexion" value={
+              <span className={`flex items-center gap-1.5 ${isOnline ? 'text-emerald-600' : 'text-red-600'}`}>
+                {isOnline ? <Wifi size={12} /> : <WifiOff size={12} />}
+                {isOnline ? 'Connecte' : 'Deconnecte'}
+              </span>
+            } />
+          </div>
+
+          {/* Actions */}
+          <div className="flex flex-wrap gap-2 pt-2 border-t">
+            <Button
+              size="sm" variant="outline" className="gap-1.5"
+              onClick={handleForceSync}
+              disabled={syncInProgress || !isOnline || totalPending === 0}
+              data-testid="force-sync-btn"
+            >
+              <FolderSync size={13} className={syncInProgress ? 'animate-spin' : ''} />
+              {syncInProgress ? 'Synchronisation...' : 'Forcer la synchronisation'}
+            </Button>
+            {failedSyncCount > 0 && (
+              <Button
+                size="sm" variant="outline" className="gap-1.5 text-amber-700 border-amber-300 hover:bg-amber-50"
+                onClick={handleRetryFailed}
+                data-testid="retry-failed-sync-btn"
+              >
+                <RotateCcw size={13} />
+                Reessayer les echecs ({failedSyncCount})
+              </Button>
+            )}
+            <Button
+              size="sm" variant="outline" className="gap-1.5 text-red-600 border-red-200 hover:bg-red-50"
+              onClick={handleClearCache}
+              disabled={clearing}
+              data-testid="clear-offline-cache-btn"
+            >
+              <Trash2 size={13} />
+              {clearing ? 'Nettoyage...' : 'Vider le cache'}
+            </Button>
+          </div>
+
+          {/* Explanatory note */}
+          <div className="bg-blue-50 border border-blue-100 rounded-lg p-3">
+            <p className="text-xs text-blue-700 leading-relaxed">
+              <strong>Mode hors ligne :</strong> L'application stocke automatiquement les pages visitees et les donnees consultees.
+              Les modifications (creation, edition, suppression) et les fichiers (photos, pieces jointes) sont enregistres
+              localement puis synchronises automatiquement au retour de la connexion internet.
+            </p>
+          </div>
+        </CardContent>
+      )}
+    </Card>
   );
 }
 

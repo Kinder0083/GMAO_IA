@@ -31,6 +31,7 @@ import { useToast } from '../hooks/use-toast';
 import SensorChart from '../components/Sensors/SensorChart';
 import AISensorAnalysis from '../components/Sensors/AISensorAnalysis';
 import { formatLocalDate as formatLocalDateUtil } from '../utils/dateUtils';
+import OfflineDisabled from '../components/Common/OfflineDisabled';
 
 const IoTDashboard = () => {
   const [sensorReadings, setSensorReadings] = useState({});
@@ -315,6 +316,7 @@ const IoTDashboard = () => {
         
         <div className="flex items-center gap-3">
           {/* Bouton Export Global */}
+          <OfflineDisabled message="Export necessite une connexion">
           <Button
             variant="outline"
             onClick={() => setExportDialogOpen(true)}
@@ -324,6 +326,7 @@ const IoTDashboard = () => {
             <Download size={18} />
             Exporter
           </Button>
+          </OfflineDisabled>
           
           {/* Sélecteur de période */}
           <select

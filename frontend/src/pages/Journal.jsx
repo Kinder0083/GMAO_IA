@@ -9,6 +9,7 @@ import { Calendar, Download, Filter, Search, User, FileText, RotateCcw } from 'l
 import { auditAPI } from '../services/api';
 import api from '../services/api';
 import { useToast } from '../hooks/use-toast';
+import OfflineDisabled from '../components/Common/OfflineDisabled';
 
 const Journal = () => {
   const { toast } = useToast();
@@ -198,14 +199,18 @@ const Journal = () => {
           <p className="text-gray-500 mt-1">Historique complet de toutes les actions dans le système</p>
         </div>
         <div className="flex gap-2">
+          <OfflineDisabled message="Export necessite une connexion">
           <Button onClick={() => handleExport('csv')} variant="outline">
             <Download className="w-4 h-4 mr-2" />
             Export CSV
           </Button>
+          </OfflineDisabled>
+          <OfflineDisabled message="Export necessite une connexion">
           <Button onClick={() => handleExport('excel')} variant="outline">
             <Download className="w-4 h-4 mr-2" />
             Export Excel
           </Button>
+          </OfflineDisabled>
         </div>
       </div>
 

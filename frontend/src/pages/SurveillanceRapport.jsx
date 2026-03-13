@@ -10,6 +10,7 @@ import { ResponsiveBar } from '@nivo/bar';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import * as XLSX from 'xlsx';
+import OfflineDisabled from '../components/Common/OfflineDisabled';
 
 const SurveillanceRapport = () => {
   const { toast } = useToast();
@@ -188,6 +189,7 @@ const SurveillanceRapport = () => {
           <p className="text-gray-600 mt-1">Statistiques et indicateurs de performance</p>
         </div>
         <div className="flex items-center gap-2">
+          <OfflineDisabled message="Export necessite une connexion">
           <Button
             variant="outline" size="sm"
             onClick={handleExportPDF}
@@ -197,6 +199,8 @@ const SurveillanceRapport = () => {
             {exporting === 'pdf' ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <FileDown className="h-4 w-4 mr-1" />}
             PDF
           </Button>
+          </OfflineDisabled>
+          <OfflineDisabled message="Export necessite une connexion">
           <Button
             variant="outline" size="sm"
             onClick={handleExportExcel}
@@ -206,6 +210,7 @@ const SurveillanceRapport = () => {
             {exporting === 'excel' ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <FileSpreadsheet className="h-4 w-4 mr-1" />}
             Excel
           </Button>
+          </OfflineDisabled>
           <span className="text-sm text-gray-600 font-medium ml-2">Mode :</span>
           <Select value={displayMode} onValueChange={setDisplayMode}>
             <SelectTrigger className="w-44" data-testid="display-mode-select">

@@ -48,6 +48,7 @@ import { useToast } from '../hooks/use-toast';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import AINonconformityAnalyzer from '../components/AINonconformityAnalyzer';
+import OfflineDisabled from '../components/Common/OfflineDisabled';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
 
@@ -346,6 +347,7 @@ const AnalyticsChecklistsPage = () => {
             <RefreshCw className="w-4 h-4" />
           </Button>
           
+          <OfflineDisabled>
           <Button 
             variant="outline" 
             size="sm" 
@@ -356,7 +358,9 @@ const AnalyticsChecklistsPage = () => {
             <Brain className="w-4 h-4 mr-2" />
             Analyse IA
           </Button>
+          </OfflineDisabled>
           
+          <OfflineDisabled message="Export PDF necessite une connexion">
           <Button 
             variant="default" 
             size="sm" 
@@ -372,6 +376,7 @@ const AnalyticsChecklistsPage = () => {
             )}
             Export PDF
           </Button>
+          </OfflineDisabled>
         </div>
       </div>
 

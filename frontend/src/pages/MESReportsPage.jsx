@@ -13,6 +13,7 @@ import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, 
   Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell
 } from 'recharts';
+import OfflineDisabled from '../components/Common/OfflineDisabled';
 
 const API = BACKEND_URL;
 const getHeaders = () => ({ Authorization: `Bearer ${localStorage.getItem('token')}` });
@@ -773,6 +774,7 @@ const MESReportsPage = () => {
         <>
           {/* Export Buttons */}
           <div className="flex items-center gap-3 justify-end">
+            <OfflineDisabled message="Export necessite une connexion">
             <button
               onClick={() => exportReport('excel')}
               disabled={exporting}
@@ -782,6 +784,8 @@ const MESReportsPage = () => {
               {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
               Export Excel
             </button>
+            </OfflineDisabled>
+            <OfflineDisabled message="Export necessite une connexion">
             <button
               onClick={() => exportReport('pdf')}
               disabled={exporting}
@@ -791,6 +795,7 @@ const MESReportsPage = () => {
               {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
               Export PDF
             </button>
+            </OfflineDisabled>
           </div>
 
           {/* Summary Cards */}

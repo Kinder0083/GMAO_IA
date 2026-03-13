@@ -28,6 +28,7 @@ import HeaderOrganizationSection from '../components/Personnalisation/HeaderOrga
 import DisplayPreferencesSection from '../components/Personnalisation/DisplayPreferencesSection';
 import DashboardSection from '../components/Personnalisation/DashboardSection';
 import AISection from '../components/Personnalisation/AISection';
+import OfflineDisabled from '../components/Common/OfflineDisabled';
 
 const Personnalisation = () => {
   const { preferences, updatePreferences, resetPreferences, loading } = usePreferences();
@@ -200,6 +201,7 @@ const Personnalisation = () => {
             </Button>
           </div>
 
+          <OfflineDisabled message="Export necessite une connexion">
           <Button
             variant="outline"
             onClick={handleExport}
@@ -208,6 +210,7 @@ const Personnalisation = () => {
             <Download size={16} />
             Exporter
           </Button>
+          </OfflineDisabled>
           <Button
             variant="outline"
             onClick={handleImport}

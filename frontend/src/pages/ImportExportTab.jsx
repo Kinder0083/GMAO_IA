@@ -9,6 +9,7 @@ import axios from 'axios';
 import { getBackendURL } from '../utils/config';
 import { formatErrorMessage } from '../utils/errorFormatter';
 import { modules, renderModuleOptions } from './importExportModules';
+import OfflineDisabled from '../components/Common/OfflineDisabled';
 
 const ImportExportTab = () => {
   const { toast } = useToast();
@@ -133,6 +134,7 @@ const ImportExportTab = () => {
                 </SelectContent>
               </Select>
             </div>
+            <OfflineDisabled message="Export necessite une connexion">
             <Button
               data-testid="export-button"
               onClick={handleExport}
@@ -142,6 +144,7 @@ const ImportExportTab = () => {
               <Download size={20} className="mr-2" />
               {exporting ? 'Export en cours...' : 'Exporter'}
             </Button>
+            </OfflineDisabled>
             {exportFormat === 'csv' && selectedModule === 'all' && (
               <p className="text-sm text-orange-600">Pour exporter toutes les données, utilisez le format Excel (XLSX)</p>
             )}

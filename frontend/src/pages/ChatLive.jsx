@@ -8,8 +8,10 @@ import { useToast } from '../hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
 import { usePermissions } from '../hooks/usePermissions';
 import api from '../services/api';
+import useOnlineStatus from '../hooks/useOnlineStatus';
 
 const ChatLive = () => {
+  const { isOnline } = useOnlineStatus();
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [onlineUsers, setOnlineUsers] = useState([]);
@@ -929,6 +931,14 @@ const ChatLive = () => {
 
   return (
     <div className="flex h-[calc(100vh-120px)] gap-4">
+      {!isOnline && (
+        <div className="absolute top-0 left-0 right-0 z-50 bg-amber-50 border-b border-amber-200 text-amber-800 px-4 py-3 text-center text-sm" data-testid="chat-offline-warning">
+          <div className="flex items-center justify-center gap-2">
+            <AlertTriangle size={16} />
+            <span>Le chat necessite une connexion internet. Les messages ne peuvent pas etre envoyes en mode hors ligne.</span>
+          </div>
+        </div>
+      )}
       {/* Zone principale du chat */}
       <Card className="flex-1 flex flex-col">
         {/* Header */}

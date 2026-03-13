@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { surveillanceAPI } from '../services/api';
 import { useToast } from '../hooks/use-toast';
+import OfflineDisabled from '../components/Common/OfflineDisabled';
 import { 
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, 
   Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend 
@@ -86,10 +87,12 @@ function TendancesTab({ analytics, alerts }) {
   return (
     <div className="space-y-6">
       <div className="flex justify-end">
+        <OfflineDisabled message="Export necessite une connexion">
         <Button onClick={exportPDF} disabled={exporting} variant="outline" size="sm" data-testid="export-pdf-btn">
           {exporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
           {exporting ? 'Generation...' : 'Export PDF'}
         </Button>
+        </OfflineDisabled>
       </div>
 
       <div ref={reportRef} className="space-y-6">

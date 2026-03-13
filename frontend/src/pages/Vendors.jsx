@@ -8,6 +8,7 @@ import VendorFormDialog from '../components/Vendors/VendorFormDialog';
 import VendorAIExtract from '../components/Vendors/VendorAIExtract';
 import { vendorsAPI } from '../services/api';
 import { useToast } from '../hooks/use-toast';
+import OfflineDisabled from '../components/Common/OfflineDisabled';
 import { useConfirmDialog } from '../components/ui/confirm-dialog';
 import { useVendors } from '../hooks/useVendors';
 
@@ -91,10 +92,12 @@ const Vendors = () => {
           <p className="text-gray-600 mt-1">Gérez vos fournisseurs et sous-traitants</p>
         </div>
         <div className="flex gap-2">
+          <OfflineDisabled>
           <Button variant="outline" className="border-blue-300 text-blue-600 hover:bg-blue-50" onClick={() => setAiExtractOpen(true)} data-testid="vendor-ai-btn">
             <Sparkles size={18} className="mr-2" />
             Analyse IA
           </Button>
+          </OfflineDisabled>
           <Button className="bg-blue-600 hover:bg-blue-700 text-white" onClick={() => {
             setSelectedVendor(null);
             setPrefillData(null);
