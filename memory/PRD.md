@@ -93,6 +93,26 @@ Application GMAO (Gestion de Maintenance Assistee par Ordinateur) pour la gestio
 
 ## Session 13 Mars 2026
 
+### Phase 14 - Mode Offline Complet PWA (Phases 1, 2, 3)
+
+#### Phase 1 - App Shell Caching
+- **Service Worker** reecrit (`sw.js`) : cache l'App Shell (HTML, JS, CSS, images, fonts)
+- **Strategies** : Network-First pour navigation, Cache-First pour assets statiques, Network-Only pour API
+- **offline.html** : Page de fallback quand l'app n'a jamais ete visitee en ligne
+- **Fix critique** : `App.js` supprimait TOUS les caches au demarrage — corrige
+
+#### Phase 2 - Sync donnees et fichiers offline
+- **IndexedDB v2** : Nouveau store `fileStore` pour photos/PJ offline
+- **Upload offline** : FormData serialises et stockes dans IndexedDB, sync au retour en ligne
+- **OfflineBanner** : Banniere persistante avec compteur, taille stockage, progression sync
+- **Toasts globaux** : Notifications pour actions bloquees, enregistrees, synchronisees
+
+#### Phase 3 - Experience utilisateur offline
+- **OfflineIndicator enrichi** : Derniere sync, fichiers stockes, force sync cliquable
+- **OfflineDisabled** : Composant wrapper pour desactiver les features IA/chat offline
+- **useOfflineCapabilities** : Hook de capacites disponibles selon le statut
+- **Testing** : 100% (iteration_127)
+
 ### Phase 13 - Bug Fix: Affichage OT supprimé dans liste DI
 - **Probleme**: Quand un OT issu d'une DI est soft-deleted, le numero de l'OT restait affiché normalement dans la colonne "Ordre N°" de la liste des DI
 - **Fix Backend**: Modification de `GET /api/intervention-requests` pour vérifier si les OT liés sont soft-deleted via une requête batch sur `work_orders` avec `deleted_at`
@@ -103,8 +123,9 @@ Application GMAO (Gestion de Maintenance Assistee par Ordinateur) pour la gestio
 ## Prioritized Backlog
 ### P0
 - (RESOLU) Miniatures photos dans formulaire modification OT
-- (RESOLU) Drag & Drop pièces jointes (OT, DI, Public DI)
-- (RESOLU) Affichage OT supprimé dans la liste DI
+- (RESOLU) Drag & Drop pieces jointes (OT, DI, Public DI)
+- (RESOLU) Affichage OT supprime dans la liste DI
+- (RESOLU) Mode Offline Complet PWA (App Shell, Sync fichiers, UX offline)
 
 ### P1
 - Validation utilisateur de tous les bugs DI/OT corriges
