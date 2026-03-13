@@ -300,7 +300,7 @@ async def get_surveillance_items(
 ):
     """Récupérer tous les items du plan de surveillance avec filtres"""
     try:
-        query = {}
+        query = {"deleted_at": {"$exists": False}}
         
         if category:
             query["category"] = category
@@ -493,7 +493,15 @@ async def delete_surveillance_item(
         if not item:
             raise HTTPException(status_code=404, detail="Item non trouvé")
         
-        await db.surveillance_items.delete_one({"id": item_id})
+        from datetime import datetime, timezone
+        await db.surveillance_items.update_one(
+            {"id": item_id},
+            {"$set": {
+                "deleted_at": datetime.now(timezone.utc),
+                "deleted_by": current_user["id"],
+                "deleted_by_name": f"{current_user['prenom']} {current_user['nom']}"
+            }}
+        )
         
         # Audit
         await audit_service.log_action(

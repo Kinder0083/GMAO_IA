@@ -12,6 +12,7 @@ import {
   QRActionsAdmin
 } from '../components/Settings';
 import FormAIModelSettings from '../components/Settings/FormAIModelSettings';
+import TrashSettings from '../components/Settings/TrashSettings';
 
 /**
  * Page de paramètres spéciaux / système
@@ -73,6 +74,9 @@ const SpecialSettings = () => {
 
           {/* Actions QR Code — Équipements */}
           <QRActionsAdmin />
+
+          {/* Corbeille — Delai de retention */}
+          <TrashSettings />
         </div>
       </div>
     </div>

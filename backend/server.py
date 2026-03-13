@@ -1210,11 +1210,11 @@ async def get_work_orders(
 ):
     """Liste tous les ordres de travail avec filtrage par date"""
     
-    query = {}
-    
+    query = {"deleted_at": {"$exists": False}}
+    date_field = "dateCreation" if date_type == "creation" else "dateLimite"
+
     # Filtrage par date
     if date_debut and date_fin:
-        date_field = "dateCreation" if date_type == "creation" else "dateLimite"
         query[date_field] = {
             "$gte": datetime.fromisoformat(date_debut),
             "$lte": datetime.fromisoformat(date_fin)
@@ -1713,7 +1713,14 @@ async def delete_work_order(wo_id: str, current_user: dict = Depends(require_per
         if not wo:
             raise HTTPException(status_code=404, detail="Ordre de travail non trouvé")
         
-        result = await db.work_orders.delete_one({"_id": ObjectId(wo_id)})
+        result = await db.work_orders.update_one(
+            {"_id": ObjectId(wo_id)},
+            {"$set": {
+                "deleted_at": datetime.now(timezone.utc),
+                "deleted_by": current_user["id"],
+                "deleted_by_name": f"{current_user.get('prenom', '')} {current_user.get('nom', '')}"
+            }}
+        )
         
         # Log dans l'audit
         await audit_service.log_action(
@@ -1969,7 +1976,7 @@ async def get_equipments(current_user: dict = Depends(get_current_user)):
     """
     from service_filter import apply_service_filter
     
-    query = {}
+    query = {"deleted_at": {"$exists": False}}
     # Appliquer le filtre par service pour les responsables de service
     query = await apply_service_filter(query, current_user, "service")
     
@@ -2572,8 +2579,15 @@ async def delete_equipment(eq_id: str, current_user: dict = Depends(require_perm
         equipment = await db.equipments.find_one({"_id": ObjectId(eq_id)})
         eq_name = equipment.get("nom", "Inconnu") if equipment else "Inconnu"
         
-        result = await db.equipments.delete_one({"_id": ObjectId(eq_id)})
-        if result.deleted_count == 0:
+        result = await db.equipments.update_one(
+            {"_id": ObjectId(eq_id)},
+            {"$set": {
+                "deleted_at": datetime.now(timezone.utc),
+                "deleted_by": current_user["id"],
+                "deleted_by_name": f"{current_user.get('prenom', '')} {current_user.get('nom', '')}"
+            }}
+        )
+        if result.matched_count == 0:
             raise HTTPException(status_code=404, detail="Équipement non trouvé")
         
         # Broadcast WebSocket pour la synchronisation temps réel
@@ -4021,7 +4035,7 @@ async def get_users(current_user: dict = Depends(get_current_user)):
                 detail="Vous n'avez pas la permission de voir les utilisateurs"
             )
     
-    users = await db.users.find().to_list(1000)
+    users = await db.users.find({"deleted_at": {"$exists": False}}).to_list(1000)
     result = []
     for user in users:
         doc = serialize_doc(user)
@@ -4117,8 +4131,15 @@ async def delete_user(user_id: str, current_user: dict = Depends(get_current_adm
         if str(user_id) == str(current_user.get('id')):
             raise HTTPException(status_code=400, detail="Vous ne pouvez pas vous supprimer vous-même")
         
-        result = await db.users.delete_one({"_id": ObjectId(user_id)})
-        if result.deleted_count == 0:
+        result = await db.users.update_one(
+            {"_id": ObjectId(user_id)},
+            {"$set": {
+                "deleted_at": datetime.now(timezone.utc),
+                "deleted_by": current_user["id"],
+                "deleted_by_name": f"{current_user.get('prenom', '')} {current_user.get('nom', '')}"
+            }}
+        )
+        if result.matched_count == 0:
             raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
         
         # Émettre l'événement WebSocket
@@ -7402,7 +7423,7 @@ def _clean_ir_attachments(req):
 async def get_all_intervention_requests(current_user: dict = Depends(require_permission("interventionRequests", "view"))):
     """Récupérer toutes les demandes d'intervention"""
     try:
-        query = {}
+        query = {"deleted_at": {"$exists": False}}
         
         requests = []
         async for req in db.intervention_requests.find(query).sort("date_creation", -1):
@@ -7588,7 +7609,14 @@ async def delete_intervention_request(request_id: str, current_user: dict = Depe
     
     req_title = req.get('titre', 'Sans titre')
     
-    await db.intervention_requests.delete_one({"id": request_id})
+    await db.intervention_requests.update_one(
+        {"id": request_id},
+        {"$set": {
+            "deleted_at": datetime.now(timezone.utc),
+            "deleted_by": current_user["id"],
+            "deleted_by_name": f"{current_user.get('prenom', '')} {current_user.get('nom', '')}"
+        }}
+    )
     
     # Broadcast WebSocket pour la synchronisation temps réel
     await realtime_manager.emit_event(
@@ -8125,12 +8153,12 @@ async def create_improvement_request(
 async def get_all_improvement_requests(current_user: dict = Depends(require_permission("improvementRequests", "view"))):
     """Récupérer toutes les demandes d'amélioration"""
     try:
-        query = {}
+        query = {"deleted_at": {"$exists": False}}
+            
         
         requests = []
         async for req in db.improvement_requests.find(query).sort("date_creation", -1):
             req_dict = serialize_doc(req)
-            
             # Enrichir avec les informations du créateur
             if req.get("created_by_id"):
                 creator = await db.users.find_one({"id": req["created_by_id"]})
@@ -8285,11 +8313,13 @@ async def delete_improvement_request(request_id: str, current_user: dict = Depen
     
     req_title = req.get('titre', 'Sans titre')
     
-    # Supprimer avec le même critère utilisé pour trouver
-    if req.get("id") == request_id:
-        await db.improvement_requests.delete_one({"id": request_id})
-    else:
-        await db.improvement_requests.delete_one({"_id": req["_id"]})
+    # Soft delete: marquer comme supprime au lieu de supprimer definitivement
+    soft_delete = {
+        "deleted_at": datetime.now(timezone.utc),
+        "deleted_by": current_user["id"],
+        "deleted_by_name": f"{current_user.get('prenom', '')} {current_user.get('nom', '')}"
+    }
+    await db.improvement_requests.update_one({"_id": req["_id"]}, {"$set": soft_delete})
     
     # Broadcast WebSocket pour la synchronisation temps réel
     await realtime_manager.emit_event(
@@ -10738,6 +10768,108 @@ from ai_maintenance_routes import router as ai_maintenance_router, init_ai_maint
 init_ai_maintenance_routes(db, audit_service)
 api_router.include_router(ai_maintenance_router)
 
+# Import and initialize Trash routes (corbeille)
+from trash_routes import init_trash_routes, purge_expired_trash, TRASH_COLLECTIONS, get_retention_days, TrashSettingsUpdate
+init_trash_routes(db)
+
+@api_router.get("/trash", tags=["Corbeille"])
+async def get_trash_items(collection: str = None, current_user: dict = Depends(get_current_user)):
+    try:
+        items = []
+        cols = {collection: TRASH_COLLECTIONS[collection]} if collection and collection in TRASH_COLLECTIONS else TRASH_COLLECTIONS
+        for col_name, col_info in cols.items():
+            name_field = col_info["name_field"]
+            cursor = db[col_name].find(
+                {"deleted_at": {"$ne": None, "$exists": True}},
+                {"_id": 1, "id": 1, name_field: 1, "deleted_at": 1, "deleted_by_name": 1, "numero": 1}
+            )
+            docs = await cursor.to_list(length=500)
+            for doc in docs:
+                doc_id = str(doc.get("id", doc.get("_id", "")))
+                deleted_at = doc["deleted_at"]
+                if isinstance(deleted_at, datetime):
+                    deleted_at = deleted_at.isoformat()
+                items.append({
+                    "id": doc_id,
+                    "collection": col_name,
+                    "collection_label": col_info["label"],
+                    "name": doc.get(name_field, "Sans nom"),
+                    "numero": doc.get("numero"),
+                    "deleted_at": deleted_at,
+                    "deleted_by_name": doc.get("deleted_by_name", "Inconnu"),
+                })
+        items.sort(key=lambda x: x["deleted_at"], reverse=True)
+        retention_days = await get_retention_days()
+        return {"items": items, "retention_days": retention_days}
+    except Exception as e:
+        logger.error(f"Erreur get_trash_items: {e}")
+        return {"items": [], "retention_days": 2}
+
+@api_router.post("/trash/{collection}/{item_id}/restore", tags=["Corbeille"])
+async def restore_trash_item(collection: str, item_id: str, current_user: dict = Depends(get_current_user)):
+    if collection not in TRASH_COLLECTIONS:
+        raise HTTPException(status_code=400, detail="Collection invalide")
+    query = {"id": item_id, "deleted_at": {"$ne": None, "$exists": True}}
+    doc = await db[collection].find_one(query)
+    if not doc:
+        try:
+            query = {"_id": ObjectId(item_id), "deleted_at": {"$ne": None, "$exists": True}}
+            doc = await db[collection].find_one(query)
+        except:
+            pass
+    if not doc:
+        raise HTTPException(status_code=404, detail="Element non trouve dans la corbeille")
+    await db[collection].update_one(
+        {"_id": doc["_id"]},
+        {"$unset": {"deleted_at": "", "deleted_by": "", "deleted_by_name": ""}}
+    )
+    name = doc.get(TRASH_COLLECTIONS[collection]["name_field"], "")
+    await audit_service.log_action(
+        user_id=current_user["id"],
+        user_name=f"{current_user.get('prenom', '')} {current_user.get('nom', '')}",
+        user_email=current_user["email"],
+        action=ActionType.CREATE,
+        entity_type=collection,
+        entity_id=item_id,
+        entity_name=name,
+        details="Restauration depuis la corbeille"
+    )
+    return {"message": "Element restaure avec succes", "name": name}
+
+@api_router.delete("/trash/{collection}/{item_id}", tags=["Corbeille"])
+async def permanent_delete_trash(collection: str, item_id: str, current_user: dict = Depends(get_current_admin_user)):
+    if collection not in TRASH_COLLECTIONS:
+        raise HTTPException(status_code=400, detail="Collection invalide")
+    query = {"id": item_id, "deleted_at": {"$ne": None, "$exists": True}}
+    doc = await db[collection].find_one(query)
+    if not doc:
+        try:
+            query = {"_id": ObjectId(item_id), "deleted_at": {"$ne": None, "$exists": True}}
+            doc = await db[collection].find_one(query)
+        except:
+            pass
+    if not doc:
+        raise HTTPException(status_code=404, detail="Element non trouve")
+    await db[collection].delete_one({"_id": doc["_id"]})
+    return {"message": "Element supprime definitivement"}
+
+@api_router.get("/trash/settings", tags=["Corbeille"])
+async def get_trash_settings_endpoint(current_user: dict = Depends(get_current_user)):
+    retention_days = await get_retention_days()
+    return {"retention_days": retention_days}
+
+@api_router.put("/trash/settings", tags=["Corbeille"])
+async def update_trash_settings_endpoint(settings: TrashSettingsUpdate, current_user: dict = Depends(get_current_admin_user)):
+    if settings.retention_days < 1 or settings.retention_days > 365:
+        raise HTTPException(status_code=400, detail="Le delai doit etre entre 1 et 365 jours")
+    await db.app_settings.update_one(
+        {"key": "trash_retention_days"},
+        {"$set": {"key": "trash_retention_days", "value": settings.retention_days}},
+        upsert=True
+    )
+    return {"message": "Parametres mis a jour", "retention_days": settings.retention_days}
+
+
 from ai_presqu_accident_routes import router as ai_pa_router, init_ai_pa_routes
 init_ai_pa_routes(db, audit_service)
 api_router.include_router(ai_pa_router)
@@ -11395,6 +11527,18 @@ async def create_notification_indexes():
         logger.info("Indexes device_tokens et push_receipts crees avec succes")
     except Exception as e:
         logger.warning(f"Erreur creation indexes: {e}")
+
+
+
+@app.on_event("startup")
+async def start_trash_purge_scheduler():
+    """Demarre le cron job de purge de la corbeille toutes les 12h"""
+    try:
+        from trash_routes import purge_expired_trash
+        scheduler.add_job(purge_expired_trash, CronTrigger(hour="0,12"), id="trash_purge", replace_existing=True)
+        logger.info("Cron job purge corbeille demarre (toutes les 12h)")
+    except Exception as e:
+        logger.warning(f"Erreur demarrage cron purge corbeille: {e}")
 
 
 

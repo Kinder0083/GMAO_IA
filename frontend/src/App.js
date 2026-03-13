@@ -48,6 +48,7 @@ import PurchaseRequests from "./pages/PurchaseRequests";
 import PurchaseRequestDetail from "./pages/PurchaseRequestDetail";
 import Updates from "./pages/Updates";
 import Journal from "./pages/Journal";
+import Trash from "./pages/Trash";
 import Meters from "./pages/Meters";
 import InterventionRequests from "./pages/InterventionRequests";
 import ImprovementRequests from "./pages/ImprovementRequests";
@@ -241,6 +242,7 @@ function App() {
             <Route path="special-settings" element={<SpecialSettings />} />
             <Route path="updates" element={<Updates />} />
             <Route path="journal" element={<Journal />} />
+            <Route path="trash" element={<Trash />} />
             <Route path="meters" element={<Meters />} />
             <Route path="intervention-requests" element={<InterventionRequests />} />
             <Route path="improvement-requests" element={<ImprovementRequests />} />

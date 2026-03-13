@@ -5,8 +5,9 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, Download, Filter, Search, User, FileText } from 'lucide-react';
+import { Calendar, Download, Filter, Search, User, FileText, RotateCcw } from 'lucide-react';
 import { auditAPI } from '../services/api';
+import api from '../services/api';
 import { useToast } from '../hooks/use-toast';
 
 const Journal = () => {
@@ -24,6 +25,40 @@ const Journal = () => {
     limit: 50,
     total: 0
   });
+
+  // Mapping audit entity_type -> collection MongoDB pour la restauration
+  const entityToCollection = {
+    'WORK_ORDER': 'work_orders',
+    'work_orders': 'work_orders',
+    'IMPROVEMENT_REQUEST': 'improvement_requests',
+    'IMPROVEMENT': 'improvement_requests',
+    'improvement_requests': 'improvement_requests',
+    'INTERVENTION_REQUEST': 'intervention_requests',
+    'intervention_requests': 'intervention_requests',
+    'EQUIPMENT': 'equipments',
+    'equipments': 'equipments',
+    'PRESQU_ACCIDENT': 'presqu_accident_items',
+    'presqu_accident_items': 'presqu_accident_items',
+    'USER': 'users',
+    'users': 'users',
+    'SURVEILLANCE': 'surveillance_items',
+    'surveillance_items': 'surveillance_items',
+  };
+
+  const handleRestore = async (log) => {
+    const collection = entityToCollection[log.entity_type];
+    if (!collection || !log.entity_id) {
+      toast({ title: 'Erreur', description: 'Impossible de restaurer cet element', variant: 'destructive' });
+      return;
+    }
+    try {
+      await api.post(`/trash/${collection}/${log.entity_id}/restore`);
+      toast({ title: 'Restaure', description: `"${log.entity_name || ''}" a ete restaure avec succes` });
+    } catch (err) {
+      const msg = err.response?.data?.detail || 'Impossible de restaurer (element peut-etre deja restaure ou purge)';
+      toast({ title: 'Erreur', description: msg, variant: 'destructive' });
+    }
+  };
 
   const actionTypes = {
     CREATE: { label: 'Création', color: 'bg-green-500' },
@@ -296,9 +331,22 @@ const Journal = () => {
                         </span>
                       </TableCell>
                       <TableCell className="max-w-md">
-                        <span className="text-sm text-gray-600">
-                          {log.details || '-'}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm text-gray-600 flex-1">
+                            {log.details || '-'}
+                          </span>
+                          {log.action === 'DELETE' && entityToCollection[log.entity_type] && log.entity_id && (
+                            <button
+                              onClick={() => handleRestore(log)}
+                              className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded-md hover:bg-green-100 transition-colors whitespace-nowrap"
+                              data-testid={`journal-restore-${log.entity_id}`}
+                              title="Restaurer depuis la corbeille"
+                            >
+                              <RotateCcw size={12} />
+                              Restaurer
+                            </button>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}

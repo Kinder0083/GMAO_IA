@@ -16,7 +16,8 @@ import {
   Palette,
   Folder,
   Database,
-  Activity
+  Activity,
+  Trash2
 } from 'lucide-react';
 import { iconMap } from './menuConfig';
 import api from '../../services/api';
@@ -332,7 +333,18 @@ const Sidebar = ({
                 {sidebarOpen && <span className="text-sm font-medium">Journal</span>}
               </button>
               <button
-                onClick={() => navigate('/ssh')}
+                onClick={() => navigate('/trash')}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${!sidebarOpen ? 'justify-center px-2' : ''}`}
+                style={getSidebarButtonStyle(location.pathname === '/trash')}
+                onMouseEnter={(e) => handleSidebarButtonHover(e, location.pathname === '/trash')}
+                onMouseLeave={(e) => handleSidebarButtonLeave(e, location.pathname === '/trash')}
+                title={!sidebarOpen ? 'Corbeille' : ''}
+                data-testid="sidebar-trash"
+              >
+                <Trash2 size={20} className="flex-shrink-0" />
+                {sidebarOpen && <span className="text-sm font-medium">Corbeille</span>}
+              </button>
+              <button
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${!sidebarOpen ? 'justify-center px-2' : ''}`}
                 style={getSidebarButtonStyle(location.pathname === '/ssh')}
                 onMouseEnter={(e) => handleSidebarButtonHover(e, location.pathname === '/ssh')}

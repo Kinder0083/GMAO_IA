@@ -53,7 +53,7 @@ async def get_presqu_accident_items(
     from service_filter import apply_service_filter
     
     try:
-        query = {}
+        query = {"deleted_at": {"$exists": False}}
         
         if service:
             query["service"] = service
@@ -381,7 +381,15 @@ async def delete_presqu_accident_item(
         if not item:
             raise HTTPException(status_code=404, detail="Presqu'accident non trouvé")
         
-        await db.presqu_accident_items.delete_one({"id": item_id})
+        from datetime import datetime, timezone
+        await db.presqu_accident_items.update_one(
+            {"id": item_id},
+            {"$set": {
+                "deleted_at": datetime.now(timezone.utc),
+                "deleted_by": current_user["id"],
+                "deleted_by_name": f"{current_user['prenom']} {current_user['nom']}"
+            }}
+        )
         
         # Audit
         await audit_service.log_action(
