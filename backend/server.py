@@ -6273,10 +6273,15 @@ async def get_user_time_tracking(
         today = now.replace(hour=0, minute=0, second=0, microsecond=0)
         
         if period == "daily":
-            date_start = today
+            # Afficher les 14 derniers jours, un point par jour
+            date_start = today - timedelta(days=13)
             date_end = today + timedelta(days=1) - timedelta(seconds=1)
-            time_labels = [f"{h}h" for h in range(24)]
-            group_by = "hour"
+            time_labels = []
+            for i in range(14):
+                d = date_start + timedelta(days=i)
+                day_names = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"]
+                time_labels.append(f"{day_names[d.weekday()]} {d.day:02d}/{d.month:02d}")
+            group_by = "dayIndex"
         elif period == "weekly":
             # Début de la semaine (lundi)
             days_since_monday = today.weekday()
@@ -6358,52 +6363,61 @@ async def get_user_time_tracking(
         for user_id in users_info.keys():
             user_data = {cat: [0] * len(time_labels) for cat in selected_categories}
             
-            # Requête pour les ordres de travail - basée sur time_entries (qui a saisi le temps)
+            # Requête pour les ordres de travail - basée sur assigne_a_id (à qui l'OT est assigné)
             wo_categories = [cat for cat in selected_categories if cat != "AMELIORATIONS"]
             if wo_categories:
-                # Chercher les OT qui ont des time_entries pour cet utilisateur dans la période
+                # Chercher les OT assignés à cet utilisateur OU dont les time_entries sont de cet utilisateur (si non assigné)
                 wo_match = {
                     "categorie": {"$in": wo_categories},
                     "time_entries": {
                         "$elemMatch": {
-                            "user_id": user_id,
                             "timestamp": {"$gte": date_start, "$lte": date_end}
                         }
-                    }
+                    },
+                    "$or": [
+                        {"assigne_a_id": user_id},
+                        {"assigne_a_id": {"$in": [None, ""]}, "time_entries": {"$elemMatch": {"user_id": user_id, "timestamp": {"$gte": date_start, "$lte": date_end}}}}
+                    ]
                 }
                 
-                wo_cursor = db.work_orders.find(wo_match, {"categorie": 1, "time_entries": 1})
+                wo_cursor = db.work_orders.find(wo_match, {"categorie": 1, "time_entries": 1, "assigne_a_id": 1})
                 async for wo in wo_cursor:
                     category = wo.get("categorie")
                     time_entries = wo.get("time_entries", [])
+                    wo_assigne = wo.get("assigne_a_id")
                     if category and time_entries:
                         for entry in time_entries:
-                            # Ne compter que les entrées de cet utilisateur dans la période
-                            if entry.get("user_id") == user_id:
-                                entry_timestamp = entry.get("timestamp")
-                                if entry_timestamp and date_start <= entry_timestamp <= date_end:
+                            entry_timestamp = entry.get("timestamp")
+                            if entry_timestamp and date_start <= entry_timestamp <= date_end:
+                                # Si l'OT est assigné à cet utilisateur, compter toutes les entrées de temps
+                                # Si non assigné, ne compter que les entrées saisies par cet utilisateur
+                                if wo_assigne == user_id or (not wo_assigne and entry.get("user_id") == user_id):
                                     idx = get_time_index(entry_timestamp, date_start, group_by, len(time_labels))
                                     if 0 <= idx < len(time_labels) and category in user_data:
                                         user_data[category][idx] += entry.get("hours", 0)
             
-            # Requête pour les améliorations - basée sur time_entries
+            # Requête pour les améliorations - basée sur assigne_a_id ou time_entries.user_id
             if "AMELIORATIONS" in selected_categories:
                 imp_match = {
                     "time_entries": {
                         "$elemMatch": {
-                            "user_id": user_id,
                             "timestamp": {"$gte": date_start, "$lte": date_end}
                         }
-                    }
+                    },
+                    "$or": [
+                        {"assigne_a_id": user_id},
+                        {"assigne_a_id": {"$in": [None, ""]}, "time_entries": {"$elemMatch": {"user_id": user_id, "timestamp": {"$gte": date_start, "$lte": date_end}}}}
+                    ]
                 }
                 
-                imp_cursor = db.improvements.find(imp_match, {"time_entries": 1})
+                imp_cursor = db.improvements.find(imp_match, {"time_entries": 1, "assigne_a_id": 1})
                 async for imp in imp_cursor:
                     time_entries = imp.get("time_entries", [])
+                    imp_assigne = imp.get("assigne_a_id")
                     for entry in time_entries:
-                        if entry.get("user_id") == user_id:
-                            entry_timestamp = entry.get("timestamp")
-                            if entry_timestamp and date_start <= entry_timestamp <= date_end:
+                        entry_timestamp = entry.get("timestamp")
+                        if entry_timestamp and date_start <= entry_timestamp <= date_end:
+                            if imp_assigne == user_id or (not imp_assigne and entry.get("user_id") == user_id):
                                 idx = get_time_index(entry_timestamp, date_start, group_by, len(time_labels))
                                 if 0 <= idx < len(time_labels):
                                     user_data["AMELIORATIONS"][idx] += entry.get("hours", 0)
@@ -6452,6 +6466,8 @@ def get_time_index(date, start_date, group_by, max_len):
         return date.hour
     elif group_by == "dayOfWeek":
         return date.weekday()
+    elif group_by == "dayIndex":
+        return (date.replace(hour=0, minute=0, second=0, microsecond=0) - start_date.replace(hour=0, minute=0, second=0, microsecond=0)).days
     elif group_by == "dayOfMonth":
         return (date - start_date).days
     elif group_by == "month":

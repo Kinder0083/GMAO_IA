@@ -128,6 +128,13 @@ Application GMAO (Gestion de Maintenance Assistee par Ordinateur) pour la gestio
 - **Modèle**: Ajout du champ `is_work_order_deleted: Optional[bool] = False` au modèle `InterventionRequest`
 - **Testing**: Backend curl validé (flag correct), Frontend screenshot validé (texte barré visible)
 
+### Phase 16 - Bug Fix: Pointage horaire - heures attribuees a la mauvaise personne
+- **Probleme**: Dans le rapport "Pointage horaire du personnel", toutes les heures etaient attribuees a la meme personne (celui qui avait saisi le temps), meme quand les OT etaient assignes a des personnes differentes
+- **Cause racine**: L'endpoint `GET /api/reports/user-time-tracking` utilisait `time_entries.user_id` (qui a SAISI le temps) au lieu de `assigne_a_id` (a qui l'OT est ASSIGNE) pour attribuer les heures
+- **Fix**: Modification de la requete MongoDB pour utiliser `assigne_a_id` comme critere principal d'attribution. Fallback sur `time_entries.user_id` uniquement pour les OT non assignes
+- **Fichier**: `backend/server.py` (endpoint `get_user_time_tracking`, lignes ~6360-6420)
+- **Testing**: Backend curl valide (heures correctement reparties entre Axel 3h et flo 2.5h)
+
 ## Prioritized Backlog
 ### P0
 - (RESOLU) Miniatures photos dans formulaire modification OT
@@ -135,6 +142,7 @@ Application GMAO (Gestion de Maintenance Assistee par Ordinateur) pour la gestio
 - (RESOLU) Affichage OT supprime dans la liste DI
 - (RESOLU) Mode Offline Complet PWA (App Shell, Sync fichiers, UX offline)
 - (RESOLU) Bug reinitialisation permissions par defaut (mutation d'objets imbriques)
+- (RESOLU) Bug pointage horaire - heures attribuees a la mauvaise personne
 
 ### P1
 - Validation utilisateur de tous les bugs DI/OT corriges
