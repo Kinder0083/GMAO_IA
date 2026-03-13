@@ -13,6 +13,15 @@ Application GMAO (Gestion de Maintenance Assistee par Ordinateur) pour la gestio
 
 ## Session 12 Mars 2026
 
+### Phase 12 - Corbeille avec Soft Delete et Restauration
+- **Soft Delete**: Les suppressions d'OT, ameliorations, DI, equipements, presqu'accidents, utilisateurs et surveillance marquent les items au lieu de les supprimer
+- **Page Corbeille** (`/trash`): Liste les elements supprimes avec Restaurer/Supprimer definitivement
+- **Bouton Restaurer dans le Journal**: A cote de chaque entree de suppression
+- **Parametres Speciaux**: Section "Corbeille" avec delai de retention configurable (defaut 2j)
+- **Cron job**: Purge automatique toutes les 12h
+- **Testing**: 100% (iteration_126)
+
+
 ### Phase 11 - Drag & Drop pour pièces jointes (3 formulaires)
 - **Fonctionnalité**: Zone de glisser-déposer ajoutée aux 3 formulaires de l'application
   - Formulaire OT (WorkOrderFormDialog.jsx) - `data-testid="wo-drop-zone"`
