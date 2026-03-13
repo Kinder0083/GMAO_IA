@@ -1364,6 +1364,7 @@ class InterventionRequest(BaseModel):
     refused_at: Optional[datetime] = None
     refused_by: Optional[str] = None
     refused_by_name: Optional[str] = None
+    is_work_order_deleted: Optional[bool] = False
 
 class InterventionRequestCreate(BaseModel):
     titre: str

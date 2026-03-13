@@ -424,6 +424,15 @@ const InterventionRequests = () => {
                             </TooltipContent>
                           </Tooltip>
                         ) : req.work_order_numero ? (
+                          req.is_work_order_deleted ? (
+                            <span 
+                              className="text-gray-400 line-through cursor-default"
+                              data-testid={`di-ot-deleted-${req.id}`}
+                              title="L'ordre de travail a été supprimé"
+                            >
+                              OT #{req.work_order_numero}
+                            </span>
+                          ) : (
                           <span 
                             className="text-blue-600 font-medium cursor-pointer hover:underline"
                             onClick={() => handleWorkOrderClick(req.work_order_id)}
@@ -431,6 +440,7 @@ const InterventionRequests = () => {
                           >
                             #{req.work_order_numero}
                           </span>
+                          )
                         ) : (
                           <span className="text-gray-400">-</span>
                         )}

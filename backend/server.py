@@ -7425,9 +7425,28 @@ async def get_all_intervention_requests(current_user: dict = Depends(require_per
     try:
         query = {"deleted_at": {"$exists": False}}
         
-        requests = []
+        # Collecter les work_order_ids pour vérifier les OT supprimés en un seul appel
+        all_reqs = []
+        wo_ids = set()
         async for req in db.intervention_requests.find(query).sort("date_creation", -1):
             req = _clean_ir_attachments(req)
+            if req.get("work_order_id"):
+                wo_ids.add(req["work_order_id"])
+            all_reqs.append(req)
+        
+        # Vérifier quels OT liés sont soft-deleted
+        deleted_wo_ids = set()
+        if wo_ids:
+            async for wo in db.work_orders.find(
+                {"id": {"$in": list(wo_ids)}, "deleted_at": {"$exists": True}},
+                {"id": 1, "_id": 0}
+            ):
+                deleted_wo_ids.add(wo["id"])
+        
+        requests = []
+        for req in all_reqs:
+            if req.get("work_order_id") and req["work_order_id"] in deleted_wo_ids:
+                req["is_work_order_deleted"] = True
             requests.append(InterventionRequest(**req))
         return requests
     except Exception as e:

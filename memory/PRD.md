@@ -91,10 +91,20 @@ Application GMAO (Gestion de Maintenance Assistee par Ordinateur) pour la gestio
 - 12 modules ajoutes a PermissionsGrid, selection equipement hierarchique, endpoints PJ
 - Testing: 100%
 
+## Session 13 Mars 2026
+
+### Phase 13 - Bug Fix: Affichage OT supprimé dans liste DI
+- **Probleme**: Quand un OT issu d'une DI est soft-deleted, le numero de l'OT restait affiché normalement dans la colonne "Ordre N°" de la liste des DI
+- **Fix Backend**: Modification de `GET /api/intervention-requests` pour vérifier si les OT liés sont soft-deleted via une requête batch sur `work_orders` avec `deleted_at`
+- **Fix Frontend**: Affichage "~~OT #XXXX~~" (texte barré gris) au lieu du lien bleu cliquable quand `is_work_order_deleted=true`
+- **Modèle**: Ajout du champ `is_work_order_deleted: Optional[bool] = False` au modèle `InterventionRequest`
+- **Testing**: Backend curl validé (flag correct), Frontend screenshot validé (texte barré visible)
+
 ## Prioritized Backlog
 ### P0
 - (RESOLU) Miniatures photos dans formulaire modification OT
 - (RESOLU) Drag & Drop pièces jointes (OT, DI, Public DI)
+- (RESOLU) Affichage OT supprimé dans la liste DI
 
 ### P1
 - Validation utilisateur de tous les bugs DI/OT corriges
