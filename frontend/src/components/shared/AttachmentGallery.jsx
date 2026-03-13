@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { X, ChevronLeft, ChevronRight, FileText, Film, File, Loader2 } from 'lucide-react';
 
 const AttachmentGallery = ({ attachments, downloadFunction, itemId }) => {
@@ -184,7 +185,7 @@ const AttachmentGallery = ({ attachments, downloadFunction, itemId }) => {
         ))}
       </div>
 
-      {lightbox.open && (
+      {lightbox.open && createPortal(
         <div
           className="fixed inset-0 z-[9999] bg-black/90 flex items-center justify-center"
           onClick={(e) => { if (e.target === e.currentTarget) closeLightbox(); }}
@@ -228,7 +229,8 @@ const AttachmentGallery = ({ attachments, downloadFunction, itemId }) => {
           <div className="flex items-center justify-center">
             {renderLightboxContent()}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );
