@@ -6357,67 +6357,99 @@ async def get_user_time_tracking(
                 "name": current_user.get("name", current_user.get("email", "Moi"))
             }
         
+        # Phase 1 : Découvrir automatiquement tous les utilisateurs ayant pointé du temps dans la période
+        # Cela permet d'afficher par défaut tous les utilisateurs actifs, pas seulement celui connecté
+        auto_discovered_user_ids = set()
+        
+        wo_discovery_match = {
+            "time_entries": {
+                "$elemMatch": {
+                    "timestamp": {"$gte": date_start, "$lte": date_end}
+                }
+            }
+        }
+        wo_disc_cursor = db.work_orders.find(wo_discovery_match, {"time_entries": 1})
+        async for wo in wo_disc_cursor:
+            for entry in wo.get("time_entries", []):
+                ts = entry.get("timestamp")
+                if ts and date_start <= ts <= date_end:
+                    uid = entry.get("user_id")
+                    if uid:
+                        auto_discovered_user_ids.add(uid)
+        
+        imp_disc_cursor = db.improvements.find(wo_discovery_match, {"time_entries": 1})
+        async for imp in imp_disc_cursor:
+            for entry in imp.get("time_entries", []):
+                ts = entry.get("timestamp")
+                if ts and date_start <= ts <= date_end:
+                    uid = entry.get("user_id")
+                    if uid:
+                        auto_discovered_user_ids.add(uid)
+        
+        # Si pas de user_ids explicitement demandés, remplacer par UNIQUEMENT les utilisateurs ayant des heures
+        if not user_ids and can_view_others and auto_discovered_user_ids:
+            users_info = {}
+            for uid in auto_discovered_user_ids:
+                try:
+                    user_doc = await db.users.find_one({"_id": ObjectId(uid)}, {"_id": 1, "nom": 1, "prenom": 1, "email": 1})
+                    if user_doc:
+                        users_info[uid] = {
+                            "id": uid,
+                            "name": f"{user_doc.get('prenom', '')} {user_doc.get('nom', '')}".strip() or user_doc.get('email', 'Inconnu')
+                        }
+                except:
+                    pass
+        
         # Construire les données pour chaque utilisateur
         results = {}
         
         for user_id in users_info.keys():
             user_data = {cat: [0] * len(time_labels) for cat in selected_categories}
             
-            # Requête pour les ordres de travail - basée sur assigne_a_id (à qui l'OT est assigné)
+            # Requête pour les ordres de travail - basée sur time_entries.user_id (qui a pointé le temps)
             wo_categories = [cat for cat in selected_categories if cat != "AMELIORATIONS"]
             if wo_categories:
-                # Chercher les OT assignés à cet utilisateur OU dont les time_entries sont de cet utilisateur (si non assigné)
                 wo_match = {
                     "categorie": {"$in": wo_categories},
                     "time_entries": {
                         "$elemMatch": {
+                            "user_id": user_id,
                             "timestamp": {"$gte": date_start, "$lte": date_end}
                         }
-                    },
-                    "$or": [
-                        {"assigne_a_id": user_id},
-                        {"assigne_a_id": {"$in": [None, ""]}, "time_entries": {"$elemMatch": {"user_id": user_id, "timestamp": {"$gte": date_start, "$lte": date_end}}}}
-                    ]
+                    }
                 }
                 
-                wo_cursor = db.work_orders.find(wo_match, {"categorie": 1, "time_entries": 1, "assigne_a_id": 1})
+                wo_cursor = db.work_orders.find(wo_match, {"categorie": 1, "time_entries": 1})
                 async for wo in wo_cursor:
                     category = wo.get("categorie")
                     time_entries = wo.get("time_entries", [])
-                    wo_assigne = wo.get("assigne_a_id")
                     if category and time_entries:
                         for entry in time_entries:
-                            entry_timestamp = entry.get("timestamp")
-                            if entry_timestamp and date_start <= entry_timestamp <= date_end:
-                                # Si l'OT est assigné à cet utilisateur, compter toutes les entrées de temps
-                                # Si non assigné, ne compter que les entrées saisies par cet utilisateur
-                                if wo_assigne == user_id or (not wo_assigne and entry.get("user_id") == user_id):
+                            if entry.get("user_id") == user_id:
+                                entry_timestamp = entry.get("timestamp")
+                                if entry_timestamp and date_start <= entry_timestamp <= date_end:
                                     idx = get_time_index(entry_timestamp, date_start, group_by, len(time_labels))
                                     if 0 <= idx < len(time_labels) and category in user_data:
                                         user_data[category][idx] += entry.get("hours", 0)
             
-            # Requête pour les améliorations - basée sur assigne_a_id ou time_entries.user_id
+            # Requête pour les améliorations - basée sur time_entries.user_id
             if "AMELIORATIONS" in selected_categories:
                 imp_match = {
                     "time_entries": {
                         "$elemMatch": {
+                            "user_id": user_id,
                             "timestamp": {"$gte": date_start, "$lte": date_end}
                         }
-                    },
-                    "$or": [
-                        {"assigne_a_id": user_id},
-                        {"assigne_a_id": {"$in": [None, ""]}, "time_entries": {"$elemMatch": {"user_id": user_id, "timestamp": {"$gte": date_start, "$lte": date_end}}}}
-                    ]
+                    }
                 }
                 
-                imp_cursor = db.improvements.find(imp_match, {"time_entries": 1, "assigne_a_id": 1})
+                imp_cursor = db.improvements.find(imp_match, {"time_entries": 1})
                 async for imp in imp_cursor:
                     time_entries = imp.get("time_entries", [])
-                    imp_assigne = imp.get("assigne_a_id")
                     for entry in time_entries:
-                        entry_timestamp = entry.get("timestamp")
-                        if entry_timestamp and date_start <= entry_timestamp <= date_end:
-                            if imp_assigne == user_id or (not imp_assigne and entry.get("user_id") == user_id):
+                        if entry.get("user_id") == user_id:
+                            entry_timestamp = entry.get("timestamp")
+                            if entry_timestamp and date_start <= entry_timestamp <= date_end:
                                 idx = get_time_index(entry_timestamp, date_start, group_by, len(time_labels))
                                 if 0 <= idx < len(time_labels):
                                     user_data["AMELIORATIONS"][idx] += entry.get("hours", 0)
