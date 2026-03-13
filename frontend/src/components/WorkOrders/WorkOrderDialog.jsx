@@ -283,6 +283,8 @@ const WorkOrderDialog = ({ open, onOpenChange, workOrder, onSuccess }) => {
       // 5. Ouvrir le dialogue de changement de statut seulement si l'utilisateur a le droit d'édition
       if (canEdit('workOrders')) {
         setShowStatusDialog(true);
+      } else {
+        onOpenChange(false);
       }
 
     } catch (error) {
