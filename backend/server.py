@@ -1637,7 +1637,7 @@ async def update_work_order(wo_id: str, wo_update: WorkOrderUpdate, current_user
 
 @api_router.post("/work-orders/{wo_id}/add-time",
     summary="Ajouter du temps passe", response_model=WorkOrder, tags=["Ordres de Travail"])
-async def add_time_to_work_order(wo_id: str, time_data: AddTimeSpent, current_user: dict = Depends(require_permission("workOrders", "edit"))):
+async def add_time_to_work_order(wo_id: str, time_data: AddTimeSpent, current_user: dict = Depends(require_permission("workOrders", "view"))):
     """Ajouter du temps passé à un ordre de travail"""
     try:
         # Récupérer l'ordre de travail existant
@@ -6767,7 +6767,7 @@ async def export_audit_logs(
 async def add_work_order_comment(
     work_order_id: str,
     comment: CommentWithPartsCreate,
-    current_user: dict = Depends(require_permission("workOrders", "edit"))
+    current_user: dict = Depends(require_permission("workOrders", "view"))
 ):
     """Ajoute un commentaire et des pièces utilisées à un ordre de travail"""
     try:

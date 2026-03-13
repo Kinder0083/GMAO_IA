@@ -21,10 +21,12 @@ import AIDiagnosticPanel from './AIDiagnosticPanel';
 import AISummaryPanel from './AISummaryPanel';
 import { commentsAPI, workOrdersAPI, inventoryAPI, equipmentsAPI } from '../../services/api';
 import { useToast } from '../../hooks/use-toast';
+import { usePermissions } from '../../hooks/usePermissions';
 import { formatTimeToHoursMinutes } from '../../utils/timeFormat';
 
 const WorkOrderDialog = ({ open, onOpenChange, workOrder, onSuccess }) => {
   const { toast } = useToast();
+  const { canEdit } = usePermissions();
   const [refreshAttachments, setRefreshAttachments] = useState(0);
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState('');
@@ -278,8 +280,10 @@ const WorkOrderDialog = ({ open, onOpenChange, workOrder, onSuccess }) => {
         description: `Commentaire et temps (${parsed.hours}h${parsed.minutes.toString().padStart(2, '0')}) enregistrés`
       });
 
-      // 5. Ouvrir le dialogue de changement de statut
-      setShowStatusDialog(true);
+      // 5. Ouvrir le dialogue de changement de statut seulement si l'utilisateur a le droit d'édition
+      if (canEdit('workOrders')) {
+        setShowStatusDialog(true);
+      }
 
     } catch (error) {
       console.error('Erreur lors de la validation:', error);
