@@ -10494,6 +10494,12 @@ async def get_maintenance_status(current_user: dict = Depends(get_current_admin_
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@api_router.get("/health")
+async def health_check():
+    """Ping simple pour vérifier la connectivité."""
+    return {"status": "ok"}
+
+
 @api_router.get("/health/recovery-history")
 async def get_recovery_history(current_user: dict = Depends(get_current_admin_user)):
     """Historique des récupérations automatiques (Admin uniquement)."""

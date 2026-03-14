@@ -146,6 +146,14 @@ Application GMAO (Gestion de Maintenance Assistee par Ordinateur) pour la gestio
 - Frontend: retire le check canEdit('workOrders') avant l'affichage du StatusChangeDialog
 - Fichiers modifies: `WorkOrderDialog.jsx`, `server.py`
 
+### Phase 19 - Refonte complete du mode offline (ConnectivityManager)
+- **Probleme**: navigator.onLine est peu fiable dans les PWA installees → pas de detection offline reelle → "Erreur de connexion au serveur" au lieu de mise en file d'attente
+- **Solution**: Creation d'un ConnectivityManager singleton qui detecte la connectivite via les echecs/succes des requetes API (pas seulement navigator.onLine)
+- L'intercepteur Axios queue TOUTE requete POST/PUT/DELETE quand aucune reponse serveur n'est recue (condition simplifiee: !error.response && !ERR_CANCELED)
+- Ping periodique vers GET /api/health pour detecter le retour de la connexion
+- Recovery automatique quand le navigateur signal "online" + confirmation par ping
+- Fichiers crees/modifies: `connectivityManager.js`, `api.js`, `useOnlineStatus.js`, `offlineSync.js`, `server.py`
+
 ## Prioritized Backlog
 ### P0
 - (RESOLU) Miniatures photos dans formulaire modification OT

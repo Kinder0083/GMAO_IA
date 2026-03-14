@@ -296,9 +296,13 @@ const InterventionRequestFormDialog = ({ open, onOpenChange, request, onSuccess 
         toast({ title: 'Succes', description: 'Demande modifiee avec succes' });
       } else {
         const response = await interventionRequestsAPI.create(submitData);
-        resultId = response?.data?.id;
-        if (hasNewFiles && resultId) await uploadFiles(resultId);
-        toast({ title: 'Succes', description: 'Demande transmise avec succes' });
+        if (response?.data?._offline_queued) {
+          toast({ title: 'Mode hors ligne', description: 'Demande enregistree localement, elle sera transmise au retour de la connexion.' });
+        } else {
+          resultId = response?.data?.id;
+          if (hasNewFiles && resultId) await uploadFiles(resultId);
+          toast({ title: 'Succes', description: 'Demande transmise avec succes' });
+        }
       }
 
       onSuccess();

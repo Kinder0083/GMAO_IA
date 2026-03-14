@@ -1,14 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
+import connectivity from '../services/connectivityManager';
 
 /**
  * Hook pour surveiller le statut en ligne/hors ligne de l'application.
- * Retourne : isOnline, lastOnlineAt, lastSyncAt, pendingSyncCount, failedSyncCount,
- *            syncInProgress, storageInfo, forceSyncNow
+ * Utilise le ConnectivityManager (détection réelle) au lieu de navigator.onLine.
  */
 export const useOnlineStatus = () => {
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [isOnline, setIsOnline] = useState(connectivity.isOnline);
   const [lastOnlineAt, setLastOnlineAt] = useState(
-    navigator.onLine ? new Date().toISOString() : localStorage.getItem('gmao_last_online') || null
+    connectivity.isOnline ? new Date().toISOString() : localStorage.getItem('gmao_last_online') || null
   );
   const [lastSyncAt, setLastSyncAt] = useState(localStorage.getItem('gmao_last_sync') || null);
   const [pendingSyncCount, setPendingSyncCount] = useState(0);
@@ -31,7 +31,7 @@ export const useOnlineStatus = () => {
   }, []);
 
   const forceSyncNow = useCallback(async () => {
-    if (!navigator.onLine) return { error: 'Pas de connexion' };
+    if (!connectivity.isOnline) return { error: 'Pas de connexion' };
     try {
       const { forceSyncNow: sync } = await import('../services/offlineSync');
       setSyncInProgress(true);
@@ -49,18 +49,16 @@ export const useOnlineStatus = () => {
   }, [updateCounts]);
 
   useEffect(() => {
-    const handleOnline = () => {
-      setIsOnline(true);
-      const now = new Date().toISOString();
-      setLastOnlineAt(now);
-      localStorage.setItem('gmao_last_online', now);
-      updateCounts();
-      window.dispatchEvent(new Event('app-online'));
-    };
-
-    const handleOffline = () => {
-      setIsOnline(false);
-    };
+    // S'abonner au ConnectivityManager pour les changements réels
+    const unsubscribe = connectivity.subscribe((online) => {
+      setIsOnline(online);
+      if (online) {
+        const now = new Date().toISOString();
+        setLastOnlineAt(now);
+        localStorage.setItem('gmao_last_online', now);
+        updateCounts();
+      }
+    });
 
     const handleSyncUpdate = () => updateCounts();
 
@@ -85,8 +83,6 @@ export const useOnlineStatus = () => {
       updateCounts();
     };
 
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
     window.addEventListener('sync-queue-updated', handleSyncUpdate);
     window.addEventListener('sync-progress', handleSyncProgress);
     window.addEventListener('sync-complete', handleSyncComplete);
@@ -94,8 +90,7 @@ export const useOnlineStatus = () => {
     updateCounts();
 
     return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
+      unsubscribe();
       window.removeEventListener('sync-queue-updated', handleSyncUpdate);
       window.removeEventListener('sync-progress', handleSyncProgress);
       window.removeEventListener('sync-complete', handleSyncComplete);

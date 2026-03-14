@@ -1,16 +1,15 @@
 import { getPendingSyncItems, removeSyncItem, incrementRetry, getOfflineFile, removeOfflineFile, removeFilesForSyncItem } from './offlineDb';
+import connectivity from './connectivityManager';
 import api from './api';
 
 let isSyncing = false;
 
 /**
  * Reconstruit un FormData a partir des references de fichiers stockes dans IndexedDB.
- * Utilise pour re-envoyer les uploads de fichiers mis en attente hors-ligne.
  */
 const reconstructFormData = async (item) => {
   const formData = new FormData();
 
-  // Ajouter les fichiers depuis IndexedDB
   if (item.fileRefs && item.fileRefs.length > 0) {
     for (const fileRef of item.fileRefs) {
       const fileData = await getOfflineFile(fileRef.fileId);
@@ -23,7 +22,6 @@ const reconstructFormData = async (item) => {
     }
   }
 
-  // Ajouter les champs texte
   if (item.formFields) {
     for (const [key, value] of Object.entries(item.formFields)) {
       formData.append(key, value);
@@ -37,7 +35,7 @@ const reconstructFormData = async (item) => {
  * Synchronise les mutations en attente avec le serveur.
  */
 export const syncPendingMutations = async () => {
-  if (isSyncing || !navigator.onLine) return { synced: 0, failed: 0 };
+  if (isSyncing || !connectivity.isOnline) return { synced: 0, failed: 0 };
   isSyncing = true;
 
   let synced = 0;
@@ -60,7 +58,6 @@ export const syncPendingMutations = async () => {
       try {
         let config;
 
-        // Si c'est un upload de fichier (a des fileRefs)
         if (item.fileRefs && item.fileRefs.length > 0) {
           const formData = await reconstructFormData(item);
           config = {
@@ -83,7 +80,6 @@ export const syncPendingMutations = async () => {
 
         await api(config);
 
-        // Nettoyer les fichiers associes
         if (item.fileRefs) {
           for (const ref of item.fileRefs) {
             await removeOfflineFile(ref.fileId);
@@ -102,7 +98,6 @@ export const syncPendingMutations = async () => {
 
     window.dispatchEvent(new CustomEvent('sync-complete', { detail: { synced, failed } }));
 
-    // Stocker le timestamp de derniere synchronisation
     if (synced > 0) {
       localStorage.setItem('gmao_last_sync', new Date().toISOString());
     }
@@ -120,7 +115,7 @@ export const syncPendingMutations = async () => {
  * Force la synchronisation manuelle.
  */
 export const forceSyncNow = async () => {
-  if (!navigator.onLine) {
+  if (!connectivity.isOnline) {
     return { synced: 0, failed: 0, error: 'Pas de connexion internet' };
   }
   return syncPendingMutations();
@@ -130,10 +125,10 @@ export const forceSyncNow = async () => {
  * Initialise le service de synchronisation.
  */
 export const initOfflineSync = () => {
+  // Écouter le ConnectivityManager pour la reconnexion
   const handleOnline = async () => {
-    // Attendre que la connexion se stabilise
     await new Promise(r => setTimeout(r, 2000));
-    if (navigator.onLine) {
+    if (connectivity.isOnline) {
       const result = await syncPendingMutations();
       if (result.synced > 0) {
         console.log(`[Sync] ${result.synced} mutation(s) synchronisee(s)`);
@@ -144,7 +139,7 @@ export const initOfflineSync = () => {
   window.addEventListener('app-online', handleOnline);
 
   // Tenter une sync au demarrage si en ligne
-  if (navigator.onLine) {
+  if (connectivity.isOnline) {
     setTimeout(() => syncPendingMutations(), 3000);
   }
 
