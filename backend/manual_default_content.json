@@ -682,7 +682,9 @@
       "icon": "Shield",
       "order": 38,
       "target_roles": [],
-      "target_modules": ["loto"],
+      "target_modules": [
+        "loto"
+      ],
       "sections": [
         "sec-loto-01",
         "sec-loto-02",
@@ -3329,10 +3331,19 @@
       "content": "**Qu'est-ce que la consignation LOTO ?**\n\nLe module LOTO (Lockout/Tagout) permet de gerer les procedures de consignation des equipements lors d'interventions de maintenance. Il garantit qu'un equipement est correctement isole de ses sources d'energie avant toute intervention.\n\n**Workflow en 4 etapes :**\n\n1. **Demande** : Un utilisateur cree une demande de consignation pour un equipement\n2. **Consignation** : Le responsable consigne l'equipement (isolation des energies, pose des cadenas)\n3. **Intervention** : L'intervention de maintenance peut commencer en toute securite\n4. **Deconsignation** : Une fois l'intervention terminee, l'equipement est remis en service\n\n**Types d'energie geres :** Electrique, Hydraulique, Pneumatique, Thermique, Chimique, Mecanique\n\n**Acces :** Cliquez sur l'icone cadenas dans le header ou naviguez via le menu lateral > Consignations LOTO",
       "order": 82,
       "level": "beginner",
-      "keywords": ["loto", "consignation", "lockout", "tagout", "securite", "cadenas"],
+      "keywords": [
+        "loto",
+        "consignation",
+        "lockout",
+        "tagout",
+        "securite",
+        "cadenas"
+      ],
       "parent_id": null,
       "target_roles": [],
-      "target_modules": ["loto"],
+      "target_modules": [
+        "loto"
+      ],
       "images": [],
       "video_url": null,
       "created_at": "2026-03-07T10:00:00.000000+00:00",
@@ -3345,10 +3356,19 @@
       "content": "**Nouvelle consignation**\n\n1. Sur la page Consignations LOTO, cliquez sur **\"Nouvelle consignation\"**\n2. Remplissez les champs :\n   - **Equipement** : Selectionnez dans la liste deroulante\n   - **Types d'energie** : Cochez les energies a isoler\n   - **Responsable** : Personne en charge de la consignation\n   - **Motif** : Raison de la consignation\n   - **Duree prevue** : Estimation en heures\n3. (Optionnel) **Lier a un OT/MP/Amelioration** : Selectionnez le type puis l'element. Les champs Equipement, Motif et Duree prevue seront remplis automatiquement\n4. (Optionnel) Ajoutez des **points d'isolation** : type (vanne, disjoncteur...), localisation et description\n5. Cliquez sur **\"Creer\"**\n\n**Remplissage automatique :** Lorsque vous liez la consignation a un ordre de travail, les champs Equipement, Motif et Duree prevue sont automatiquement remplis a partir des informations de l'OT.",
       "order": 83,
       "level": "beginner",
-      "keywords": ["creer", "consignation", "formulaire", "equipement", "energie", "auto-remplissage"],
+      "keywords": [
+        "creer",
+        "consignation",
+        "formulaire",
+        "equipement",
+        "energie",
+        "auto-remplissage"
+      ],
       "parent_id": null,
       "target_roles": [],
-      "target_modules": ["loto"],
+      "target_modules": [
+        "loto"
+      ],
       "images": [],
       "video_url": null,
       "created_at": "2026-03-07T10:00:00.000000+00:00",
@@ -3361,10 +3381,18 @@
       "content": "**Systeme de cadenas multiples**\n\nPlusieurs utilisateurs peuvent poser leur cadenas sur une meme consignation. C'est le principe fondamental du LOTO : chaque intervenant pose son propre cadenas pour garantir sa securite.\n\n**Poser un cadenas :**\n1. Ouvrez le detail d'une consignation en statut **Consigne** ou **Intervention**\n2. Cliquez sur **\"Poser mon cadenas\"**\n3. Saisissez votre code PIN LOTO et/ou signez\n\n**Retirer son cadenas :**\n1. Cliquez sur **\"Retirer mon cadenas\"** a cote de votre nom\n2. Confirmez avec votre code PIN\n\n**Regle importante :** L'equipement ne peut etre deconsigne que lorsque **tous les cadenas ont ete retires**. Tant qu'un seul cadenas reste en place, l'equipement reste verrouille.\n\n**Code PIN LOTO :** Chaque utilisateur peut definir un code PIN personnel dans ses parametres. Ce code est requis pour les operations de cadenas.",
       "order": 84,
       "level": "intermediate",
-      "keywords": ["cadenas", "multiples", "pin", "securite", "verrouillage"],
+      "keywords": [
+        "cadenas",
+        "multiples",
+        "pin",
+        "securite",
+        "verrouillage"
+      ],
       "parent_id": null,
       "target_roles": [],
-      "target_modules": ["loto"],
+      "target_modules": [
+        "loto"
+      ],
       "images": [],
       "video_url": null,
       "created_at": "2026-03-07T10:00:00.000000+00:00",
@@ -3377,10 +3405,19 @@
       "content": "**Filtrer les consignations**\n\nLa page LOTO propose plusieurs niveaux de filtrage :\n\n**Par onglet :**\n- **En cours** : Consignations actives (Demande, Consigne, Intervention)\n- **Terminees** : Consignations deconsignees ou annulees\n- **Toutes** : Ensemble des consignations\n\n**Par periode :**\n- **Mois** : Affiche uniquement les consignations du mois selectionne (par defaut : mois en cours)\n- **Annee** : Affiche les consignations de l'annee selectionnee\n- **Personnalisee** : Definissez une plage de dates (du... au...)\n- **Tout afficher** : Aucun filtre de date\n\n**Par equipement :**\nUtilisez la liste deroulante pour filtrer par equipement specifique. Les equipements sont classes par ordre alphabetique.\n\n**Par statut :**\nFiltrez par statut specifique : Demande, Consigne, Intervention, Deconsigne, Annule.\n\n**Recherche textuelle :**\nRecherchez par numero de consignation, nom d'equipement ou motif.\n\nLe compteur de resultats en bas de la barre de filtres indique le nombre de consignations correspondant aux criteres.",
       "order": 85,
       "level": "beginner",
-      "keywords": ["filtre", "recherche", "periode", "mois", "annee", "equipement"],
+      "keywords": [
+        "filtre",
+        "recherche",
+        "periode",
+        "mois",
+        "annee",
+        "equipement"
+      ],
       "parent_id": null,
       "target_roles": [],
-      "target_modules": ["loto"],
+      "target_modules": [
+        "loto"
+      ],
       "images": [],
       "video_url": null,
       "created_at": "2026-03-07T10:00:00.000000+00:00",
@@ -3393,14 +3430,52 @@
       "content": "**Suppression (administrateur uniquement)**\n\nSeuls les administrateurs peuvent supprimer une consignation. La suppression n'est possible que pour les consignations en statut **Demande**, **Annule** ou **Deconsigne** (jamais pour une consignation active).\n\n1. Reperer l'icone corbeille (rouge) dans la colonne Actions\n2. Cliquer sur l'icone\n3. Confirmer dans la boite de dialogue\n\n**Journalisation**\n\nToutes les operations LOTO sont enregistrees dans le journal d'audit :\n- Creation d'une consignation\n- Execution d'une action workflow (consigner, deconsigner, annuler)\n- Pose et retrait de cadenas\n- Suppression d'une consignation\n\nPour consulter le journal : Menu lateral > Journal d'activite > Filtrer par type \"Consignation LOTO\"\n\n**Icone cadenas dans les listes**\n\nDans les pages Ordres de travail, Ameliorations et Maintenance preventive, une icone cadenas coloree s'affiche a cote des elements lies a une consignation LOTO :\n- **Rouge** : Equipement consigne ou en intervention\n- **Orange** : Demande en attente\n- **Vert** : Deconsigne\n\nCliquez sur l'icone pour naviguer vers la page LOTO correspondante. Les icones se mettent a jour en temps reel.",
       "order": 86,
       "level": "intermediate",
-      "keywords": ["suppression", "admin", "journal", "audit", "icone", "cadenas", "temps reel"],
+      "keywords": [
+        "suppression",
+        "admin",
+        "journal",
+        "audit",
+        "icone",
+        "cadenas",
+        "temps reel"
+      ],
       "parent_id": null,
       "target_roles": [],
-      "target_modules": ["loto"],
+      "target_modules": [
+        "loto"
+      ],
       "images": [],
       "video_url": null,
       "created_at": "2026-03-07T10:00:00.000000+00:00",
       "updated_at": "2026-03-07T10:00:00.000000+00:00"
+    },
+    {
+      "id": "sec-accident-analysis-01",
+      "title": "Arbre des Causes - Analyse d'Accidents",
+      "content": "## Module Arbre des Causes\n\nLe module **Arbre des Causes** permet de realiser une analyse structuree des accidents de maintenance en suivant 5 phases guidees par l'intelligence artificielle.\n\n### Comment acceder au module\nCliquez sur **Arbre des Causes** dans la sidebar (icone de branche).\n\n### Creer une nouvelle analyse\n1. Cliquez sur **Nouvelle analyse**\n2. Renseignez le titre, la date, le lieu, la gravite et une description initiale\n3. Cliquez sur **Demarrer l'analyse**\n\n### Les 5 phases de l'analyse\n\n#### Phase 1 - QQOQCP\nRepondez aux 6 questions fondamentales : **Quoi, Qui, Ou, Quand, Comment, Pourquoi**. Cliquez sur **Aide IA** pour obtenir des suggestions et des questions complementaires.\n\n#### Phase 2 - 5 Pourquoi\nMethode iterative pour remonter a la cause racine. Repondez a chaque \"Pourquoi ?\" et l'IA vous guide vers la prochaine question. L'IA detecte automatiquement quand la cause racine est identifiee.\n\n#### Phase 3 - Ishikawa (5M)\nClassez les causes dans les 5 familles : **Main d'oeuvre, Materiel, Methodes, Milieu, Matieres**. Un diagramme visuel se construit automatiquement. Cliquez sur **Analyse IA** pour une classification automatique.\n\n#### Phase 4 - ALARM\nAnalysez les facteurs contributifs selon 7 categories (Patient/Victime, Taches, Individu, Equipe, Environnement, Organisation, Contexte). L'IA peut pre-remplir les facteurs identifies.\n\n#### Phase 5 - Actions correctives\nL'IA genere des propositions d'actions correctives et preventives. Depuis cette page vous pouvez creer directement :\n- **Ordres de Travail** (OT) correctifs\n- **Maintenances Preventives** (MP)\n- **Checklists** de controle\n\n### Configuration du modele IA\nAllez dans **Parametres speciaux** > **Analyse d'Accidents - Modele IA** pour choisir le modele d'IA utilise (GPT-5.2 par defaut, GPT-4o, Gemini, Claude).\n\n### Permissions\nL'acces au module est controle par la permission **accidentAnalysis** (Arbre des Causes) dans la gestion des utilisateurs.",
+      "order": 87,
+      "parent_id": null,
+      "target_roles": [],
+      "target_modules": [
+        "accidentAnalysis"
+      ],
+      "level": "intermediate",
+      "images": [],
+      "video_url": null,
+      "keywords": [
+        "arbre des causes",
+        "accident",
+        "analyse",
+        "qqoqcp",
+        "5 pourquoi",
+        "ishikawa",
+        "5m",
+        "alarm",
+        "ia",
+        "actions correctives"
+      ],
+      "created_at": "2026-03-14T17:05:29.434163+00:00",
+      "updated_at": "2026-03-14T17:05:29.434163+00:00"
     }
   ]
 }

@@ -38,6 +38,16 @@ FSAO Iris integre des fonctionnalites d'IA generative (Gemini Pro) pour automati
 - **Archives IA** : Consultation de l'historique de toutes les analyses IA effectuees sur les achats, avec possibilite de comparer les resultats dans le temps
 - Acces depuis le module "Historique Achat" via les boutons "Analyse IA" et "Archives IA"
 
+#### IA - Arbre des Causes (Analyse d'Accidents)
+- **Analyse structuree des accidents** : Module complet d'analyse des accidents de maintenance en 5 phases guidees par l'IA
+- **Methode QQOQCP** : Questionnement structure (Quoi, Qui, Ou, Quand, Comment, Pourquoi) avec suggestions IA
+- **Methode des 5 Pourquoi** : Iterations successives pour identifier la cause racine, avec guidage IA et detection automatique de la cause fondamentale
+- **Diagramme d'Ishikawa (5M)** : Analyse par les 5 familles de causes (Main d'oeuvre, Materiel, Methodes, Milieu, Matieres) avec diagramme visuel interactif et analyse IA
+- **Grille ALARM** : Analyse des facteurs contributifs (Patient, Taches, Individu, Equipe, Environnement, Organisation, Contexte) avec classification IA
+- **Generation d'actions correctives** : L'IA propose des actions correctives et preventives a partir de l'analyse complete, avec creation directe d'Ordres de Travail, de Maintenances Preventives ou de Checklists
+- **Modele IA configurable** : Choix du modele d'IA (GPT-5.2, GPT-4o, Gemini, Claude) dans les Parametres speciaux
+- Acces depuis le menu "Arbre des Causes" dans la sidebar
+
 #### IA - Assistant (Adria)
 - Assistant IA conversationnel integre (personnalisable : nom, genre, modele LLM)
 - **Memoire de conversation** : Adria se souvient du contexte des echanges precedents

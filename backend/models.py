@@ -72,6 +72,7 @@ class UserPermissions(BaseModel):
     autorisationsParticulieres: ModulePermission = ModulePermission(view=False, edit=False, delete=False)  # Autorisations Particulières - Gestion des autorisations spéciales
     training: ModulePermission = ModulePermission(view=False, edit=False, delete=False)  # Formation - Module de formation et questionnaire nouveaux arrivants
     contrats: ModulePermission = ModulePermission(view=False, edit=False, delete=False)  # Contrats - Gestion des contrats fournisseurs
+    accidentAnalysis: ModulePermission = ModulePermission(view=False, edit=False, delete=False)  # Arbre des Causes - Analyse d'accidents de maintenance
     aiDashboard: ModulePermission = ModulePermission(view=False, edit=False, delete=False)  # Tableau de bord IA - Vue unifiée des analyses IA
     aiAutomations: ModulePermission = ModulePermission(view=False, edit=False, delete=False)  # Automatisations IA - Configuration des règles automatiques
     aiWidgets: ModulePermission = ModulePermission(view=False, edit=False, delete=False)  # Widgets IA (Adria) - Création de widgets par l'assistant IA
@@ -127,6 +128,7 @@ def get_default_permissions_by_role(role: str) -> UserPermissions:
             autorisationsParticulieres=ModulePermission(view=True, edit=True, delete=True),
             training=ModulePermission(view=True, edit=True, delete=True),
             contrats=ModulePermission(view=True, edit=True, delete=True),
+            accidentAnalysis=ModulePermission(view=True, edit=True, delete=True),
             aiDashboard=ModulePermission(view=True, edit=True, delete=True),
             aiAutomations=ModulePermission(view=True, edit=True, delete=True),
             aiWidgets=ModulePermission(view=True, edit=True, delete=True)
@@ -174,7 +176,8 @@ def get_default_permissions_by_role(role: str) -> UserPermissions:
             consignes=ModulePermission(view=False, edit=False, delete=False),
             autorisationsParticulieres=ModulePermission(view=False, edit=False, delete=False),
             training=ModulePermission(view=False, edit=False, delete=False),
-            contrats=ModulePermission(view=False, edit=False, delete=False)
+            contrats=ModulePermission(view=False, edit=False, delete=False),
+            accidentAnalysis=ModulePermission(view=False, edit=False, delete=False)
         )
     
     # DIRECTEUR : Demande d'inter./Demandes d'amél. en visualisation et modification
@@ -217,7 +220,8 @@ def get_default_permissions_by_role(role: str) -> UserPermissions:
             consignes=ModulePermission(view=True, edit=False, delete=False),
             autorisationsParticulieres=ModulePermission(view=True, edit=True, delete=False),
             training=ModulePermission(view=True, edit=False, delete=False),
-            contrats=ModulePermission(view=True, edit=False, delete=False)
+            contrats=ModulePermission(view=True, edit=False, delete=False),
+            accidentAnalysis=ModulePermission(view=True, edit=True, delete=False)
         )
     
     # QHSE : Demande d'inter./Demandes d'amél. en visualisation et modification
@@ -261,7 +265,8 @@ def get_default_permissions_by_role(role: str) -> UserPermissions:
             consignes=ModulePermission(view=True, edit=True, delete=False),
             autorisationsParticulieres=ModulePermission(view=True, edit=True, delete=False),
             training=ModulePermission(view=True, edit=True, delete=False),
-            contrats=ModulePermission(view=True, edit=True, delete=False)
+            contrats=ModulePermission(view=True, edit=True, delete=False),
+            accidentAnalysis=ModulePermission(view=True, edit=True, delete=True)
         )
     
     # LABO et ADV : Demande d'inter. en visualisation et modification
@@ -299,7 +304,8 @@ def get_default_permissions_by_role(role: str) -> UserPermissions:
             consignes=ModulePermission(view=True, edit=False, delete=False),
             autorisationsParticulieres=ModulePermission(view=False, edit=False, delete=False),
             training=ModulePermission(view=True, edit=False, delete=False),
-            contrats=ModulePermission(view=True, edit=False, delete=False)
+            contrats=ModulePermission(view=True, edit=False, delete=False),
+            accidentAnalysis=ModulePermission(view=True, edit=False, delete=False)
         )
     
     # PROD (RSP_PROD et PROD) : Demande d'inter./Demandes d'amél./Ordres de travail/Améliorations/Equipement en visualisation et modification
@@ -337,7 +343,8 @@ def get_default_permissions_by_role(role: str) -> UserPermissions:
             consignes=ModulePermission(view=True, edit=False, delete=False),
             autorisationsParticulieres=ModulePermission(view=True, edit=False, delete=False),
             training=ModulePermission(view=True, edit=False, delete=False),
-            contrats=ModulePermission(view=True, edit=False, delete=False)
+            contrats=ModulePermission(view=True, edit=False, delete=False),
+            accidentAnalysis=ModulePermission(view=True, edit=True, delete=False)
         )
     
     # INDUS : Demande d'inter./Demandes d'amél./Ordres de travail/Améliorations/Equipement en visualisation et modification
@@ -380,7 +387,8 @@ def get_default_permissions_by_role(role: str) -> UserPermissions:
             consignes=ModulePermission(view=True, edit=False, delete=False),
             autorisationsParticulieres=ModulePermission(view=True, edit=False, delete=False),
             training=ModulePermission(view=True, edit=False, delete=False),
-            contrats=ModulePermission(view=True, edit=False, delete=False)
+            contrats=ModulePermission(view=True, edit=False, delete=False),
+            accidentAnalysis=ModulePermission(view=True, edit=True, delete=False)
         )
     
     # LOGISTIQUE : Même que PROD mais peut-être avec accès Fournisseurs
@@ -422,7 +430,8 @@ def get_default_permissions_by_role(role: str) -> UserPermissions:
             consignes=ModulePermission(view=True, edit=False, delete=False),
             autorisationsParticulieres=ModulePermission(view=True, edit=False, delete=False),
             training=ModulePermission(view=True, edit=False, delete=False),
-            contrats=ModulePermission(view=True, edit=False, delete=False)
+            contrats=ModulePermission(view=True, edit=False, delete=False),
+            accidentAnalysis=ModulePermission(view=True, edit=False, delete=False)
         )
     
     # TECHNICIEN : Permissions complètes sur les modules opérationnels
@@ -464,7 +473,8 @@ def get_default_permissions_by_role(role: str) -> UserPermissions:
             consignes=ModulePermission(view=True, edit=True, delete=False),
             autorisationsParticulieres=ModulePermission(view=True, edit=True, delete=False),
             training=ModulePermission(view=True, edit=True, delete=False),
-            contrats=ModulePermission(view=True, edit=True, delete=False)
+            contrats=ModulePermission(view=True, edit=True, delete=False),
+            accidentAnalysis=ModulePermission(view=True, edit=True, delete=True)
         )
     
     # VISUALISEUR : Visualisation uniquement sur tout
@@ -506,7 +516,8 @@ def get_default_permissions_by_role(role: str) -> UserPermissions:
             consignes=ModulePermission(view=True, edit=False, delete=False),
             autorisationsParticulieres=ModulePermission(view=True, edit=False, delete=False),
             training=ModulePermission(view=True, edit=False, delete=False),
-            contrats=ModulePermission(view=True, edit=False, delete=False)
+            contrats=ModulePermission(view=True, edit=False, delete=False),
+            accidentAnalysis=ModulePermission(view=True, edit=False, delete=False)
         )
     
     # Par défaut : permissions minimales

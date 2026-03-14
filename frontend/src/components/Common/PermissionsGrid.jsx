@@ -79,7 +79,8 @@ const PermissionsGrid = ({ role, permissions, onChange }) => {
     { key: 'sensors', label: 'Capteurs MQTT' },
     { key: 'iotDashboard', label: 'Dashboard IoT' },
     { key: 'mqttLogs', label: 'Logs MQTT' },
-    { key: 'whiteboard', label: 'Tableau d\'affichage' }
+    { key: 'whiteboard', label: 'Tableau d\'affichage' },
+    { key: 'accidentAnalysis', label: 'Arbre des Causes' }
   ];
 
   const handlePermissionChange = (moduleKey, permissionType, checked) => {

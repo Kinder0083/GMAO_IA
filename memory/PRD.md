@@ -13,6 +13,18 @@ Application GMAO (Gestion de Maintenance Assistee par Ordinateur) pour la gestio
 
 ## Session 14 Mars 2026
 
+### Phase 21 - Integration Arbre des Causes (Permissions, README, Manuel)
+- **Permissions** : Ajout `accidentAnalysis` dans `UserPermissions` (models.py) pour tous les roles
+  - ADMIN/QHSE/TECHNICIEN = full (view+edit+delete)
+  - DIRECTEUR/PROD/RSP_PROD/INDUS = view+edit
+  - LOGISTIQUE/LABO/ADV/VISUALISEUR = view only
+  - AFFICHAGE = aucun acces
+- **PermissionsGrid.jsx** : Ajout de l'entree dans la grille frontend
+- **Migration startup** : Migration automatique des permissions au demarrage du serveur
+- **README.md** : Section complete "IA - Arbre des Causes" avec description des 5 phases
+- **Manuel utilisateur** : Section detaillee dans manual_default_content.json
+- **Icone sidebar** : Import `GitBranch` dans menuConfig.js
+
 ### Phase 20 - Module Arbre des Causes (Analyse d'Accidents)
 - **Fonctionnalite complete** : Module d'analyse d'accidents de maintenance avec 4 methodologies et IA integree
 - **Backend** (`accident_analysis_routes.py`) :
@@ -23,73 +35,36 @@ Application GMAO (Gestion de Maintenance Assistee par Ordinateur) pour la gestio
   - Fallback chain LLM (OpenAI → Gemini → Anthropic)
 - **Frontend** :
   - `AccidentAnalysisPage.jsx` : Page de liste avec creation, recherche, suppression
-  - `AccidentAnalysisDetail.jsx` : Page de detail avec stepper 5 phases :
-    1. QQOQCP (6 champs + aide IA)
-    2. 5 Pourquoi (iterations + identification cause racine)
-    3. Ishikawa 5M (5 categories + diagramme visuel + IA)
-    4. ALARM (7 categories de facteurs + IA)
-    5. Actions correctives (generation IA + creation OT/MP/Checklist)
+  - `AccidentAnalysisDetail.jsx` : Page de detail avec stepper 5 phases
   - `AccidentAISettings.jsx` : Configuration du modele IA dans Parametres speciaux
-- **Menu** : Entree "Arbre des Causes" ajoutee dans la sidebar avec migration automatique
+- **Menu** : Entree "Arbre des Causes" ajoutee dans la sidebar
 - **Routes** : `/accident-analysis` et `/accident-analysis/:id`
 - **Testing** : Backend 92% (AI timeout expected), Frontend 100% (iteration_128)
 
-## Session 13 Mars 2026
-
-### Phase 19 - Refonte complete du mode offline (ConnectivityManager)
-- ConnectivityManager singleton pour detection fiable de la connectivite
-- Fix sync photos offline, token expire, double-serialisation
-
-### Phase 18 - Dialog statut OT accessible aux utilisateurs view-only
-- StatusChangeDialog apres validation du pointage pour TOUS les utilisateurs
-
-### Phase 17 - Persistance offline du menu + Indicateur hors ligne
-- Preferences utilisateur cachees dans localStorage comme fallback offline
-
-### Phase 16 - Bug Fix + Amelioration : Pointage horaire du personnel
-- Auto-decouverte des utilisateurs ayant pointe du temps
-
-### Phase 15 - Stockage Hors Ligne dans Sante Systeme + OfflineDisabled sur IA/Export
-
-### Phase 14 - Mode Offline Complet PWA (Phases 1, 2, 3)
-
-### Phase 13 - Bug Fix: Affichage OT supprime dans liste DI
-
-## Session 12 Mars 2026
-
-### Phase 12 - Corbeille avec Soft Delete et Restauration
-### Phase 11 - Drag & Drop pour pieces jointes (3 formulaires)
-### Phase 10 - Bug Fix: Miniatures photos dans formulaire modification OT
-
-## Session 11 Mars 2026
-
-### Phase 9 - Admin peut modifier ses propres permissions
-### Phase 8 - Corrections Demandes d'Intervention
-### Phase 7 - Cache-busting automatique
-### Phase 6 - Formulaire DI Public via QR Code + Photos + KPI
-### Phase 5 - Analyse IA Historique Achat
-### Phase 4 - WebSocket Demandes d'Intervention
-### Phase 3 - Bug Roles + Categories Menu
-### Phase 2 - Bugs DI + Refus + Camera native
-### Phase 1 - Permissions + PJ + Selection Equipement
-
 ## Prioritized Backlog
 ### P0
-- (RESOLU) Module Arbre des Causes - Analyse d'accidents
+- (DONE) Module Arbre des Causes - Analyse d'accidents
+- (DONE) Integration permissions, README, manuel
 
 ### P1
 - Validation utilisateur de tous les bugs corriges
 - Filtres avances sur la page DI
 
 ### P2
-- Systeme de mise a jour serveur - EN PAUSE par l'utilisateur
+- Script de mise a jour serveur - EN PAUSE par l'utilisateur
+- Generation rapport PDF pour analyses d'accidents
 
 ## Credentials
 - Admin: buenogy@gmail.com / Admin2024!
 
 ## Key Files
 - `/app/backend/accident_analysis_routes.py` - Routes backend Arbre des Causes
+- `/app/backend/models.py` - Permissions accidentAnalysis (ligne ~74)
 - `/app/frontend/src/pages/AccidentAnalysisPage.jsx` - Page liste
 - `/app/frontend/src/pages/AccidentAnalysisDetail.jsx` - Page detail avec 5 phases
 - `/app/frontend/src/components/Settings/AccidentAISettings.jsx` - Config IA
+- `/app/frontend/src/components/Common/PermissionsGrid.jsx` - Grille permissions
+- `/app/frontend/src/components/Layout/menuConfig.js` - IconMap sidebar
 - `/app/frontend/src/services/api.js` - accidentAnalysisAPI
+- `/app/README.md` - Documentation
+- `/app/backend/manual_default_content.json` - Manuel utilisateur

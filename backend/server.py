@@ -12051,6 +12051,21 @@ async def startup_scheduler():
         if menus_migrated > 0:
             logger.info(f"✅ Menus migrés pour {menus_migrated} utilisateur(s)")
         
+        # Migrer les permissions : ajouter accidentAnalysis aux utilisateurs existants
+        perms_migrated = 0
+        all_users = await db.users.find({"permissions": {"$exists": True}}).to_list(length=None)
+        for u in all_users:
+            perms = u.get("permissions", {})
+            aa = perms.get("accidentAnalysis")
+            if aa is None or (aa.get("view") == False and aa.get("edit") == False and aa.get("delete") == False):
+                user_role = u.get("role", "VISUALISEUR")
+                default_perms = get_default_permissions_by_role(user_role).model_dump()
+                aa_perm = default_perms.get("accidentAnalysis", {"view": False, "edit": False, "delete": False})
+                await db.users.update_one({"_id": u["_id"]}, {"$set": {"permissions.accidentAnalysis": aa_perm}})
+                perms_migrated += 1
+        if perms_migrated > 0:
+            logger.info(f"✅ Permission accidentAnalysis migrée pour {perms_migrated} utilisateur(s)")
+        
         # Initialiser le scheduler des rapports hebdomadaires
         from weekly_report_scheduler import init_report_scheduler, load_all_report_schedules
         init_report_scheduler(scheduler, db)
