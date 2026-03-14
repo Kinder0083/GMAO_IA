@@ -46,7 +46,8 @@ import {
   FileSignature,
   History,
   TrendingUp,
-  GraduationCap
+  GraduationCap,
+  GitBranch
 } from 'lucide-react';
 
 // Mapping des noms d'icônes vers les composants
@@ -95,7 +96,8 @@ export const iconMap = {
   'Palette': Palette,
   'History': History,
   'TrendingUp': TrendingUp,
-  'GraduationCap': GraduationCap
+  'GraduationCap': GraduationCap,
+  'GitBranch': GitBranch
 };
 
 // Liste par défaut des items du menu
