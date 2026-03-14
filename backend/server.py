@@ -1421,7 +1421,7 @@ async def create_work_order(wo_create: WorkOrderCreate, current_user: dict = Dep
 
 @api_router.put("/work-orders/{wo_id}",
     summary="Modifier un ordre de travail", response_model=WorkOrder, tags=["Ordres de Travail"])
-async def update_work_order(wo_id: str, wo_update: WorkOrderUpdate, current_user: dict = Depends(require_permission("workOrders", "edit"))):
+async def update_work_order(wo_id: str, wo_update: WorkOrderUpdate, current_user: dict = Depends(require_permission("workOrders", "view"))):
     """Modifier un ordre de travail"""
     from dependencies import can_edit_work_order_status
     
@@ -1447,34 +1447,27 @@ async def update_work_order(wo_id: str, wo_update: WorkOrderUpdate, current_user
         created_by = existing_wo.get("createdBy")
         assigne_a_id = existing_wo.get("assigne_a_id")
         
+        update_fields = set(wo_update.model_dump(exclude_unset=True).keys())
+        is_status_only = update_fields == {'statut'}
+        
         # Admin : peut tout modifier
         if user_role == "ADMIN":
             can_full_edit = True
-        # Technicien : peut modifier ce qu'il a créé
+        # Technicien : peut modifier ce qu'il a créé, sinon peut changer le statut
         elif user_role == "TECHNICIEN":
             can_full_edit = (created_by == user_id)
-        # Visualiseur assigné : peut seulement modifier le statut
-        elif user_role == "VISUALISEUR":
-            can_full_edit = False
-            # Vérifier si le visualiseur est assigné
-            if assigne_a_id != user_id:
-                raise HTTPException(
-                    status_code=403,
-                    detail="Vous ne pouvez pas modifier cet ordre de travail"
-                )
-            # Le visualiseur ne peut modifier que le statut
-            if wo_update.model_dump(exclude_unset=True).keys() != {'statut'}:
-                raise HTTPException(
-                    status_code=403,
-                    detail="Les visualiseurs ne peuvent modifier que le statut"
-                )
         else:
-            raise HTTPException(status_code=403, detail="Permission refusée")
+            # Tout autre rôle (VISUALISEUR, etc.) : ne peut que changer le statut
+            can_full_edit = False
+            if not is_status_only:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Vous ne pouvez modifier que le statut de cet ordre de travail"
+                )
         
         # Si pas de permission complète et qu'on essaie de modifier autre chose que le statut
         if not can_full_edit:
-            update_dict = wo_update.model_dump(exclude_unset=True)
-            if len(update_dict) > 1 or (len(update_dict) == 1 and 'statut' not in update_dict):
+            if not is_status_only:
                 raise HTTPException(
                     status_code=403,
                     detail="Vous ne pouvez modifier que le statut de cet ordre de travail"

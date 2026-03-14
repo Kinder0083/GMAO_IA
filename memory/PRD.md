@@ -140,6 +140,12 @@ Application GMAO (Gestion de Maintenance Assistee par Ordinateur) pour la gestio
 - Fix du PreferencesContext: attend le token avant de charger (le Provider se monte avant le login)
 - Fichiers modifies: `PreferencesContext.jsx`, `Header.jsx`, `Sidebar.jsx`
 
+### Phase 18 - Dialog statut OT accessible aux utilisateurs view-only
+- Le StatusChangeDialog s'affiche desormais apres validation du pointage pour TOUS les utilisateurs, meme ceux avec seulement la permission de visualisation
+- Backend: endpoint PUT /work-orders/{id} passe de require_permission("edit") a require_permission("view"), les permissions internes (role-based) restent en place pour bloquer les modifications autres que le statut
+- Frontend: retire le check canEdit('workOrders') avant l'affichage du StatusChangeDialog
+- Fichiers modifies: `WorkOrderDialog.jsx`, `server.py`
+
 ## Prioritized Backlog
 ### P0
 - (RESOLU) Miniatures photos dans formulaire modification OT

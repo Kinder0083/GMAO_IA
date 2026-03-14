@@ -280,12 +280,8 @@ const WorkOrderDialog = ({ open, onOpenChange, workOrder, onSuccess }) => {
         description: `Commentaire et temps (${parsed.hours}h${parsed.minutes.toString().padStart(2, '0')}) enregistrés`
       });
 
-      // 5. Ouvrir le dialogue de changement de statut seulement si l'utilisateur a le droit d'édition
-      if (canEdit('workOrders')) {
-        setShowStatusDialog(true);
-      } else {
-        onOpenChange(false);
-      }
+      // 5. Ouvrir le dialogue de changement de statut (toujours, même en lecture seule)
+      setShowStatusDialog(true);
 
     } catch (error) {
       console.error('Erreur lors de la validation:', error);
