@@ -46,9 +46,15 @@ const Sidebar = ({
     const loadBadges = async () => {
       try {
         const response = await api.get('/menu-badges');
-        setNewMenuIds(response.data.new_menu_ids || []);
+        const ids = response.data.new_menu_ids || [];
+        setNewMenuIds(ids);
+        try { localStorage.setItem('cached_menu_badges', JSON.stringify(ids)); } catch {}
       } catch (e) {
-        // Silently fail
+        // Fallback : cache local (mode hors ligne)
+        try {
+          const cached = localStorage.getItem('cached_menu_badges');
+          if (cached) setNewMenuIds(JSON.parse(cached));
+        } catch {}
       }
     };
     loadBadges();

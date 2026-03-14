@@ -134,6 +134,12 @@ Application GMAO (Gestion de Maintenance Assistee par Ordinateur) pour la gestio
 - **Fichier** : `backend/server.py` (endpoint `get_user_time_tracking`, lignes ~6360-6400)
 - **Testing** : Backend curl validé + Screenshot frontend OK
 
+### Phase 17 - Persistance offline du menu + Indicateur hors ligne dans le header
+- Les preferences utilisateur (menu, theme, sidebar), la visibilite du header et les badges sont caches dans localStorage comme fallback offline
+- L'indicateur En ligne/Hors ligne est toujours visible dans le header, independamment de la configuration utilisateur
+- Fix du PreferencesContext: attend le token avant de charger (le Provider se monte avant le login)
+- Fichiers modifies: `PreferencesContext.jsx`, `Header.jsx`, `Sidebar.jsx`
+
 ## Prioritized Backlog
 ### P0
 - (RESOLU) Miniatures photos dans formulaire modification OT

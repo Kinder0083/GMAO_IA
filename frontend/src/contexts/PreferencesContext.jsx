@@ -16,9 +16,22 @@ export const PreferencesProvider = ({ children }) => {
   const [preferences, setPreferences] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Charger les préférences au montage
+  // Charger les préférences quand le token est disponible
   useEffect(() => {
-    loadPreferences();
+    const token = localStorage.getItem('token');
+    if (token) {
+      loadPreferences();
+    } else {
+      setLoading(false);
+      // Attendre que le token apparaisse (après login)
+      const checkToken = setInterval(() => {
+        if (localStorage.getItem('token')) {
+          clearInterval(checkToken);
+          loadPreferences();
+        }
+      }, 500);
+      return () => clearInterval(checkToken);
+    }
   }, []);
 
   const loadPreferences = async () => {
@@ -36,8 +49,19 @@ export const PreferencesProvider = ({ children }) => {
 
       setPreferences(response.data);
       applyPreferences(response.data);
+      // Sauvegarder en cache local pour le mode hors ligne
+      try { localStorage.setItem('cached_preferences', JSON.stringify(response.data)); } catch {}
     } catch (error) {
       console.error('Erreur lors du chargement des préférences:', error);
+      // Fallback : charger depuis le cache local (mode hors ligne)
+      try {
+        const cached = localStorage.getItem('cached_preferences');
+        if (cached) {
+          const cachedPrefs = JSON.parse(cached);
+          setPreferences(cachedPrefs);
+          applyPreferences(cachedPrefs);
+        }
+      } catch {}
     } finally {
       setLoading(false);
     }
@@ -56,6 +80,7 @@ export const PreferencesProvider = ({ children }) => {
 
       setPreferences(response.data);
       applyPreferences(response.data);
+      try { localStorage.setItem('cached_preferences', JSON.stringify(response.data)); } catch {}
       return response.data;
     } catch (error) {
       console.error('Erreur lors de la mise à jour des préférences:', error);
@@ -76,6 +101,7 @@ export const PreferencesProvider = ({ children }) => {
 
       setPreferences(response.data.preferences);
       applyPreferences(response.data.preferences);
+      try { localStorage.setItem('cached_preferences', JSON.stringify(response.data.preferences)); } catch {}
       return response.data.preferences;
     } catch (error) {
       console.error('Erreur lors de la réinitialisation des préférences:', error);

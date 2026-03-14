@@ -64,8 +64,20 @@ const Header = ({
   useEffect(() => {
     if (user?.id) {
       api.get(`/users/${user.id}/header-visibility`)
-        .then(res => setHeaderVisibility(res.data || {}))
-        .catch(() => setHeaderVisibility({}));
+        .then(res => {
+          const data = res.data || {};
+          setHeaderVisibility(data);
+          try { localStorage.setItem('cached_header_visibility', JSON.stringify(data)); } catch {}
+        })
+        .catch(() => {
+          // Fallback : charger depuis le cache local (mode hors ligne)
+          try {
+            const cached = localStorage.getItem('cached_header_visibility');
+            setHeaderVisibility(cached ? JSON.parse(cached) : {});
+          } catch {
+            setHeaderVisibility({});
+          }
+        });
     }
   }, [user?.id]);
 
@@ -348,15 +360,18 @@ const Header = ({
           <span className="hidden md:inline font-semibold text-gray-800 text-lg">FSAO Iris</span>
         </div>
         
-        {/* Icônes zone gauche — ordre configurable */}
+        {/* Icônes zone gauche — ordre configurable (offline_indicator exclu car affiché en permanent) */}
         <div className="flex items-center gap-2">
-          {leftIcons.map(id => renderIcon(id))}
+          {leftIcons.filter(id => id !== 'offline_indicator').map(id => renderIcon(id))}
         </div>
       </div>
 
       {/* Zone droite : Icônes droite (ordre configurable) + Profil (toujours en dernier) */}
       <div className="flex items-center gap-1 md:gap-4">
-        {rightIcons.map(id => renderIcon(id))}
+        {/* Indicateur En ligne / Hors ligne — toujours visible, non conditionné par la config utilisateur */}
+        <span className="hidden md:flex"><OfflineIndicator /></span>
+        
+        {rightIcons.filter(id => id !== 'offline_indicator').map(id => renderIcon(id))}
         
         {/* Profil — toujours en dernier */}
         <Tooltip>
