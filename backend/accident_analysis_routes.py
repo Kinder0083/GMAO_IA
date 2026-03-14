@@ -103,6 +103,28 @@ def serialize_doc(doc):
 
 
 # =============================================
+# Config IA pour ce module (AVANT les routes /{analysis_id})
+# =============================================
+
+@router.get("/settings/ai-config")
+async def get_ai_config(current_user: dict = Depends(get_current_user)):
+    config = await db.global_settings.find_one({"key": "accident_analysis_ai_config"}, {"_id": 0})
+    if config and config.get("value"):
+        return config["value"]
+    return {"provider": "openai", "model": "gpt-5.2"}
+
+
+@router.put("/settings/ai-config")
+async def update_ai_config(data: dict, current_user: dict = Depends(get_current_user)):
+    await db.global_settings.update_one(
+        {"key": "accident_analysis_ai_config"},
+        {"$set": {"key": "accident_analysis_ai_config", "value": {"provider": data.get("provider", "openai"), "model": data.get("model", "gpt-5.2")}}},
+        upsert=True
+    )
+    return {"status": "ok", "provider": data.get("provider"), "model": data.get("model")}
+
+
+# =============================================
 # CRUD Analyses
 # =============================================
 
@@ -367,7 +389,14 @@ async def create_work_order_from_analysis(analysis_id: str, data: dict, current_
 
     now = datetime.now(timezone.utc)
     last_wo = await db.work_orders.find_one(sort=[("numero", -1)])
-    next_num = (last_wo.get("numero", 5000) if last_wo else 5000) + 1
+    # Handle both string and int numero fields for backward compatibility
+    last_num = last_wo.get("numero", 5000) if last_wo else 5000
+    if isinstance(last_num, str):
+        try:
+            last_num = int(last_num)
+        except ValueError:
+            last_num = 5000
+    next_num = last_num + 1
 
     wo = {
         "numero": next_num,
@@ -457,25 +486,3 @@ async def create_checklist_from_analysis(analysis_id: str, data: dict, current_u
         {"$push": {"checklists_generees": {"checklist_id": cl_id, "titre": checklist["titre"], "created_at": now.isoformat()}}}
     )
     return {"id": cl_id, "titre": checklist["titre"]}
-
-
-# =============================================
-# Config IA pour ce module
-# =============================================
-
-@router.get("/settings/ai-config")
-async def get_ai_config(current_user: dict = Depends(get_current_user)):
-    config = await db.global_settings.find_one({"key": "accident_analysis_ai_config"}, {"_id": 0})
-    if config and config.get("value"):
-        return config["value"]
-    return {"provider": "openai", "model": "gpt-5.2"}
-
-
-@router.put("/settings/ai-config")
-async def update_ai_config(data: dict, current_user: dict = Depends(get_current_user)):
-    await db.global_settings.update_one(
-        {"key": "accident_analysis_ai_config"},
-        {"$set": {"key": "accident_analysis_ai_config", "value": {"provider": data.get("provider", "openai"), "model": data.get("model", "gpt-5.2")}}},
-        upsert=True
-    )
-    return {"status": "ok", "provider": data.get("provider"), "model": data.get("model")}

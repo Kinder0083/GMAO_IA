@@ -13,6 +13,7 @@ import {
 } from '../components/Settings';
 import FormAIModelSettings from '../components/Settings/FormAIModelSettings';
 import TrashSettings from '../components/Settings/TrashSettings';
+import AccidentAISettings from '../components/Settings/AccidentAISettings';
 
 /**
  * Page de paramètres spéciaux / système
@@ -77,6 +78,9 @@ const SpecialSettings = () => {
 
           {/* Corbeille — Delai de retention */}
           <TrashSettings />
+
+          {/* Analyse d'Accidents — Modele IA */}
+          <AccidentAISettings />
         </div>
       </div>
     </div>

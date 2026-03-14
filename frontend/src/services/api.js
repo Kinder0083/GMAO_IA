@@ -1275,4 +1275,26 @@ export const dashboardAPI = {
   getWidgetData: () => api.get('/dashboard/widget-data').then(res => res.data),
 };
 
+
+export const accidentAnalysisAPI = {
+  list: () => api.get('/accident-analysis').then(r => r.data),
+  get: (id) => api.get(`/accident-analysis/${id}`).then(r => r.data),
+  create: (data) => api.post('/accident-analysis', data).then(r => r.data),
+  update: (id, data) => api.put(`/accident-analysis/${id}`, data).then(r => r.data),
+  delete: (id) => api.delete(`/accident-analysis/${id}`).then(r => r.data),
+  // IA
+  aiQqoqcp: (id, data) => api.post(`/accident-analysis/${id}/ai/qqoqcp`, data).then(r => r.data),
+  ai5Pourquoi: (id, data) => api.post(`/accident-analysis/${id}/ai/5pourquoi`, data).then(r => r.data),
+  aiIshikawa: (id, data) => api.post(`/accident-analysis/${id}/ai/ishikawa`, data).then(r => r.data),
+  aiAlarm: (id, data) => api.post(`/accident-analysis/${id}/ai/alarm`, data).then(r => r.data),
+  aiGenerateActions: (id) => api.post(`/accident-analysis/${id}/ai/generate-actions`).then(r => r.data),
+  // Actions correctives
+  createWorkOrder: (id, data) => api.post(`/accident-analysis/${id}/create-work-order`, data).then(r => r.data),
+  createPreventive: (id, data) => api.post(`/accident-analysis/${id}/create-preventive`, data).then(r => r.data),
+  createChecklist: (id, data) => api.post(`/accident-analysis/${id}/create-checklist`, data).then(r => r.data),
+  // Config IA
+  getAIConfig: () => api.get('/accident-analysis/settings/ai-config').then(r => r.data),
+  updateAIConfig: (data) => api.put('/accident-analysis/settings/ai-config', data).then(r => r.data),
+};
+
 export default api;

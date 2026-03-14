@@ -4853,7 +4853,8 @@ async def migrate_menu_preferences(current_user: dict = Depends(get_current_user
             { "id": "sensors", "label": "Capteurs MQTT", "path": "/sensors", "icon": "Activity", "module": "sensors", "visible": True, "favorite": False, "order": 22 },
             { "id": "iot-dashboard", "label": "Dashboard IoT", "path": "/iot-dashboard", "icon": "BarChart3", "module": "iotDashboard", "visible": True, "favorite": False, "order": 23 },
             { "id": "mqtt-logs", "label": "Logs MQTT", "path": "/mqtt-logs", "icon": "Terminal", "module": "mqttLogs", "visible": True, "favorite": False, "order": 24 },
-            { "id": "whiteboard", "label": "Tableau d'affichage", "path": "/whiteboard", "icon": "Presentation", "module": "whiteboard", "visible": True, "favorite": False, "order": 25 }
+            { "id": "whiteboard", "label": "Tableau d'affichage", "path": "/whiteboard", "icon": "Presentation", "module": "whiteboard", "visible": True, "favorite": False, "order": 25 },
+            { "id": "accident-analysis", "label": "Arbre des Causes", "path": "/accident-analysis", "icon": "GitBranch", "module": "accidentAnalysis", "visible": True, "favorite": False, "order": 26 }
         ]
         
         # Récupérer les préférences actuelles
@@ -11199,6 +11200,11 @@ from training_routes import router as training_router, init_training_routes
 init_training_routes(db)
 api_router.include_router(training_router)
 
+# Routes Analyse d'Accidents (Arbre des Causes)
+from accident_analysis_routes import router as accident_analysis_router, init_accident_analysis_routes
+init_accident_analysis_routes(db, audit_service)
+api_router.include_router(accident_analysis_router)
+
 
 # WebSocket pour le tableau d'affichage
 from fastapi import WebSocket, WebSocketDisconnect
@@ -12015,6 +12021,7 @@ async def startup_scheduler():
             "iot-dashboard": {"label": "Dashboard IoT", "path": "/iot-dashboard", "icon": "BarChart3", "module": "iotDashboard"},
             "mqtt-logs": {"label": "Logs MQTT", "path": "/mqtt-logs", "icon": "Terminal", "module": "mqttLogs"},
             "whiteboard": {"label": "Tableau d'affichage", "path": "/whiteboard", "icon": "Presentation", "module": "whiteboard"},
+            "accident-analysis": {"label": "Arbre des Causes", "path": "/accident-analysis", "icon": "GitBranch", "module": "accidentAnalysis"},
         }
         user_prefs = await db.user_preferences.find({}).to_list(length=None)
         menus_migrated = 0
