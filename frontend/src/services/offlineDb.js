@@ -60,10 +60,15 @@ export const getCachedResponse = async (url) => {
 export const addToSyncQueue = async (method, url, data, headers = {}, fileRefs = []) => {
   try {
     const db = await getOfflineDb();
+    // S'assurer que data est un objet (pas une string JSON déjà sérialisée par axios)
+    let safeData = data;
+    if (typeof data === 'string') {
+      try { safeData = JSON.parse(data); } catch { safeData = data; }
+    }
     const id = await db.add('syncQueue', {
       method,
       url,
-      data,
+      data: safeData,
       headers,
       fileRefs,
       timestamp: Date.now(),

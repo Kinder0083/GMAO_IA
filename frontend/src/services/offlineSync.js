@@ -55,6 +55,10 @@ export const syncPendingMutations = async () => {
       const item = items[i];
       window.dispatchEvent(new CustomEvent('sync-progress', { detail: { total: items.length, current: i + 1, item: item.url } }));
 
+      // Utiliser le token ACTUEL (pas celui stocké au moment offline, qui peut avoir expiré)
+      const currentToken = localStorage.getItem('token');
+      const authHeader = currentToken ? `Bearer ${currentToken}` : item.headers?.Authorization;
+
       try {
         let config;
 
@@ -65,7 +69,7 @@ export const syncPendingMutations = async () => {
             url: item.url,
             data: formData,
             headers: {
-              Authorization: item.headers?.Authorization,
+              Authorization: authHeader,
               'X-Offline-Sync': 'true'
             }
           };
@@ -73,12 +77,40 @@ export const syncPendingMutations = async () => {
           config = {
             method: item.method,
             url: item.url,
-            headers: { ...item.headers, 'X-Offline-Sync': 'true' }
+            headers: { ...item.headers, Authorization: authHeader, 'X-Offline-Sync': 'true' }
           };
           if (item.data) config.data = item.data;
         }
 
-        await api(config);
+        const response = await api(config);
+
+        // Après sync réussie d'une DI : uploader les fichiers en attente
+        if (item.pendingFiles && item.pendingFiles.length > 0 && response?.data?.id) {
+          const newId = response.data.id;
+          console.log(`[Sync] Upload de ${item.pendingFiles.length} fichier(s) pour DI ${newId}`);
+          for (const fileRef of item.pendingFiles) {
+            try {
+              const fileData = await getOfflineFile(fileRef.fileId);
+              if (fileData) {
+                const fd = new FormData();
+                const file = new File([fileData.blob], fileData.metadata?.name || fileRef.name, {
+                  type: fileData.metadata?.type || fileRef.type
+                });
+                fd.append('file', file);
+                await api.post(`${item.url}/${newId}/attachments`, fd, {
+                  headers: {
+                    Authorization: authHeader,
+                    'Content-Type': 'multipart/form-data'
+                  }
+                });
+                await removeOfflineFile(fileRef.fileId);
+                console.log(`[Sync] Fichier uploade: ${fileRef.name}`);
+              }
+            } catch (fileErr) {
+              console.warn(`[Sync] Echec upload fichier ${fileRef.name}:`, fileErr?.response?.status || fileErr?.message);
+            }
+          }
+        }
 
         if (item.fileRefs) {
           for (const ref of item.fileRefs) {

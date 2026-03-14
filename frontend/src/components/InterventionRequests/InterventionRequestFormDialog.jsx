@@ -297,7 +297,44 @@ const InterventionRequestFormDialog = ({ open, onOpenChange, request, onSuccess 
       } else {
         const response = await interventionRequestsAPI.create(submitData);
         if (response?.data?._offline_queued) {
-          toast({ title: 'Mode hors ligne', description: 'Demande enregistree localement, elle sera transmise au retour de la connexion.' });
+          // Mode offline : stocker les fichiers en attente pour synchronisation ultérieure
+          if (hasNewFiles) {
+            const newFiles = attachments.filter(a => !a.isExisting && a.file);
+            const fileRefs = [];
+            for (const item of newFiles) {
+              const fileId = `offline_file_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+              try {
+                const { storeOfflineFile } = await import('../../services/offlineDb');
+                await storeOfflineFile(fileId, item.file, {
+                  name: item.file.name || item.name,
+                  type: item.file.type,
+                  size: item.file.size
+                });
+                fileRefs.push({ fileId, name: item.file.name || item.name, type: item.file.type });
+              } catch (e) {
+                console.error('[Offline] Erreur stockage fichier:', e);
+              }
+            }
+            if (fileRefs.length > 0) {
+              // Attacher les fichiers au dernier item de la syncQueue
+              try {
+                const { getOfflineDb } = await import('../../services/offlineDb');
+                const idb = await getOfflineDb();
+                const items = await idb.getAll('syncQueue');
+                const lastItem = items[items.length - 1];
+                if (lastItem && lastItem.url === '/intervention-requests' && lastItem.method === 'post') {
+                  lastItem.pendingFiles = fileRefs;
+                  await idb.put('syncQueue', lastItem);
+                  console.log('[Offline] ' + fileRefs.length + ' fichier(s) attache(s) a la DI en attente');
+                }
+              } catch (e) {
+                console.error('[Offline] Erreur liaison fichiers:', e);
+              }
+            }
+            toast({ title: 'Mode hors ligne', description: `Demande et ${fileRefs.length} photo(s) enregistrees localement, seront transmises au retour de la connexion.` });
+          } else {
+            toast({ title: 'Mode hors ligne', description: 'Demande enregistree localement, elle sera transmise au retour de la connexion.' });
+          }
         } else {
           resultId = response?.data?.id;
           if (hasNewFiles && resultId) await uploadFiles(resultId);

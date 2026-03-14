@@ -152,7 +152,10 @@ Application GMAO (Gestion de Maintenance Assistee par Ordinateur) pour la gestio
 - L'intercepteur Axios queue TOUTE requete POST/PUT/DELETE quand aucune reponse serveur n'est recue (condition simplifiee: !error.response && !ERR_CANCELED)
 - Ping periodique vers GET /api/health pour detecter le retour de la connexion
 - Recovery automatique quand le navigateur signal "online" + confirmation par ping
-- Fichiers crees/modifies: `connectivityManager.js`, `api.js`, `useOnlineStatus.js`, `offlineSync.js`, `server.py`
+- **Fix sync photos offline**: Les fichiers sont stockes dans IndexedDB (fileStore) avec reference (pendingFiles) dans la syncQueue. Apres sync reussie de la DI, les photos sont automatiquement uploadees avec le nouvel ID
+- **Fix token expire**: La synchronisation utilise le token JWT actuel (localStorage) et non celui stocke au moment offline
+- **Fix double-serialisation**: addToSyncQueue desérialise les strings JSON avant stockage
+- Fichiers crees/modifies: `connectivityManager.js`, `api.js`, `useOnlineStatus.js`, `offlineSync.js`, `offlineDb.js`, `InterventionRequestFormDialog.jsx`, `server.py`
 
 ## Prioritized Backlog
 ### P0
