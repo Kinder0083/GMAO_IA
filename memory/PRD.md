@@ -4,183 +4,92 @@
 Application GMAO (Gestion de Maintenance Assistee par Ordinateur) pour la gestion de maintenance industrielle.
 
 ## Tech Stack
-- **Frontend**: React 18, Tailwind CSS, Shadcn/UI, Lucide icons
+- **Frontend**: React 18, Tailwind CSS, Shadcn/UI, Lucide icons, @xyflow/react
 - **Backend**: FastAPI, Python 3.11
 - **Database**: MongoDB (motor async)
 - **Auth**: JWT tokens
 - **Realtime**: WebSocket via RealtimeManager
-- **AI**: Gemini, OpenAI, Claude (via emergentintegrations)
+- **AI**: Gemini, OpenAI (GPT-5.2), Claude (via emergentintegrations)
+
+## Session 14 Mars 2026
+
+### Phase 20 - Module Arbre des Causes (Analyse d'Accidents)
+- **Fonctionnalite complete** : Module d'analyse d'accidents de maintenance avec 4 methodologies et IA integree
+- **Backend** (`accident_analysis_routes.py`) :
+  - CRUD complet pour les analyses (list, create, get, update, soft delete)
+  - 5 endpoints IA : QQOQCP, 5 Pourquoi, Ishikawa (5M), ALARM, Generation d'actions
+  - 3 endpoints de creation d'actions correctives : OT, Maintenance Preventive, Checklist
+  - Configuration du modele IA (GET/PUT /settings/ai-config)
+  - Fallback chain LLM (OpenAI → Gemini → Anthropic)
+- **Frontend** :
+  - `AccidentAnalysisPage.jsx` : Page de liste avec creation, recherche, suppression
+  - `AccidentAnalysisDetail.jsx` : Page de detail avec stepper 5 phases :
+    1. QQOQCP (6 champs + aide IA)
+    2. 5 Pourquoi (iterations + identification cause racine)
+    3. Ishikawa 5M (5 categories + diagramme visuel + IA)
+    4. ALARM (7 categories de facteurs + IA)
+    5. Actions correctives (generation IA + creation OT/MP/Checklist)
+  - `AccidentAISettings.jsx` : Configuration du modele IA dans Parametres speciaux
+- **Menu** : Entree "Arbre des Causes" ajoutee dans la sidebar avec migration automatique
+- **Routes** : `/accident-analysis` et `/accident-analysis/:id`
+- **Testing** : Backend 92% (AI timeout expected), Frontend 100% (iteration_128)
+
+## Session 13 Mars 2026
+
+### Phase 19 - Refonte complete du mode offline (ConnectivityManager)
+- ConnectivityManager singleton pour detection fiable de la connectivite
+- Fix sync photos offline, token expire, double-serialisation
+
+### Phase 18 - Dialog statut OT accessible aux utilisateurs view-only
+- StatusChangeDialog apres validation du pointage pour TOUS les utilisateurs
+
+### Phase 17 - Persistance offline du menu + Indicateur hors ligne
+- Preferences utilisateur cachees dans localStorage comme fallback offline
+
+### Phase 16 - Bug Fix + Amelioration : Pointage horaire du personnel
+- Auto-decouverte des utilisateurs ayant pointe du temps
+
+### Phase 15 - Stockage Hors Ligne dans Sante Systeme + OfflineDisabled sur IA/Export
+
+### Phase 14 - Mode Offline Complet PWA (Phases 1, 2, 3)
+
+### Phase 13 - Bug Fix: Affichage OT supprime dans liste DI
 
 ## Session 12 Mars 2026
 
 ### Phase 12 - Corbeille avec Soft Delete et Restauration
-- **Soft Delete**: Les suppressions d'OT, ameliorations, DI, equipements, presqu'accidents, utilisateurs et surveillance marquent les items au lieu de les supprimer
-- **Page Corbeille** (`/trash`): Liste les elements supprimes avec Restaurer/Supprimer definitivement
-- **Bouton Restaurer dans le Journal**: A cote de chaque entree de suppression
-- **Parametres Speciaux**: Section "Corbeille" avec delai de retention configurable (defaut 2j)
-- **Cron job**: Purge automatique toutes les 12h
-- **Testing**: 100% (iteration_126)
-
-
-### Phase 11 - Drag & Drop pour pièces jointes (3 formulaires)
-- **Fonctionnalité**: Zone de glisser-déposer ajoutée aux 3 formulaires de l'application
-  - Formulaire OT (WorkOrderFormDialog.jsx) - `data-testid="wo-drop-zone"`
-  - Formulaire DI (InterventionRequestFormDialog.jsx) - `data-testid="di-drop-zone"`
-  - Formulaire public DI via QR (PublicInterventionForm.jsx) - `data-testid="public-di-drop-zone"`
-- **Implémentation**: état `isDragging`, `dragCounter` ref, handlers `handleDragEnter/Leave/Over/Drop`
-- **UX**: Bordure pointillée, feedback visuel bleu au survol, icône Upload, texte "Glissez-deposez"
-- **Boutons existants conservés**: Parcourir + Appareil photo (OT/DI), Prendre photo + Galerie (Public)
-- **Testing**: 100% - 13 tests frontend passés (iteration_125), régression miniatures OT validée
-
+### Phase 11 - Drag & Drop pour pieces jointes (3 formulaires)
 ### Phase 10 - Bug Fix: Miniatures photos dans formulaire modification OT
-- **Probleme**: Les photos transferees d'une DI vers un OT n'etaient visibles que dans le dialogue de visualisation (oeil) et pas dans le dialogue de modification (crayon)
-- **Cause racine**: Le chargement async des blob URLs pour les miniatures etait fonctionnel mais manquait de robustesse (pas de nettoyage, pas de protection contre les races conditions)
-- **Fix**: Amelioration du `useEffect` dans `WorkOrderFormDialog.jsx`:
-  - Ajout d'un flag `cancelled` pour annuler les operations async perimees
-  - Ajout du nettoyage des blob URLs (`URL.revokeObjectURL`) a la fermeture du dialogue
-  - Reset des attachments avant le chargement async
-  - Support des formats alternatifs d'attachments (`nom`, `taille`, `type` en plus de `original_filename`, `size`, `mime_type`)
-  - Reset de `previewImage` a l'ouverture
-- **Testing**: 100% - Backend et frontend valides par testing agent (API download 200, miniatures blob visibles dans les dialogues edition et visualisation)
 
 ## Session 11 Mars 2026
 
 ### Phase 9 - Admin peut modifier ses propres permissions
-- Suppression de la restriction backend qui empechait un admin de modifier ses propres permissions
-- Testing: curl valide (200 OK au lieu de 400)
-
-### Phase 8 - Corrections Demandes d'Intervention (icones, photos, transfert)
-- **Logique icones**: Crayon seul si DI en attente, Oeil seul si convertie/refusee. Corbeille toujours visible selon permissions.
-- **Photos DI dans formulaire (Crayon)**: Miniatures chargees via fetch authentifie avec blob URLs (avant conversion)
-- **Photos DI dans visualisation (Oeil)**: AttachmentGallery integre au dialogue (miniatures + lightbox plein ecran)
-- **Compatibilite PJ**: Support ancien format (id string, chemin uploads/intervention_requests/) et nouveau (ObjectId, uploads/intervention-requests/)
-- **Transfert DI->OT**: Photos copiees vers le dossier OT avec fallback ancien chemin
-- Testing: 100% (iteration_123, iteration_124 - 10/10 backend + Playwright frontend)
-
-### Phase 7 - Cache-busting automatique (plus besoin de CTRL+MAJ+F5)
-- **Service Worker**: `sw.js` modifie pour forcer `cache: 'no-store'` sur les navigation requests
-- **Detection de version**: Hook `useVersionCheck.js` verifie `/version.json` toutes les 5 min + au retour sur l'onglet. Recharge automatiquement si nouvelle version detectee
-- **Post-build script**: `post-build.sh` remplace les timestamps dans `sw.js` et `version.json` a chaque `yarn build`
-
+### Phase 8 - Corrections Demandes d'Intervention
+### Phase 7 - Cache-busting automatique
 ### Phase 6 - Formulaire DI Public via QR Code + Photos + KPI
-- **Fonctionnalite**: "Creer une demande d'intervention" accessible SANS authentification depuis le QR code
-- **Backend**: POST /api/qr/public/intervention-request, POST /api/qr/public/intervention-request/{id}/attachments
-- **Frontend**: `PublicInterventionForm.jsx` - Formulaire mobile-first epure
-- **Email notification**: Envoi auto aux admins avec 2 boutons action (Convertir en OT / Refuser)
-- **KPI Dashboard**: Widgets "DI en attente" et "Temps reponse DI"
-- Testing: 100%
-
 ### Phase 5 - Analyse IA Historique Achat
-- Boutons "Analyse IA" et "Archives IA" sur la page Historique Achat
-- Pattern identique au module Presqu'accidents (LLM fallback chain, auto-archivage)
-- Testing: 100%
-
 ### Phase 4 - WebSocket Demandes d'Intervention
-- Fix: Suppression de `exclude_user` dans les emit_event des DI pour support multi-appareils
-- Testing: valide
-
 ### Phase 3 - Bug Roles + Categories Menu
-- Auto-migration des roles + categories menu pliees par defaut
-- Testing: 100%
-
 ### Phase 2 - Bugs DI + Refus + Camera native
-- Bug colonne Equipement, Camera native, Refus d'intervention, Transfert PJ DI->OT
-- Testing: 100%
-
 ### Phase 1 - Permissions + PJ + Selection Equipement
-- 12 modules ajoutes a PermissionsGrid, selection equipement hierarchique, endpoints PJ
-- Testing: 100%
-
-## Session 13 Mars 2026
-
-### Phase 14 - Mode Offline Complet PWA (Phases 1, 2, 3)
-
-#### Phase 1 - App Shell Caching
-- **Service Worker** reecrit (`sw.js`) : cache l'App Shell (HTML, JS, CSS, images, fonts)
-- **Strategies** : Network-First pour navigation, Cache-First pour assets statiques, Network-Only pour API
-- **offline.html** : Page de fallback quand l'app n'a jamais ete visitee en ligne
-- **Fix critique** : `App.js` supprimait TOUS les caches au demarrage — corrige
-
-#### Phase 2 - Sync donnees et fichiers offline
-- **IndexedDB v2** : Nouveau store `fileStore` pour photos/PJ offline
-- **Upload offline** : FormData serialises et stockes dans IndexedDB, sync au retour en ligne
-- **OfflineBanner** : Banniere persistante avec compteur, taille stockage, progression sync
-- **Toasts globaux** : Notifications pour actions bloquees, enregistrees, synchronisees
-
-#### Phase 3 - Experience utilisateur offline
-- **OfflineIndicator enrichi** : Derniere sync, fichiers stockes, force sync cliquable
-- **OfflineDisabled** : Composant wrapper pour desactiver les features IA/chat offline
-- **useOfflineCapabilities** : Hook de capacites disponibles selon le statut
-- **Testing** : 100% (iteration_127)
-
-### Phase 15 - Stockage Hors Ligne dans Sante Systeme + OfflineDisabled sur IA/Export
-- **Section SystemHealth** : Ajout d'une carte "Stockage Hors Ligne" avec KPIs (en attente, en echec, fichiers, espace), boutons Forcer sync et Vider cache, note explicative
-- **OfflineDisabled wrapper** applique sur 13 pages :
-  - IA : PurchaseHistory, PresquAccidentRapport, SurveillancePlan, Vendors, AnalyticsChecklistsPage, AISensorAnalysis
-  - Export : Journal, Reports, SurveillanceRapport, SurveillanceAIDashboard, IoTDashboard, MESReportsPage, ImportExportTab, Personnalisation
-- **Chat** : Avertissement offline dans ChatLive et icone WifiOff dans AIChatWidget
-- **Testing** : Screenshots OK (boutons visibles/cliquables en ligne, section Stockage Hors Ligne affichee)
-
-### Phase 13 - Bug Fix: Affichage OT supprimé dans liste DI
-- **Probleme**: Quand un OT issu d'une DI est soft-deleted, le numero de l'OT restait affiché normalement dans la colonne "Ordre N°" de la liste des DI
-- **Fix Backend**: Modification de `GET /api/intervention-requests` pour vérifier si les OT liés sont soft-deleted via une requête batch sur `work_orders` avec `deleted_at`
-- **Fix Frontend**: Affichage "~~OT #XXXX~~" (texte barré gris) au lieu du lien bleu cliquable quand `is_work_order_deleted=true`
-- **Modèle**: Ajout du champ `is_work_order_deleted: Optional[bool] = False` au modèle `InterventionRequest`
-- **Testing**: Backend curl validé (flag correct), Frontend screenshot validé (texte barré visible)
-
-### Phase 16 - Bug Fix + Amélioration : Pointage horaire du personnel
-- **Clarification logique** : Le temps est attribué à l'utilisateur qui VALIDE/SAISIT le temps (time_entries.user_id), PAS à celui à qui l'OT est assigné (assigne_a_id). Plusieurs personnes peuvent pointer du temps sur un même OT.
-- **Amélioration auto-découverte** : Quand l'admin ouvre le rapport sans filtre, le backend découvre automatiquement tous les utilisateurs ayant pointé du temps dans la période et les affiche par défaut (au lieu de n'afficher que l'admin connecté avec 0h).
-- **Fichier** : `backend/server.py` (endpoint `get_user_time_tracking`, lignes ~6360-6400)
-- **Testing** : Backend curl validé + Screenshot frontend OK
-
-### Phase 17 - Persistance offline du menu + Indicateur hors ligne dans le header
-- Les preferences utilisateur (menu, theme, sidebar), la visibilite du header et les badges sont caches dans localStorage comme fallback offline
-- L'indicateur En ligne/Hors ligne est toujours visible dans le header, independamment de la configuration utilisateur
-- Fix du PreferencesContext: attend le token avant de charger (le Provider se monte avant le login)
-- Fichiers modifies: `PreferencesContext.jsx`, `Header.jsx`, `Sidebar.jsx`
-
-### Phase 18 - Dialog statut OT accessible aux utilisateurs view-only
-- Le StatusChangeDialog s'affiche desormais apres validation du pointage pour TOUS les utilisateurs, meme ceux avec seulement la permission de visualisation
-- Backend: endpoint PUT /work-orders/{id} passe de require_permission("edit") a require_permission("view"), les permissions internes (role-based) restent en place pour bloquer les modifications autres que le statut
-- Frontend: retire le check canEdit('workOrders') avant l'affichage du StatusChangeDialog
-- Fichiers modifies: `WorkOrderDialog.jsx`, `server.py`
-
-### Phase 19 - Refonte complete du mode offline (ConnectivityManager)
-- **Probleme**: navigator.onLine est peu fiable dans les PWA installees → pas de detection offline reelle → "Erreur de connexion au serveur" au lieu de mise en file d'attente
-- **Solution**: Creation d'un ConnectivityManager singleton qui detecte la connectivite via les echecs/succes des requetes API (pas seulement navigator.onLine)
-- L'intercepteur Axios queue TOUTE requete POST/PUT/DELETE quand aucune reponse serveur n'est recue (condition simplifiee: !error.response && !ERR_CANCELED)
-- Ping periodique vers GET /api/health pour detecter le retour de la connexion
-- Recovery automatique quand le navigateur signal "online" + confirmation par ping
-- **Fix sync photos offline**: Les fichiers sont stockes dans IndexedDB (fileStore) avec reference (pendingFiles) dans la syncQueue. Apres sync reussie de la DI, les photos sont automatiquement uploadees avec le nouvel ID
-- **Fix token expire**: La synchronisation utilise le token JWT actuel (localStorage) et non celui stocke au moment offline
-- **Fix double-serialisation**: addToSyncQueue desérialise les strings JSON avant stockage
-- Fichiers crees/modifies: `connectivityManager.js`, `api.js`, `useOnlineStatus.js`, `offlineSync.js`, `offlineDb.js`, `InterventionRequestFormDialog.jsx`, `server.py`
 
 ## Prioritized Backlog
 ### P0
-- (RESOLU) Miniatures photos dans formulaire modification OT
-- (RESOLU) Drag & Drop pieces jointes (OT, DI, Public DI)
-- (RESOLU) Affichage OT supprime dans la liste DI
-- (RESOLU) Mode Offline Complet PWA (App Shell, Sync fichiers, UX offline)
-- (RESOLU) Bug reinitialisation permissions par defaut (mutation d'objets imbriques)
-- (RESOLU) Pointage horaire - auto-decouverte des utilisateurs ayant pointe du temps
+- (RESOLU) Module Arbre des Causes - Analyse d'accidents
 
 ### P1
-- Validation utilisateur de tous les bugs DI/OT corriges
-- Attente instructions utilisateur
+- Validation utilisateur de tous les bugs corriges
+- Filtres avances sur la page DI
 
 ### P2
 - Systeme de mise a jour serveur - EN PAUSE par l'utilisateur
-- Filtres avances sur la page DI (date, priorite, statut, createur)
-
-## Key Files Modified (Session 12 Mars)
-- `/app/frontend/src/components/WorkOrders/WorkOrderFormDialog.jsx` - Fix chargement miniatures + cleanup blob URLs + drag & drop
-- `/app/frontend/src/components/InterventionRequests/InterventionRequestFormDialog.jsx` - Drag & drop
-- `/app/frontend/src/components/QR/PublicInterventionForm.jsx` - Drag & drop
-- `/app/README.md` - Mise a jour version 1.10.0 avec toutes les nouvelles fonctionnalites
-- `/app/CHANGELOG.md` - Ajout version 1.10.0
-- Base de donnees `manual_sections` - 6 nouvelles sections ajoutees (drag & drop OT/DI, DI publique QR, KPI dashboard, IA achats, cache-busting)
 
 ## Credentials
 - Admin: buenogy@gmail.com / Admin2024!
+
+## Key Files
+- `/app/backend/accident_analysis_routes.py` - Routes backend Arbre des Causes
+- `/app/frontend/src/pages/AccidentAnalysisPage.jsx` - Page liste
+- `/app/frontend/src/pages/AccidentAnalysisDetail.jsx` - Page detail avec 5 phases
+- `/app/frontend/src/components/Settings/AccidentAISettings.jsx` - Config IA
+- `/app/frontend/src/services/api.js` - accidentAnalysisAPI
