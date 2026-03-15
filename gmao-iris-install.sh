@@ -432,8 +432,19 @@ curl -fsSL https://www.mongodb.org/static/pgp/server-7.0.asc | \
 echo "deb [signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg] http://repo.mongodb.org/apt/debian bookworm/mongodb-org/7.0 main" > /etc/apt/sources.list.d/mongodb-org-7.0.list
 apt-get update -qq
 apt-get install -y -qq mongodb-org
-systemctl start mongod
+
+# Fix MongoDB pour containers LXC non-privilegies
+# Le ExecStartPre de mongod tente de modifier transparent_hugepage qui nexiste pas en LXC
+mkdir -p /etc/systemd/system/mongod.service.d
+printf "[Service]\nExecStartPre=\n" > /etc/systemd/system/mongod.service.d/lxc-fix.conf
+systemctl daemon-reload
+
+# Creer les repertoires avec les bonnes permissions
+mkdir -p /var/lib/mongodb /var/log/mongodb /run/mongodb
+chown -R mongodb:mongodb /var/lib/mongodb /var/log/mongodb /run/mongodb 2>/dev/null || true
+
 systemctl enable mongod >/dev/null 2>&1
+systemctl start mongod 2>&1 || true
 
 # Postfix
 apt-get install -y -qq mailutils
@@ -446,6 +457,46 @@ systemctl enable postfix >/dev/null 2>&1
 ' 2>&1 | grep -iE "(error|fatal)" || true
 
 ok "Système installé"
+
+# Vérification robuste de MongoDB avec diagnostics
+msg "Vérification de MongoDB..."
+pct exec $CTID -- bash -c '
+READY=0
+for i in $(seq 1 15); do
+    if mongosh --quiet --eval "db.runCommand({ping:1})" 2>/dev/null | grep -q "ok"; then
+        echo "  ✓ MongoDB prêt (tentative $i)"
+        READY=1
+        break
+    fi
+    sleep 2
+done
+
+if [ "$READY" -eq 0 ]; then
+    echo "  ⚠ MongoDB non démarré, diagnostic en cours..."
+    echo "--- Statut systemd ---"
+    systemctl status mongod --no-pager 2>&1 | head -20 || true
+    echo "--- Logs MongoDB ---"
+    tail -30 /var/log/mongodb/mongod.log 2>/dev/null || echo "(pas de logs)"
+    echo "--- Journal systemd ---"
+    journalctl -u mongod --no-pager -n 15 2>/dev/null || true
+    echo ""
+    echo "  Tentative de démarrage direct..."
+    systemctl stop mongod 2>/dev/null || true
+    sleep 1
+    mkdir -p /var/lib/mongodb /var/log/mongodb
+    chown -R mongodb:mongodb /var/lib/mongodb /var/log/mongodb 2>/dev/null || true
+    mongod --dbpath /var/lib/mongodb --logpath /var/log/mongodb/mongod.log --fork --bind_ip 127.0.0.1 --port 27017 2>&1 || true
+    sleep 5
+    if mongosh --quiet --eval "db.runCommand({ping:1})" 2>/dev/null | grep -q "ok"; then
+        echo "  ✓ MongoDB démarré en mode direct"
+    else
+        echo "  ❌ MongoDB ne démarre pas - dernières lignes du log:"
+        tail -10 /var/log/mongodb/mongod.log 2>/dev/null || true
+    fi
+fi
+'
+
+ok "Vérification MongoDB terminée"
 
 # Obtenir IP du container
 if [[ "$CONTAINER_IP" == "dhcp" ]]; then
@@ -568,17 +619,16 @@ echo "🔐 Création des comptes administrateurs..."
 
 # S'assurer que MongoDB est bien démarré
 echo "  Vérification de MongoDB..."
-systemctl enable mongod >/dev/null 2>&1
-systemctl start mongod >/dev/null 2>&1
 for attempt in 1 2 3 4 5 6 7 8 9 10; do
     if mongosh --quiet --eval "db.runCommand({ping:1})" 2>/dev/null | grep -q "ok"; then
         echo "  ✓ MongoDB est prêt"
         break
     fi
     if [ "\$attempt" -eq 10 ]; then
-        echo "  ⚠ MongoDB ne répond pas, tentative de redémarrage..."
-        systemctl restart mongod
-        sleep 10
+        echo "  ⚠ MongoDB ne répond pas, tentative de démarrage direct..."
+        systemctl stop mongod 2>/dev/null || true
+        mongod --dbpath /var/lib/mongodb --logpath /var/log/mongodb/mongod.log --fork --bind_ip 127.0.0.1 --port 27017 2>&1 || true
+        sleep 5
     else
         echo "  Attente de MongoDB... (\$attempt/10)"
         sleep 3
