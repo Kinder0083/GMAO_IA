@@ -11,6 +11,28 @@ Application GMAO (Gestion de Maintenance Assistee par Ordinateur) pour la gestio
 - **Realtime**: WebSocket via RealtimeManager
 - **AI**: Gemini, OpenAI (GPT-5.2), Claude (via emergentintegrations)
 
+## Session 15 Mars 2026
+
+### Bug Fix P0 - Creation MP depuis Arbre des Causes
+- **Probleme** : Les maintenances preventives creees depuis les actions correctives du module Arbre des Causes n'apparaissaient pas dans le module Maintenance Preventive
+- **Cause racine** : Collection MongoDB incorrecte (`preventive_maintenance` singulier au lieu de `preventive_maintenances` pluriel) + structure de donnees incompatible avec le modele `PreventiveMaintenanceBase`
+- **Corrections** :
+  - `accident_analysis_routes.py` : Collection corrigee + structure adaptee (equipement_id, prochaineMaintenance, duree, dateCreation, statut=ACTIF)
+  - `AccidentAnalysisDetail.jsx` : Frequence corrigee `MENSUELLE` → `MENSUEL`
+  - Collection unifiee dans `ai_chat_routes.py`, `ai_maintenance_routes.py`, `gmao_data_service.py`
+- **Testing** : 100% backend (9/9), 100% frontend - iteration_130
+
+### Feature P1 - Actions Correctives Manuelles
+- **Fonctionnalite** : Ajout d'actions correctives manuelles dans l'onglet "Actions correctives & preventives"
+- **Frontend** (`AccidentAnalysisDetail.jsx`) :
+  - Bouton "Ajouter manuellement" dans le header
+  - Formulaire inline : titre (requis), description, type (OT/MP/Checklist), priorite
+  - Badge "Manuelle" pour les actions manuelles + bouton "Supprimer"
+  - Sauvegarde automatique avec les actions IA existantes
+- **Backend** (`accident_analysis_routes.py`) :
+  - Rapport PDF inclut colonne "Source" (IA/Manuelle)
+- **Testing** : 100% - iteration_130
+
 ## Session 14 Mars 2026
 
 ### Phase 21 - Integration Arbre des Causes (Permissions, README, Manuel)
@@ -45,6 +67,8 @@ Application GMAO (Gestion de Maintenance Assistee par Ordinateur) pour la gestio
 ### P0
 - (DONE) Module Arbre des Causes - Analyse d'accidents
 - (DONE) Integration permissions, README, manuel
+- (DONE) Bug creation MP depuis Arbre des Causes
+- (DONE) Actions correctives manuelles
 
 ### P1
 - Validation utilisateur de tous les bugs corriges
@@ -52,7 +76,6 @@ Application GMAO (Gestion de Maintenance Assistee par Ordinateur) pour la gestio
 
 ### P2
 - Script de mise a jour serveur - EN PAUSE par l'utilisateur
-- Generation rapport PDF pour analyses d'accidents
 
 ## Credentials
 - Admin: buenogy@gmail.com / Admin2024!

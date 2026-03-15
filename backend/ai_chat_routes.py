@@ -669,7 +669,7 @@ async def get_enriched_app_context(current_user: dict) -> dict:
         # --- Maintenances préventives en retard ---
         try:
             today = datetime.now(timezone.utc)
-            context["preventive_maintenance_overdue"] = await db.preventive_maintenance.count_documents({
+            context["preventive_maintenance_overdue"] = await db.preventive_maintenances.count_documents({
                 "prochaine_date": {"$lt": today}, "statut": {"$ne": "terminé"}
             })
         except Exception:
@@ -1538,7 +1538,7 @@ async def ai_search(
             if filters.get("en_retard"):
                 query["prochaine_date"] = {"$lt": datetime.now(timezone.utc)}
             
-            cursor = db.preventive_maintenance.find(query, {"_id": 0}).limit(20)
+            cursor = db.preventive_maintenances.find(query, {"_id": 0}).limit(20)
             results = await cursor.to_list(length=20)
         
         # Convertir les dates pour la sérialisation JSON

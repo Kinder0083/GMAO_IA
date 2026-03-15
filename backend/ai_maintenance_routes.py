@@ -401,7 +401,7 @@ async def create_maintenance_batch(
                 "pieces_rechange": op.get("pieces_rechange"),
                 "source_filename": data.get("source_filename")
             }
-            await db.preventive_maintenance.insert_one(pm)
+            await db.preventive_maintenances.insert_one(pm)
             pm.pop("_id", None)
             created_maintenance.append(pm)
 

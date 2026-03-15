@@ -337,12 +337,12 @@ async def _get_preventive_completion_rate(service_filter=None, date_filter=None,
     if date_filter and len(date_filter) > 0:
         query["scheduled_date"] = date_filter
     
-    total = await _db.preventive_maintenance.count_documents(query)
+    total = await _db.preventive_maintenances.count_documents(query)
     if total == 0:
         return 0
     
     completed_query = {**query, "status": {"$in": ["REALISE", "completed", "done"]}}
-    completed = await _db.preventive_maintenance.count_documents(completed_query)
+    completed = await _db.preventive_maintenances.count_documents(completed_query)
     
     return round((completed / total) * 100, 1)
 
@@ -357,7 +357,7 @@ async def _get_preventive_overdue_count(service_filter=None, **kwargs):
     if service_filter:
         query["service"] = service_filter
     
-    return await _db.preventive_maintenance.count_documents(query)
+    return await _db.preventive_maintenances.count_documents(query)
 
 
 async def _get_preventive_upcoming_count(service_filter=None, **kwargs):
@@ -373,7 +373,7 @@ async def _get_preventive_upcoming_count(service_filter=None, **kwargs):
     if service_filter:
         query["service"] = service_filter
     
-    return await _db.preventive_maintenance.count_documents(query)
+    return await _db.preventive_maintenances.count_documents(query)
 
 
 # === Fonctions pour les Demandes ===
