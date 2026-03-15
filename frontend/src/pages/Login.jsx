@@ -60,7 +60,7 @@ const Login = () => {
       
       toast({
         title: 'Connexion réussie',
-        description: `Bienvenue ${user.prenom} ${user.nom}`
+        description: `Bienvenue ${user?.prenom || ''} ${user?.nom || ''}`.trim()
       });
       
       // Récupérer les préférences utilisateur pour la page d'accueil

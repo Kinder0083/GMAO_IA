@@ -619,12 +619,12 @@ async def login(login_request: LoginRequest):
     # Log dans l'audit
     await audit_service.log_action(
         user_id=user.get("id", str(user["_id"])),
-        user_name=f"{user['prenom']} {user['nom']}",
+        user_name=f"{user.get('prenom', '')} {user.get('nom', '')}".strip(),
         user_email=user["email"],
         action=ActionType.LOGIN,
         entity_type=EntityType_Audit.USER,
         entity_id=user.get("id", str(user["_id"])),
-        entity_name=f"{user['prenom']} {user['nom']}"
+        entity_name=f"{user.get('prenom', '')} {user.get('nom', '')}".strip()
     )
     
     # Create access token (valide 1 heure)
