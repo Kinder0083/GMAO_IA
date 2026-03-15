@@ -83,13 +83,43 @@ async def execute_backup(schedule: dict) -> dict:
             # 1a. Générer le fichier Excel des données
             xlsx_output = io.BytesIO()
             with pd.ExcelWriter(xlsx_output, engine='openpyxl') as writer:
+                # Collections déclarées dans EXPORT_MODULES
                 for mod_name, collection_name in EXPORT_MODULES.items():
-                    items = await db[collection_name].find().to_list(10000)
-                    cleaned = [_clean_item_for_export(item) for item in items]
-                    df = pd.DataFrame(cleaned)
-                    sheet_name = mod_name[:31]
-                    df.to_excel(writer, sheet_name=sheet_name, index=False)
-                    module_count += 1
+                    try:
+                        items = await db[collection_name].find().to_list(100000)
+                        if items:
+                            cleaned = [_clean_item_for_export(item) for item in items]
+                            df = pd.DataFrame(cleaned)
+                            sheet_name = mod_name[:31]
+                            df.to_excel(writer, sheet_name=sheet_name, index=False)
+                            module_count += 1
+                            logger.info(f"[Backup] {mod_name}: {len(items)} documents")
+                    except Exception as e:
+                        logger.warning(f"[Backup] Erreur export {mod_name}: {e}")
+
+                # Collections dynamiques : sauvegarder aussi celles non listées
+                all_collections = await db.list_collection_names()
+                backed_up = set(EXPORT_MODULES.values())
+                skip_patterns = {"system."}
+                for col_name in sorted(all_collections):
+                    if col_name in backed_up:
+                        continue
+                    if any(col_name.startswith(p) for p in skip_patterns):
+                        continue
+                    try:
+                        count = await db[col_name].count_documents({})
+                        if count > 0:
+                            items = await db[col_name].find().to_list(100000)
+                            cleaned = [_clean_item_for_export(item) for item in items]
+                            df = pd.DataFrame(cleaned)
+                            sheet_name = col_name[:31]
+                            # Éviter les doublons de noms de feuilles
+                            if sheet_name not in [ws.title for ws in writer.book.worksheets]:
+                                df.to_excel(writer, sheet_name=sheet_name, index=False)
+                                module_count += 1
+                                logger.info(f"[Backup] (auto) {col_name}: {len(items)} documents")
+                    except Exception as e:
+                        logger.warning(f"[Backup] Erreur export auto {col_name}: {e}")
 
             xlsx_output.seek(0)
             zf.writestr("data.xlsx", xlsx_output.getvalue())

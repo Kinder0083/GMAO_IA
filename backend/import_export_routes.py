@@ -124,6 +124,67 @@ EXPORT_MODULES = {
     "service-dashboard-configs": "service_dashboard_configs",
     # --- Contrats ---
     "contracts": "contracts",
+    # ============================================================
+    # --- Collections ajoutées (manquaient dans les backups) ---
+    # ============================================================
+    # --- Analyses d'accidents ---
+    "accident-analyses": "accident_analyses",
+    "ai-analysis-history": "ai_analysis_history",
+    "ai-chat-history": "ai_chat_history",
+    "ai-pa-archives": "ai_pa_archives",
+    # --- Alertes et actions ---
+    "alert-action-configs": "alert_action_configs",
+    # --- Paramètres application ---
+    "app-settings": "app_settings",
+    "system-settings": "system_settings",
+    # --- Autorisations ---
+    "autorisations-particulieres": "autorisations_particulieres",
+    # --- Disponibilités ---
+    "availabilities": "availabilities",
+    # --- Checklists ---
+    "checklists": "checklists",
+    "checklist-templates": "checklist_templates",
+    "checklist-executions": "checklist_executions",
+    # --- Widgets personnalisés ---
+    "custom-widgets": "custom_widgets",
+    # --- Historique statut équipements ---
+    "equipment-status-history": "equipment_status_history",
+    # --- Config alertes santé ---
+    "health-alerts-config": "health_alerts_config",
+    # --- Inventaire (mouvements, demandes, services) ---
+    "inventory-movements": "inventory_movements",
+    "inventory-restock-requests": "inventory_restock_requests",
+    "inventory-services": "inventory_services",
+    # --- Manuel utilisateur ---
+    "manual-chapters": "manual_chapters",
+    "manual-sections": "manual_sections",
+    "manual-versions": "manual_versions",
+    # --- MQTT ---
+    "mqtt-messages": "mqtt_messages",
+    "mqtt-publish-history": "mqtt_publish_history",
+    # --- Maintenances préventives (autre collection) ---
+    "preventive-maintenances": "preventive_maintenances",
+    # --- Config QR ---
+    "qr-actions-config": "qr_actions_config",
+    # --- Releases / Changelog ---
+    "releases": "releases",
+    "releases-feedback": "releases_feedback",
+    # --- Capteurs lectures ---
+    "sensor-readings": "sensor_readings",
+    # --- Services responsables ---
+    "service-responsables": "service_responsables",
+    # --- SSH macros ---
+    "ssh-macros": "ssh_macros",
+    # --- Support ---
+    "support-requests": "support_requests",
+    # --- Temps passé ---
+    "time-entries": "time_entries",
+    # --- Formation ---
+    "training-links": "training_links",
+    "training-responses": "training_responses",
+    "training-sessions": "training_sessions",
+    # --- Fichiers Excel uploadés ---
+    "uploaded-excel-files": "uploaded_excel_files",
 }
 
 # Mappings de colonnes pour l'import (noms français/anglais vers noms internes)
@@ -386,6 +447,76 @@ SHEET_TO_MODULE = {
     "service_dashboard_configs": "service-dashboard-configs",
     "contracts": "contracts",
     "contrats": "contracts",
+    # --- Collections ajoutées ---
+    "accident-analyses": "accident-analyses",
+    "accident_analyses": "accident-analyses",
+    "ai-analysis-history": "ai-analysis-history",
+    "ai_analysis_history": "ai-analysis-history",
+    "ai-chat-history": "ai-chat-history",
+    "ai_chat_history": "ai-chat-history",
+    "ai-pa-archives": "ai-pa-archives",
+    "ai_pa_archives": "ai-pa-archives",
+    "alert-action-configs": "alert-action-configs",
+    "alert_action_configs": "alert-action-configs",
+    "app-settings": "app-settings",
+    "app_settings": "app-settings",
+    "system-settings": "system-settings",
+    "system_settings": "system-settings",
+    "autorisations-particulieres": "autorisations-particulieres",
+    "autorisations_particulieres": "autorisations-particulieres",
+    "availabilities": "availabilities",
+    "checklists": "checklists",
+    "checklist-templates": "checklist-templates",
+    "checklist_templates": "checklist-templates",
+    "checklist-executions": "checklist-executions",
+    "checklist_executions": "checklist-executions",
+    "custom-widgets": "custom-widgets",
+    "custom_widgets": "custom-widgets",
+    "equipment-status-history": "equipment-status-history",
+    "equipment_status_history": "equipment-status-history",
+    "health-alerts-config": "health-alerts-config",
+    "health_alerts_config": "health-alerts-config",
+    "inventory-movements": "inventory-movements",
+    "inventory_movements": "inventory-movements",
+    "inventory-restock-requests": "inventory-restock-requests",
+    "inventory_restock_requests": "inventory-restock-requests",
+    "inventory-services": "inventory-services",
+    "inventory_services": "inventory-services",
+    "manual-chapters": "manual-chapters",
+    "manual_chapters": "manual-chapters",
+    "manual-sections": "manual-sections",
+    "manual_sections": "manual-sections",
+    "manual-versions": "manual-versions",
+    "manual_versions": "manual-versions",
+    "mqtt-messages": "mqtt-messages",
+    "mqtt_messages": "mqtt-messages",
+    "mqtt-publish-history": "mqtt-publish-history",
+    "mqtt_publish_history": "mqtt-publish-history",
+    "preventive-maintenances": "preventive-maintenances",
+    "preventive_maintenances": "preventive-maintenances",
+    "qr-actions-config": "qr-actions-config",
+    "qr_actions_config": "qr-actions-config",
+    "releases": "releases",
+    "releases-feedback": "releases-feedback",
+    "releases_feedback": "releases-feedback",
+    "sensor-readings": "sensor-readings",
+    "sensor_readings": "sensor-readings",
+    "service-responsables": "service-responsables",
+    "service_responsables": "service-responsables",
+    "ssh-macros": "ssh-macros",
+    "ssh_macros": "ssh-macros",
+    "support-requests": "support-requests",
+    "support_requests": "support-requests",
+    "time-entries": "time-entries",
+    "time_entries": "time-entries",
+    "training-links": "training-links",
+    "training_links": "training-links",
+    "training-responses": "training-responses",
+    "training_responses": "training-responses",
+    "training-sessions": "training-sessions",
+    "training_sessions": "training-sessions",
+    "uploaded-excel-files": "uploaded-excel-files",
+    "uploaded_excel_files": "uploaded-excel-files",
 }
 
 
@@ -473,21 +604,9 @@ async def process_import_item(item: dict, module: str, collection_name: str, cur
         cleaned["_id"] = ObjectId()
         cleaned["id"] = str(cleaned["_id"])
     
-    # --- Convertir les champs *_id en ObjectId ---
-    id_fields = [
-        "equipement_id", "assigne_a_id", "emplacement_id", "createdBy",
-        "parent_id", "created_by", "demandeur_id", "destinataire_id",
-        "responsable_n1_id", "responsable_hierarchique_id",
-        "preventive_maintenance_id", "checklist_id", "inventory_item_id",
-        "user_id", "archived_by"
-    ]
-    for field in id_fields:
-        val = cleaned.get(field)
-        if val and isinstance(val, str) and len(val) == 24:
-            try:
-                cleaned[field] = ObjectId(val)
-            except Exception:
-                pass
+    # --- NOTE: NE PAS convertir les champs *_id en ObjectId ---
+    # Les modèles Pydantic attendent des strings pour ces champs.
+    # Seul le champ _id (MongoDB) doit être un ObjectId.
     
     # --- Parser les champs JSON (listes/dicts stockés comme strings) ---
     json_fields = [
@@ -768,7 +887,14 @@ async def fix_missing_ids(
                 if "id" not in doc or not doc["id"]:
                     updates["id"] = str(doc["_id"])
 
-                # 2. Compléter les champs requis manquants
+                # 2. Convertir les ObjectId en string (critique pour données restaurées)
+                for field, val in doc.items():
+                    if field == "_id":
+                        continue
+                    if isinstance(val, ObjectId):
+                        updates[field] = str(val)
+
+                # 3. Compléter les champs requis manquants
                 for field, default_val in defaults.items():
                     if field not in doc or doc[field] is None:
                         if default_val is None:
@@ -777,13 +903,13 @@ async def fix_missing_ids(
                         else:
                             updates[field] = default_val
 
-                # 3. Normaliser les enums en majuscule
+                # 4. Normaliser les enums en majuscule
                 for field in UPPERCASE_FIELDS:
                     val = doc.get(field)
                     if isinstance(val, str) and val != val.upper():
                         updates[field] = val.upper()
 
-                # 4. Mapper les noms de champs alternatifs
+                # 5. Mapper les noms de champs alternatifs
                 field_aliases = {
                     "title": "titre",
                     "priority": "priorite",
@@ -819,6 +945,79 @@ async def fix_missing_ids(
         "total_fixed": total_fixed,
         "details": stats
     }
+
+
+
+@router.get("/restore/diagnostic")
+async def diagnostic_restore(
+    current_user: dict = Depends(get_current_admin_user)
+):
+    """
+    Diagnostic complet : liste toutes les collections MongoDB, 
+    leur nombre de documents, et teste les DI contre le modèle Pydantic.
+    """
+    from models import InterventionRequest
+    
+    result = {
+        "collections_in_export_modules": {},
+        "all_mongodb_collections": {},
+        "intervention_requests_detail": [],
+        "intervention_requests_errors": [],
+    }
+    
+    # 1. Lister TOUTES les collections MongoDB avec leur count
+    collection_names = await db.list_collection_names()
+    for col_name in sorted(collection_names):
+        count = await db[col_name].count_documents({})
+        result["all_mongodb_collections"][col_name] = count
+    
+    # 2. Vérifier les collections dans EXPORT_MODULES
+    for mod_name, col_name in EXPORT_MODULES.items():
+        try:
+            count = await db[col_name].count_documents({})
+            result["collections_in_export_modules"][f"{mod_name} -> {col_name}"] = count
+        except Exception as e:
+            result["collections_in_export_modules"][f"{mod_name} -> {col_name}"] = f"erreur: {str(e)}"
+    
+    # 3. Détail des DI avec test du modèle Pydantic
+    async for doc in db.intervention_requests.find({"deleted_at": {"$exists": False}}).limit(20):
+        doc_summary = {}
+        for k, v in doc.items():
+            if k == "_id":
+                doc_summary["_id"] = str(v)
+            elif isinstance(v, list):
+                doc_summary[k] = f"[{len(v)} items]"
+            elif isinstance(v, dict):
+                doc_summary[k] = f"{{dict {len(v)} keys}}"
+            else:
+                doc_summary[k] = str(v)[:100]
+        
+        # Tester contre le modèle
+        try:
+            InterventionRequest(**doc)
+            doc_summary["_pydantic_valid"] = True
+        except Exception as e:
+            doc_summary["_pydantic_valid"] = False
+            doc_summary["_pydantic_error"] = str(e)[:300]
+            result["intervention_requests_errors"].append({
+                "id": str(doc.get("id", doc.get("_id", "?"))),
+                "titre": str(doc.get("titre", doc.get("title", "?")))[:50],
+                "error": str(e)[:300]
+            })
+        
+        result["intervention_requests_detail"].append(doc_summary)
+    
+    # 4. Compter aussi les DI avec deleted_at
+    total_di = await db.intervention_requests.count_documents({})
+    active_di = await db.intervention_requests.count_documents({"deleted_at": {"$exists": False}})
+    deleted_di = await db.intervention_requests.count_documents({"deleted_at": {"$exists": True}})
+    result["di_counts"] = {
+        "total": total_di,
+        "active": active_di,
+        "deleted": deleted_di
+    }
+    
+    return result
 
 
 # --- Upload chunké pour gros fichiers (contourne la limite Nginx) ---
@@ -932,6 +1131,19 @@ async def _do_restore(content: bytes, mode: str, current_user: dict):
             if module_name and module_name in EXPORT_MODULES:
                 data_sheets[module_name] = df
                 logger.info(f"[Restore] Feuille '{sheet_name}' -> '{module_name}': {len(df)} lignes")
+            elif len(df) > 0:
+                # Feuille inconnue mais avec des données : la restaurer directement
+                # Le nom de la feuille est le nom de la collection (sauvegarde dynamique)
+                col_name = sheet_name.replace("-", "_")
+                # Vérifier si c'est un nom de collection valide (pas de caractères spéciaux)
+                if col_name.replace("_", "").isalnum():
+                    # Ajouter dynamiquement au mapping pour la restauration
+                    if sheet_name not in EXPORT_MODULES:
+                        EXPORT_MODULES[sheet_name] = col_name
+                    data_sheets[sheet_name] = df
+                    logger.info(f"[Restore] Feuille dynamique '{sheet_name}' -> '{col_name}': {len(df)} lignes")
+                else:
+                    logger.warning(f"[Restore] Feuille '{sheet_name}' ignorée (nom invalide)")
 
         # 2. Restaurer les fichiers uploadés
         upload_entries = [n for n in zf.namelist() if n.startswith('uploads/') and not n.endswith('/')]

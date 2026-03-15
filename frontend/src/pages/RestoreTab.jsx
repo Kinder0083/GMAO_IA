@@ -22,6 +22,29 @@ const RestoreTab = () => {
   const [uploadPhase, setUploadPhase] = useState('');
   const [fixingIds, setFixingIds] = useState(false);
   const [fixResult, setFixResult] = useState(null);
+  const [diagRunning, setDiagRunning] = useState(false);
+  const [diagResult, setDiagResult] = useState(null);
+
+  const handleDiagnostic = async () => {
+    try {
+      setDiagRunning(true);
+      setDiagResult(null);
+      const backend_url = getBackendURL();
+      const token = localStorage.getItem('token');
+      const response = await axios.get(`${backend_url}/api/restore/diagnostic`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setDiagResult(response.data);
+    } catch (error) {
+      toast({
+        title: 'Erreur diagnostic',
+        description: formatErrorMessage(error, 'Impossible de lancer le diagnostic'),
+        variant: 'destructive'
+      });
+    } finally {
+      setDiagRunning(false);
+    }
+  };
 
   const handleFixMissingIds = async () => {
     try {
@@ -383,6 +406,78 @@ const RestoreTab = () => {
                   ))}
                 </div>
               )}
+            </div>
+          )}
+
+          <div className="border-t pt-4 mt-4">
+            <p className="text-sm font-medium text-gray-700 mb-2">Diagnostic des donnees</p>
+            <p className="text-xs text-gray-500 mb-3">Lance un diagnostic complet pour identifier pourquoi certaines donnees n'apparaissent pas.</p>
+            <Button
+              data-testid="diagnostic-button"
+              onClick={handleDiagnostic}
+              disabled={diagRunning}
+              variant="outline"
+              size="sm"
+            >
+              {diagRunning ? 'Analyse en cours...' : 'Lancer le diagnostic'}
+            </Button>
+          </div>
+
+          {diagResult && (
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-4 text-sm max-h-[600px] overflow-y-auto">
+              <div>
+                <p className="font-semibold text-gray-900">Demandes d'Intervention (DI)</p>
+                <p className="text-gray-600">Total: {diagResult.di_counts?.total || 0}, Actives: {diagResult.di_counts?.active || 0}, Supprimees: {diagResult.di_counts?.deleted || 0}</p>
+              </div>
+              
+              {diagResult.intervention_requests_errors?.length > 0 && (
+                <div className="bg-red-50 border border-red-200 rounded p-3">
+                  <p className="font-semibold text-red-800 mb-1">Erreurs de validation DI ({diagResult.intervention_requests_errors.length})</p>
+                  {diagResult.intervention_requests_errors.map((err, i) => (
+                    <div key={i} className="text-xs text-red-700 mb-1">
+                      <span className="font-medium">{err.titre}</span>: {err.error}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {diagResult.intervention_requests_detail?.length > 0 && (
+                <div>
+                  <p className="font-semibold text-gray-900 mb-1">Detail des DI ({diagResult.intervention_requests_detail.length} premieres)</p>
+                  {diagResult.intervention_requests_detail.map((di, i) => (
+                    <details key={i} className="mb-1">
+                      <summary className={`cursor-pointer text-xs ${di._pydantic_valid ? 'text-green-700' : 'text-red-700'}`}>
+                        {di._pydantic_valid ? 'OK' : 'ERREUR'} - {di.titre || di.title || 'Sans titre'} (id: {(di.id || di._id || '?').substring(0, 20)})
+                      </summary>
+                      <pre className="text-xs bg-white p-2 rounded mt-1 overflow-x-auto whitespace-pre-wrap">{JSON.stringify(di, null, 2)}</pre>
+                    </details>
+                  ))}
+                </div>
+              )}
+
+              <details>
+                <summary className="cursor-pointer font-semibold text-gray-900">Collections MongoDB ({Object.keys(diagResult.all_mongodb_collections || {}).length})</summary>
+                <div className="mt-1 space-y-0.5">
+                  {Object.entries(diagResult.all_mongodb_collections || {}).map(([name, count]) => (
+                    <div key={name} className="flex justify-between text-xs">
+                      <span className="text-gray-600">{name}</span>
+                      <span className={`font-medium ${count > 0 ? 'text-green-700' : 'text-gray-400'}`}>{count}</span>
+                    </div>
+                  ))}
+                </div>
+              </details>
+
+              <details>
+                <summary className="cursor-pointer font-semibold text-gray-900">Collections sauvegardees ({Object.keys(diagResult.collections_in_export_modules || {}).length})</summary>
+                <div className="mt-1 space-y-0.5">
+                  {Object.entries(diagResult.collections_in_export_modules || {}).map(([name, count]) => (
+                    <div key={name} className="flex justify-between text-xs">
+                      <span className="text-gray-600">{name}</span>
+                      <span className={`font-medium ${count > 0 ? 'text-green-700' : 'text-gray-400'}`}>{count}</span>
+                    </div>
+                  ))}
+                </div>
+              </details>
             </div>
           )}
         </CardContent>

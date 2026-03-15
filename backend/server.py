@@ -328,6 +328,11 @@ def serialize_doc(doc, _is_root=True):
             doc["id"] = str(doc["_id"])
         del doc["_id"]
     
+    # Convertir tous les ObjectId en string (protection globale pour données restaurées)
+    for key, value in doc.items():
+        if isinstance(value, ObjectId):
+            doc[key] = str(value)
+    
     # Supprimer les champs sensibles si présents
     sensitive_fields = ["password", "hashed_password", "reset_token", "reset_token_created"]
     for field in sensitive_fields:
@@ -7535,6 +7540,10 @@ async def get_all_intervention_requests(current_user: dict = Depends(require_per
         for req in all_reqs:
             if req.get("work_order_id") and req["work_order_id"] in deleted_wo_ids:
                 req["is_work_order_deleted"] = True
+            # Convertir tous les ObjectId en string (données restaurées)
+            for key, val in req.items():
+                if isinstance(val, ObjectId):
+                    req[key] = str(val)
             # Compléter les champs obligatoires manquants (données restaurées)
             if "id" not in req:
                 req["id"] = str(req.get("_id", ""))
@@ -7553,8 +7562,7 @@ async def get_all_intervention_requests(current_user: dict = Depends(require_per
             try:
                 requests.append(InterventionRequest(**req))
             except Exception as e:
-                logger.warning(f"DI {req.get('id','?')} invalide, tentative de correction: {str(e)[:100]}")
-                # Dernier recours : forcer les valeurs par défaut
+                logger.warning(f"DI {req.get('id','?')} invalide, tentative correction: {str(e)[:100]}")
                 req.setdefault("titre", "Sans titre")
                 req.setdefault("description", "")
                 req.setdefault("priorite", "AUCUNE")
