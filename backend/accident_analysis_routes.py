@@ -4,7 +4,7 @@ Arbre des causes, QQOQCP, 5 Pourquoi, Ishikawa, ALARM
 avec questionnement IA et generation d'actions correctives
 """
 from fastapi import APIRouter, Depends, HTTPException
-from dependencies import get_current_user
+from dependencies import get_current_user, get_current_user_optional
 from datetime import datetime, timezone
 from bson import ObjectId
 import logging
@@ -486,3 +486,252 @@ async def create_checklist_from_analysis(analysis_id: str, data: dict, current_u
         {"$push": {"checklists_generees": {"checklist_id": cl_id, "titre": checklist["titre"], "created_at": now.isoformat()}}}
     )
     return {"id": cl_id, "titre": checklist["titre"]}
+
+
+# =============================================
+# Rapport PDF
+# =============================================
+
+ISHIKAWA_LABELS = {
+    "main_oeuvre": "Main d'oeuvre",
+    "materiel": "Materiel",
+    "methodes": "Methodes",
+    "milieu": "Milieu",
+    "matieres": "Matieres",
+}
+
+ALARM_LABELS = {
+    "patient_facteurs": "Facteurs patient / victime",
+    "taches_facteurs": "Facteurs taches",
+    "individus_facteurs": "Facteurs individuels",
+    "equipe_facteurs": "Facteurs equipe",
+    "environnement_facteurs": "Facteurs environnement",
+    "organisation_facteurs": "Facteurs organisation",
+    "contexte_facteurs": "Facteurs contexte institutionnel",
+}
+
+
+def _build_pdf_html(analysis: dict, selected_action_indices: list = None) -> str:
+    """Genere le HTML du rapport PDF pour une analyse d'accident"""
+    titre = analysis.get("titre", "Analyse")
+    date_acc = analysis.get("date_accident", "N/A")
+    lieu = analysis.get("lieu", "N/A")
+    gravite = analysis.get("gravite", "N/A")
+    desc = analysis.get("description_initiale", "")
+    created_by = analysis.get("created_by_name", "")
+
+    # QQOQCP
+    qqoqcp = analysis.get("qqoqcp", {})
+    qqoqcp_html = ""
+    for key, label in [("quoi","Quoi"), ("qui","Qui"), ("ou","Ou"), ("quand","Quand"), ("comment","Comment"), ("pourquoi","Pourquoi")]:
+        val = qqoqcp.get(key, "")
+        if val:
+            qqoqcp_html += f"<tr><td class='label'>{label} ?</td><td>{val}</td></tr>"
+
+    # 5 Pourquoi
+    cinq_p = analysis.get("cinq_pourquoi", {})
+    iterations = cinq_p.get("iterations", [])
+    cause_racine = cinq_p.get("cause_racine", "")
+    pourquoi_html = ""
+    for i, it in enumerate(iterations):
+        pourquoi_html += f"<tr><td class='label'>Pourquoi {i+1}</td><td>{it.get('reponse', '')}</td></tr>"
+    if cause_racine:
+        pourquoi_html += f"<tr class='highlight'><td class='label'>Cause racine</td><td><strong>{cause_racine}</strong></td></tr>"
+
+    # Ishikawa
+    ishikawa = analysis.get("ishikawa", {})
+    ishikawa_html = ""
+    for key, label in ISHIKAWA_LABELS.items():
+        causes = ishikawa.get(key, [])
+        if causes:
+            items = ", ".join(c.get("cause", str(c)) if isinstance(c, dict) else str(c) for c in causes)
+            ishikawa_html += f"<tr><td class='label'>{label}</td><td>{items}</td></tr>"
+
+    # ALARM
+    alarm = analysis.get("alarm", {})
+    alarm_html = ""
+    for key, label in ALARM_LABELS.items():
+        factors = alarm.get(key, [])
+        if factors:
+            items = ", ".join(f.get("facteur", str(f)) if isinstance(f, dict) else str(f) for f in factors)
+            alarm_html += f"<tr><td class='label'>{label}</td><td>{items}</td></tr>"
+
+    # Actions correctives (filtrées si indices fournis)
+    all_actions = analysis.get("actions_correctives", [])
+    if selected_action_indices is not None:
+        actions = [all_actions[i] for i in selected_action_indices if i < len(all_actions)]
+    else:
+        actions = all_actions
+
+    actions_html = ""
+    for i, a in enumerate(actions):
+        prio = a.get("priorite", "")
+        prio_class = "prio-haute" if prio in ("URGENTE", "HAUTE") else "prio-moyenne" if prio == "MOYENNE" else ""
+        actions_html += f"""
+        <tr>
+            <td class='label'>{i+1}</td>
+            <td>{a.get('titre', '')}</td>
+            <td>{a.get('description', '')}</td>
+            <td class='{prio_class}'>{prio}</td>
+            <td>{(a.get('type', '') or '').replace('_', ' ')}</td>
+        </tr>"""
+
+    # Elements generes
+    generes_html = ""
+    ot_gen = analysis.get("ot_generes", [])
+    mp_gen = analysis.get("mp_generees", [])
+    cl_gen = analysis.get("checklists_generees", [])
+    if ot_gen or mp_gen or cl_gen:
+        generes_html = "<h2>Elements generes dans la GMAO</h2><ul>"
+        for ot in ot_gen:
+            generes_html += f"<li><strong>OT</strong> #{ot.get('numero', '')} - {ot.get('titre', '')}</li>"
+        for mp in mp_gen:
+            generes_html += f"<li><strong>Maint. Prev.</strong> - {mp.get('titre', '')}</li>"
+        for cl in cl_gen:
+            generes_html += f"<li><strong>Checklist</strong> - {cl.get('titre', '')}</li>"
+        generes_html += "</ul>"
+
+    now_str = datetime.now(timezone.utc).strftime("%d/%m/%Y %H:%M")
+
+    html = f"""<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Rapport - {titre}</title>
+<style>
+  @media print {{
+    body {{ margin: 0; }}
+    .no-print {{ display: none !important; }}
+    @page {{ margin: 15mm; size: A4; }}
+  }}
+  * {{ box-sizing: border-box; }}
+  body {{ font-family: 'Segoe UI', Tahoma, sans-serif; font-size: 11pt; color: #1a1a1a; line-height: 1.5; padding: 20px; max-width: 900px; margin: 0 auto; }}
+  .header {{ display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #c2410c; padding-bottom: 12px; margin-bottom: 20px; }}
+  .header h1 {{ font-size: 20pt; color: #c2410c; margin: 0; }}
+  .header .meta {{ text-align: right; font-size: 9pt; color: #666; }}
+  .badge {{ display: inline-block; padding: 2px 10px; border-radius: 4px; font-weight: bold; font-size: 9pt; }}
+  .badge-gravite {{ background: #fef3c7; color: #92400e; }}
+  .badge-gravite.CRITIQUE {{ background: #fee2e2; color: #991b1b; }}
+  .badge-gravite.HAUTE {{ background: #ffedd5; color: #9a3412; }}
+  h2 {{ font-size: 13pt; color: #c2410c; border-left: 4px solid #c2410c; padding-left: 10px; margin-top: 24px; margin-bottom: 10px; page-break-after: avoid; }}
+  table {{ width: 100%; border-collapse: collapse; margin-bottom: 16px; }}
+  table th, table td {{ border: 1px solid #d1d5db; padding: 6px 10px; text-align: left; font-size: 10pt; }}
+  table th {{ background: #f3f4f6; font-weight: 600; }}
+  td.label {{ font-weight: 600; width: 180px; background: #fafafa; }}
+  tr.highlight td {{ background: #ecfdf5; }}
+  .prio-haute {{ color: #dc2626; font-weight: bold; }}
+  .prio-moyenne {{ color: #d97706; }}
+  .desc {{ background: #f9fafb; padding: 10px; border-radius: 6px; border: 1px solid #e5e7eb; margin-bottom: 16px; }}
+  .print-btn {{ position: fixed; top: 15px; right: 15px; padding: 10px 24px; background: #c2410c; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 11pt; z-index: 100; }}
+  .print-btn:hover {{ background: #9a3412; }}
+  .footer {{ margin-top: 30px; padding-top: 10px; border-top: 1px solid #d1d5db; font-size: 8pt; color: #999; text-align: center; }}
+</style>
+</head>
+<body>
+<button class="print-btn no-print" onclick="window.print()">Imprimer / PDF</button>
+
+<div class="header">
+  <div>
+    <h1>Rapport d'Analyse d'Accident</h1>
+    <p style="margin:4px 0 0;font-size:10pt;color:#666;">{titre}</p>
+  </div>
+  <div class="meta">
+    <div><strong>Date accident :</strong> {date_acc}</div>
+    <div><strong>Lieu :</strong> {lieu}</div>
+    <div><strong>Gravite :</strong> <span class="badge badge-gravite {gravite}">{gravite}</span></div>
+    <div><strong>Analyste :</strong> {created_by}</div>
+    <div><strong>Rapport genere le :</strong> {now_str}</div>
+  </div>
+</div>
+
+<div class="desc"><strong>Description :</strong> {desc}</div>
+
+<h2>1. Methode QQOQCP</h2>
+{"<table>" + qqoqcp_html + "</table>" if qqoqcp_html else "<p style='color:#999;'>Non renseigne</p>"}
+
+<h2>2. Methode des 5 Pourquoi</h2>
+{"<table>" + pourquoi_html + "</table>" if pourquoi_html else "<p style='color:#999;'>Non renseigne</p>"}
+
+<h2>3. Diagramme d'Ishikawa (5M)</h2>
+{"<table><tr><th>Categorie</th><th>Causes identifiees</th></tr>" + ishikawa_html + "</table>" if ishikawa_html else "<p style='color:#999;'>Non renseigne</p>"}
+
+<h2>4. Grille ALARM</h2>
+{"<table><tr><th>Categorie</th><th>Facteurs identifies</th></tr>" + alarm_html + "</table>" if alarm_html else "<p style='color:#999;'>Non renseigne</p>"}
+
+<h2>5. Actions correctives et preventives retenues</h2>
+{"<table><tr><th>#</th><th>Action</th><th>Description</th><th>Priorite</th><th>Type</th></tr>" + actions_html + "</table>" if actions_html else "<p style='color:#999;'>Aucune action</p>"}
+
+{generes_html}
+
+<div class="footer">
+  FSAO Iris - Rapport d'analyse d'accident genere automatiquement le {now_str}
+</div>
+</body>
+</html>"""
+    return html
+
+
+@router.get("/{analysis_id}/pdf")
+async def generate_analysis_pdf(
+    analysis_id: str,
+    token: str = None,
+    actions: str = None,
+    current_user: dict = Depends(get_current_user_optional)
+):
+    """Generer le rapport HTML/PDF pour une analyse d'accident"""
+    from fastapi.responses import HTMLResponse
+    from auth import decode_access_token
+
+    # Auth via Bearer OU token query param
+    if not current_user and token:
+        payload = decode_access_token(token)
+        if payload is None:
+            raise HTTPException(status_code=401, detail="Token invalide ou expire")
+    elif not current_user and not token:
+        raise HTTPException(status_code=401, detail="Non authentifie")
+
+    doc = await db.accident_analyses.find_one({"_id": ObjectId(analysis_id), "deleted": {"$ne": True}})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Analyse non trouvee")
+
+    selected = None
+    if actions:
+        try:
+            selected = [int(i) for i in actions.split(",")]
+        except ValueError:
+            pass
+
+    html = _build_pdf_html(doc, selected)
+    return HTMLResponse(content=html)
+
+
+@router.post("/{analysis_id}/archive-pdf")
+async def archive_analysis_pdf(
+    analysis_id: str,
+    data: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    """Archiver un rapport PDF (stocker les metadonnees du rapport genere)"""
+    doc = await db.accident_analyses.find_one({"_id": ObjectId(analysis_id), "deleted": {"$ne": True}})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Analyse non trouvee")
+
+    now = datetime.now(timezone.utc)
+    rapport = {
+        "id": str(uuid.uuid4())[:8],
+        "generated_at": now.isoformat(),
+        "generated_by": f"{current_user.get('prenom', '')} {current_user.get('nom', '')}".strip(),
+        "generated_by_id": current_user.get("id"),
+        "selected_actions": data.get("selected_actions", []),
+        "total_actions": len(doc.get("actions_correctives", [])),
+        "retained_actions": len(data.get("selected_actions", []))
+    }
+
+    await db.accident_analyses.update_one(
+        {"_id": ObjectId(analysis_id)},
+        {
+            "$push": {"rapports_pdf": rapport},
+            "$set": {"updated_at": now}
+        }
+    )
+    return rapport

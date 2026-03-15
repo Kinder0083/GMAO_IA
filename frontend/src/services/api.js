@@ -1295,6 +1295,8 @@ export const accidentAnalysisAPI = {
   // Config IA
   getAIConfig: () => api.get('/accident-analysis/settings/ai-config').then(r => r.data),
   updateAIConfig: (data) => api.put('/accident-analysis/settings/ai-config', data).then(r => r.data),
+  // PDF & Archive
+  archivePdf: (id, data) => api.post(`/accident-analysis/${id}/archive-pdf`, data).then(r => r.data),
 };
 
 export default api;

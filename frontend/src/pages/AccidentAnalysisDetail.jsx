@@ -9,7 +9,8 @@ import { Input } from '../components/ui/input';
 import {
   ArrowLeft, ArrowRight, GitBranch, Brain, Send, Loader2,
   CheckCircle2, Circle, ClipboardList, Calendar, Shield,
-  ChevronDown, ChevronUp, Plus, FileText, Wrench
+  ChevronDown, ChevronUp, Plus, FileText, Wrench, Printer,
+  Check, Archive
 } from 'lucide-react';
 
 // ========== PHASES ==========
@@ -596,7 +597,7 @@ function AlarmPhase({ analysis, onSave, aiLoading, setAiLoading, toast }) {
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <CardTitle className="text-lg flex items-center gap-2">
-            <Shield className="h-5 w-5 text-red-600" /> Grille ALARM
+            <Shield className="h-5 w-5 text-red-600" /> Grille ALARM - Association of Litigation And Risk Management
           </CardTitle>
           <div className="flex gap-2">
             <Button size="sm" variant="outline" onClick={askAI} disabled={aiLoading} data-testid="ai-alarm-btn">
@@ -669,8 +670,13 @@ function AlarmPhase({ analysis, onSave, aiLoading, setAiLoading, toast }) {
 // ========== Actions Phase ==========
 function ActionsPhase({ analysis, onSave, onReload, aiLoading, setAiLoading, toast }) {
   const [actions, setActions] = useState(analysis.actions_correctives || []);
+  const [selected, setSelected] = useState(() => {
+    // Par defaut, toutes selectionnees
+    return new Set((analysis.actions_correctives || []).map((_, i) => i));
+  });
   const [aiActions, setAiActions] = useState(null);
   const [creatingAction, setCreatingAction] = useState(null);
+  const [archiving, setArchiving] = useState(false);
 
   const generateActions = async () => {
     setAiLoading(true);
@@ -679,6 +685,7 @@ function ActionsPhase({ analysis, onSave, onReload, aiLoading, setAiLoading, toa
       setAiActions(result);
       if (result.actions) {
         setActions(result.actions);
+        setSelected(new Set(result.actions.map((_, i) => i)));
       }
     } catch {
       toast({ title: 'Erreur IA', variant: 'destructive' });
@@ -687,7 +694,45 @@ function ActionsPhase({ analysis, onSave, onReload, aiLoading, setAiLoading, toa
     }
   };
 
+  const toggleSelect = (idx) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(idx)) next.delete(idx); else next.add(idx);
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    if (selected.size === actions.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(actions.map((_, i) => i)));
+    }
+  };
+
   const save = () => onSave({ actions_correctives: actions });
+
+  const openPdf = () => {
+    const baseUrl = process.env.REACT_APP_BACKEND_URL || '';
+    const token = localStorage.getItem('token');
+    const selectedIndices = [...selected].sort((a, b) => a - b).join(',');
+    const url = `${baseUrl}/api/accident-analysis/${analysis.id}/pdf?token=${token}&actions=${selectedIndices}`;
+    window.open(url, '_blank');
+  };
+
+  const archivePdf = async () => {
+    setArchiving(true);
+    try {
+      const selectedIndices = [...selected].sort((a, b) => a - b);
+      await accidentAnalysisAPI.archivePdf(analysis.id, { selected_actions: selectedIndices });
+      toast({ title: 'Rapport archive', description: `${selectedIndices.length} action(s) retenue(s)` });
+      onReload();
+    } catch {
+      toast({ title: 'Erreur', variant: 'destructive' });
+    } finally {
+      setArchiving(false);
+    }
+  };
 
   const createOT = async (action) => {
     setCreatingAction(action.titre);
@@ -751,11 +796,11 @@ function ActionsPhase({ analysis, onSave, onReload, aiLoading, setAiLoading, toa
   return (
     <Card data-testid="actions-phase">
       <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-2">
           <CardTitle className="text-lg flex items-center gap-2">
             <Wrench className="h-5 w-5 text-green-600" /> Actions correctives & preventives
           </CardTitle>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <Button size="sm" variant="outline" onClick={generateActions} disabled={aiLoading} data-testid="ai-generate-actions-btn">
               {aiLoading ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Brain className="h-4 w-4 mr-1" />}
               Generer via IA
@@ -763,6 +808,33 @@ function ActionsPhase({ analysis, onSave, onReload, aiLoading, setAiLoading, toa
             <Button size="sm" onClick={save} data-testid="save-actions-btn">Sauvegarder</Button>
           </div>
         </div>
+        {/* PDF & Archive buttons - only when actions exist */}
+        {actions.length > 0 && (
+          <div className="flex items-center justify-between mt-3 pt-3 border-t">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={toggleAll}
+                className="text-xs text-blue-600 hover:underline"
+                data-testid="toggle-all-actions"
+              >
+                {selected.size === actions.length ? 'Tout deselectionner' : 'Tout selectionner'}
+              </button>
+              <span className="text-xs text-gray-500">
+                {selected.size} / {actions.length} action(s) retenue(s)
+              </span>
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" onClick={openPdf} disabled={selected.size === 0} data-testid="generate-pdf-btn">
+                <Printer className="h-4 w-4 mr-1" />
+                Rapport PDF
+              </Button>
+              <Button size="sm" variant="outline" onClick={archivePdf} disabled={selected.size === 0 || archiving} data-testid="archive-pdf-btn">
+                {archiving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Archive className="h-4 w-4 mr-1" />}
+                Archiver
+              </Button>
+            </div>
+          </div>
+        )}
       </CardHeader>
       <CardContent>
         {actions.length === 0 ? (
@@ -772,41 +844,60 @@ function ActionsPhase({ analysis, onSave, onReload, aiLoading, setAiLoading, toa
           </div>
         ) : (
           <div className="space-y-3">
-            {actions.map((action, i) => (
-              <div key={i} className="border rounded-lg p-4" data-testid={`action-${i}`}>
-                <div className="flex items-start justify-between mb-2">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <h4 className="font-medium text-gray-900">{action.titre}</h4>
-                      <Badge className={PRIO_COLORS[action.priorite] || ''}>{action.priorite}</Badge>
-                      <Badge variant="outline">{action.type?.replace('_', ' ')}</Badge>
+            {actions.map((action, i) => {
+              const isSelected = selected.has(i);
+              return (
+                <div
+                  key={i}
+                  className={`border rounded-lg p-4 transition-all ${isSelected ? 'border-green-300 bg-green-50/30' : 'border-gray-200 bg-gray-50/30 opacity-60'}`}
+                  data-testid={`action-${i}`}
+                >
+                  <div className="flex items-start gap-3">
+                    {/* Checkbox */}
+                    <button
+                      onClick={() => toggleSelect(i)}
+                      className={`mt-0.5 flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+                        isSelected ? 'bg-green-600 border-green-600 text-white' : 'border-gray-300 hover:border-gray-400'
+                      }`}
+                      data-testid={`select-action-${i}`}
+                    >
+                      {isSelected && <Check className="h-3 w-3" />}
+                    </button>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h4 className="font-medium text-gray-900">{action.titre}</h4>
+                        <Badge className={PRIO_COLORS[action.priorite] || ''}>{action.priorite}</Badge>
+                        <Badge variant="outline">{action.type?.replace('_', ' ')}</Badge>
+                      </div>
+                      <p className="text-sm text-gray-600">{action.description}</p>
+                      {action.categorie_5m && <p className="text-xs text-gray-400 mt-1">Categorie 5M: {action.categorie_5m}</p>}
+                      {isSelected && (
+                        <div className="flex gap-2 mt-3">
+                          {(action.type === 'OT_CORRECTIF' || !action.type) && (
+                            <Button size="sm" variant="outline" onClick={() => createOT(action)} disabled={!!creatingAction} data-testid={`create-ot-${i}`}>
+                              {creatingAction === action.titre ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <ClipboardList className="h-3 w-3 mr-1" />}
+                              Creer OT
+                            </Button>
+                          )}
+                          {(action.type === 'MAINTENANCE_PREVENTIVE' || !action.type) && (
+                            <Button size="sm" variant="outline" onClick={() => createMP(action)} disabled={!!creatingAction} data-testid={`create-mp-${i}`}>
+                              {creatingAction === action.titre ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Calendar className="h-3 w-3 mr-1" />}
+                              Creer M.Prev
+                            </Button>
+                          )}
+                          {(action.type === 'CHECKLIST' || !action.type) && (
+                            <Button size="sm" variant="outline" onClick={() => createChecklist(action)} disabled={!!creatingAction} data-testid={`create-checklist-${i}`}>
+                              {creatingAction === action.titre ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <FileText className="h-3 w-3 mr-1" />}
+                              Creer Checklist
+                            </Button>
+                          )}
+                        </div>
+                      )}
                     </div>
-                    <p className="text-sm text-gray-600">{action.description}</p>
-                    {action.categorie_5m && <p className="text-xs text-gray-400 mt-1">Categorie 5M: {action.categorie_5m}</p>}
                   </div>
                 </div>
-                <div className="flex gap-2 mt-3">
-                  {(action.type === 'OT_CORRECTIF' || !action.type) && (
-                    <Button size="sm" variant="outline" onClick={() => createOT(action)} disabled={!!creatingAction} data-testid={`create-ot-${i}`}>
-                      {creatingAction === action.titre ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <ClipboardList className="h-3 w-3 mr-1" />}
-                      Creer OT
-                    </Button>
-                  )}
-                  {(action.type === 'MAINTENANCE_PREVENTIVE' || !action.type) && (
-                    <Button size="sm" variant="outline" onClick={() => createMP(action)} disabled={!!creatingAction} data-testid={`create-mp-${i}`}>
-                      {creatingAction === action.titre ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Calendar className="h-3 w-3 mr-1" />}
-                      Creer M.Prev
-                    </Button>
-                  )}
-                  {(action.type === 'CHECKLIST' || !action.type) && (
-                    <Button size="sm" variant="outline" onClick={() => createChecklist(action)} disabled={!!creatingAction} data-testid={`create-checklist-${i}`}>
-                      {creatingAction === action.titre ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <FileText className="h-3 w-3 mr-1" />}
-                      Creer Checklist
-                    </Button>
-                  )}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
@@ -838,6 +929,41 @@ function ActionsPhase({ analysis, onSave, onReload, aiLoading, setAiLoading, toa
                 {analysis.checklists_generees.map((cl, i) => <Badge key={i} variant="outline" className="mr-1 mb-1">{cl.titre}</Badge>)}
               </div>
             )}
+          </div>
+        )}
+
+        {/* Rapports PDF archives */}
+        {analysis.rapports_pdf?.length > 0 && (
+          <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200" data-testid="archived-reports">
+            <h4 className="font-medium text-blue-700 mb-2 flex items-center gap-1">
+              <Archive className="h-4 w-4" /> Rapports archives ({analysis.rapports_pdf.length})
+            </h4>
+            <div className="space-y-1">
+              {analysis.rapports_pdf.map((r, i) => (
+                <div key={i} className="flex items-center justify-between text-sm bg-white rounded px-3 py-1.5 border border-blue-100">
+                  <div>
+                    <span className="text-gray-700">
+                      {new Date(r.generated_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                    <span className="text-gray-400 ml-2">par {r.generated_by}</span>
+                    <span className="text-gray-400 ml-2">({r.retained_actions}/{r.total_actions} actions)</span>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      const baseUrl = process.env.REACT_APP_BACKEND_URL || '';
+                      const token = localStorage.getItem('token');
+                      const actionsParam = r.selected_actions?.join(',') || '';
+                      window.open(`${baseUrl}/api/accident-analysis/${analysis.id}/pdf?token=${token}&actions=${actionsParam}`, '_blank');
+                    }}
+                    data-testid={`view-archived-pdf-${i}`}
+                  >
+                    <Printer className="h-3 w-3 mr-1" /> Voir
+                  </Button>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </CardContent>
