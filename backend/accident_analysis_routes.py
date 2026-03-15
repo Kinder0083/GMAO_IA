@@ -582,16 +582,20 @@ async def create_work_order_from_analysis(analysis_id: str, data: dict, current_
         "statut": "OUVERT",
         "origine": "ANALYSE_ACCIDENT",
         "analyse_accident_id": analysis_id,
-        "created_at": now,
+        "dateCreation": now,
         "updated_at": now,
         "createdBy": current_user.get("id"),
         "createdByName": f"{current_user.get('prenom', '')} {current_user.get('nom', '')}".strip(),
         "attachments": [],
         "time_entries": [],
+        "comments": [],
+        "parts_used": [],
         "commentaires": [{"auteur": "Systeme", "texte": f"OT genere depuis l'analyse d'accident: {doc.get('titre', '')}", "date": now.isoformat()}]
     }
+    wo["_id"] = ObjectId()
+    wo["id"] = str(wo["_id"])
     result = await db.work_orders.insert_one(wo)
-    wo_id = str(result.inserted_id)
+    wo_id = wo["id"]
 
     await db.accident_analyses.update_one(
         {"_id": ObjectId(analysis_id)},
