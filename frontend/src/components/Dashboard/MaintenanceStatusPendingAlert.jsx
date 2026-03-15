@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
 import { Button } from '../ui/button';
 import { 
@@ -20,24 +20,55 @@ const MaintenanceStatusPendingAlert = () => {
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState(false);
 
+  const fetchPendingMaintenances = useCallback(async () => {
+    try {
+      const data = await demandesArretAPI.getPendingStatusUpdate();
+      setPendingMaintenances(data.maintenances || []);
+    } catch (error) {
+      console.error('Erreur récupération maintenances en attente:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
-    const fetchPendingMaintenances = async () => {
-      try {
-        const data = await demandesArretAPI.getPendingStatusUpdate();
-        setPendingMaintenances(data.maintenances || []);
-      } catch (error) {
-        console.error('Erreur récupération maintenances en attente:', error);
-      } finally {
-        setLoading(false);
+    fetchPendingMaintenances();
+    
+    // Rafraîchir toutes les 2 minutes
+    const interval = setInterval(fetchPendingMaintenances, 2 * 60 * 1000);
+
+    // Rafraîchir quand l'utilisateur revient sur l'onglet/la fenêtre
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchPendingMaintenances();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // Rafraîchir quand la fenêtre reprend le focus (retour depuis l'onglet end-maintenance)
+    const handleFocus = () => {
+      fetchPendingMaintenances();
+    };
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [fetchPendingMaintenances]);
+
+  // Écouter les notifications cross-tab via localStorage (quand l'utilisateur valide depuis un autre onglet)
+  useEffect(() => {
+    const handleStorageChange = (event) => {
+      if (event.key === 'maintenance_status_resolved') {
+        fetchPendingMaintenances();
       }
     };
 
-    fetchPendingMaintenances();
-    
-    // Rafraîchir toutes les 5 minutes
-    const interval = setInterval(fetchPendingMaintenances, 5 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, []);
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, [fetchPendingMaintenances]);
 
   // Ne rien afficher si pas de maintenances en attente
   if (loading || pendingMaintenances.length === 0) {

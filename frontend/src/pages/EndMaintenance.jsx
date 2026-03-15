@@ -73,6 +73,8 @@ const EndMaintenance = () => {
         message: response.data.message,
         statut: statut
       });
+      // Notifier les autres onglets (dashboard) que le statut a été résolu
+      localStorage.setItem('maintenance_status_resolved', Date.now().toString());
     } catch (err) {
       console.error('Erreur:', err);
       setError(err.response?.data?.detail || 'Erreur lors du traitement');

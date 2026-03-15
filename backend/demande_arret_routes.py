@@ -408,6 +408,13 @@ async def process_end_maintenance(
         
         logger.info(f"Fin de maintenance traitée pour demande {demande.get('id')}, nouveau statut: {statut}")
         
+        # Broadcast WebSocket pour que le dashboard se mette à jour
+        await broadcast_demande_update("maintenance_status_resolved", {
+            "demande_id": demande.get("id"),
+            "nouveau_statut": statut,
+            "equipement_ids": demande.get("equipement_ids", [])
+        })
+        
         return {
             "status": "success",
             "message": f"Maintenance terminée. Statut mis à jour vers '{statut}'",
