@@ -6,7 +6,7 @@ import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse, FileResponse
 from pydantic import BaseModel
 from typing import Optional
@@ -178,8 +178,28 @@ async def get_backup_status(current_user: dict = Depends(get_current_admin_user)
 
 
 @router.get("/download/{history_id}")
-async def download_backup(history_id: str, current_user: dict = Depends(get_current_admin_user)):
-    """Télécharger un fichier de backup local"""
+async def download_backup(history_id: str, token: str = None, request: Request = None):
+    """Télécharger un fichier de backup local (supporte token via header OU query param)"""
+    from auth import decode_access_token
+    
+    # Auth: query param token OU Authorization header
+    user_token = token
+    if not user_token and request:
+        auth_header = request.headers.get("authorization", "")
+        if auth_header.startswith("Bearer "):
+            user_token = auth_header[7:]
+    
+    if not user_token:
+        raise HTTPException(status_code=401, detail="Token requis")
+    
+    payload = decode_access_token(user_token)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Token invalide ou expiré")
+    
+    user = await db.users.find_one({"_id": ObjectId(payload.get("sub"))})
+    if not user or user.get("role") != "ADMIN":
+        raise HTTPException(status_code=403, detail="Droits administrateur requis")
+    
     entry = await db.backup_history.find_one({"_id": ObjectId(history_id)})
     if not entry:
         raise HTTPException(status_code=404, detail="Backup non trouvé")

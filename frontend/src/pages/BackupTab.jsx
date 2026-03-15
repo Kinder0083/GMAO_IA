@@ -130,28 +130,11 @@ const BackupTab = () => {
     }
   };
 
-  const handleDownloadBackup = async (historyId) => {
-    try {
-      const res = await axios.get(`${backend_url}/api/backup/download/${historyId}`, {
-        headers: authHeaders, responseType: 'blob', timeout: 300000
-      });
-      const disposition = res.headers['content-disposition'];
-      let filename = 'backup.zip';
-      if (disposition) {
-        const match = disposition.match(/filename=(.+)/);
-        if (match) filename = match[1].replace(/"/g, '');
-      }
-      const url = window.URL.createObjectURL(new Blob([res.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', filename);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-    } catch (error) {
-      toast({ title: 'Erreur', description: formatErrorMessage(error, 'Fichier non disponible'), variant: 'destructive' });
-    }
+  const handleDownloadBackup = (historyId) => {
+    // Téléchargement natif via le navigateur (pas d'axios blob)
+    // Plus fiable pour les gros fichiers et évite les problèmes CORS
+    const url = `${backend_url}/api/backup/download/${historyId}?token=${encodeURIComponent(token)}`;
+    window.open(url, '_blank');
   };
 
   const handleUploadToDrive = async (historyId) => {
