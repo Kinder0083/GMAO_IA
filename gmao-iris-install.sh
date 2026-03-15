@@ -217,13 +217,13 @@ NET_MODE=${NET_MODE:-1}
 
 if [[ "$NET_MODE" == "1" ]]; then
     # IP Statique
-    read -p "Adresse IP du container [$SUGGESTED_IP]: " CONTAINER_IP
+    read -p "Adresse IP du container [$SUGGESTED_IP]: " CONTAINER_IP < /dev/tty
     CONTAINER_IP=${CONTAINER_IP:-$SUGGESTED_IP}
     
-    read -p "Masque CIDR [/$BRIDGE_CIDR]: " CONTAINER_CIDR
+    read -p "Masque CIDR [/$BRIDGE_CIDR]: " CONTAINER_CIDR < /dev/tty
     CONTAINER_CIDR=${CONTAINER_CIDR:-$BRIDGE_CIDR}
     
-    read -p "Gateway [$BRIDGE_GW]: " CONTAINER_GW
+    read -p "Gateway [$BRIDGE_GW]: " CONTAINER_GW < /dev/tty
     CONTAINER_GW=${CONTAINER_GW:-$BRIDGE_GW}
     
     IP_CONFIG="${CONTAINER_IP}/${CONTAINER_CIDR}"
@@ -269,7 +269,7 @@ case $ACCESS_CHOICE in
         echo ""
         echo "Entrez votre IP publique ou nom de domaine"
         echo "Exemples: http://203.0.113.45 ou https://mon-domaine.com"
-        read -p "URL d'accès: " MANUAL_URL
+        read -p "URL d'accès: " MANUAL_URL < /dev/tty
         if [[ -z "$MANUAL_URL" ]]; then
             warn "Aucune URL fournie, utilisation de l'IP locale"
         else
@@ -281,7 +281,7 @@ case $ACCESS_CHOICE in
         echo "Configuration Tailscale"
         echo "Pour obtenir une clé: https://login.tailscale.com/admin/settings/keys"
         echo ""
-        read -p "Clé d'authentification Tailscale: " TAILSCALE_AUTH_KEY
+        read -p "Clé d'authentification Tailscale: " TAILSCALE_AUTH_KEY < /dev/tty
         if [[ -z "$TAILSCALE_AUTH_KEY" ]]; then
             warn "Pas de clé Tailscale fournie, utilisation de l'IP locale"
         else
