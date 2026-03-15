@@ -822,6 +822,27 @@ if command -v supervisorctl &> /dev/null; then
     supervisorctl status gmao-iris-backend
 fi
 
+# 5. Corriger la config nginx si nécessaire
+echo "🌐 Étape 5: Vérification nginx..."
+if [ -f /etc/nginx/sites-available/gmao-iris ]; then
+    NGINX_CHANGED=0
+    if grep -q "client_max_body_size 25M" /etc/nginx/sites-available/gmao-iris; then
+        sed -i 's/client_max_body_size 25M/client_max_body_size 200M/' /etc/nginx/sites-available/gmao-iris
+        NGINX_CHANGED=1
+        echo "   ✅ client_max_body_size: 25M -> 200M"
+    fi
+    if ! grep -q "proxy_buffering off" /etc/nginx/sites-available/gmao-iris; then
+        sed -i '/location \/api/,/}/ { /proxy_set_header X-Real-IP/a\        proxy_read_timeout 300;\n        proxy_send_timeout 300;\n        proxy_buffering off;' /etc/nginx/sites-available/gmao-iris 2>/dev/null || true
+        NGINX_CHANGED=1
+    fi
+    if [ "\$NGINX_CHANGED" -eq 1 ]; then
+        nginx -t 2>/dev/null && systemctl reload nginx 2>/dev/null
+        echo "   ✅ Nginx rechargé"
+    else
+        echo "   ✅ Nginx OK"
+    fi
+fi
+
 echo ""
 echo "╔══════════════════════════════════════════════════════════════════╗"
 echo "║                    ✅ MISE À JOUR TERMINÉE                       ║"
@@ -898,7 +919,7 @@ pct exec $CTID -- tee /etc/nginx/sites-available/gmao-iris > /dev/null << 'NGINX
 server {
     listen 80;
     server_name _;
-    client_max_body_size 25M;
+    client_max_body_size 200M;
     
     location / {
         root /opt/gmao-iris/frontend/build;
@@ -912,6 +933,9 @@ server {
         proxy_set_header Connection upgrade;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
+        proxy_read_timeout 300;
+        proxy_send_timeout 300;
+        proxy_buffering off;
     }
     
     # WebSocket pour le Chat Live

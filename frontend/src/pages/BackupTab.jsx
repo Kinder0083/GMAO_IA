@@ -133,7 +133,7 @@ const BackupTab = () => {
   const handleDownloadBackup = async (historyId) => {
     try {
       const res = await axios.get(`${backend_url}/api/backup/download/${historyId}`, {
-        headers: authHeaders, responseType: 'blob'
+        headers: authHeaders, responseType: 'blob', timeout: 300000
       });
       const disposition = res.headers['content-disposition'];
       let filename = 'backup.zip';
