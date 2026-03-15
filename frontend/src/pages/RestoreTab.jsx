@@ -8,6 +8,8 @@ import { getBackendURL } from '../utils/config';
 import { formatErrorMessage } from '../utils/errorFormatter';
 import { modules } from './importExportModules';
 
+const CHUNK_SIZE = 5 * 1024 * 1024; // 5 Mo par chunk
+
 const RestoreTab = () => {
   const { toast } = useToast();
   const fileInputRef = useRef(null);
@@ -16,18 +18,22 @@ const RestoreTab = () => {
   const [restoring, setRestoring] = useState(false);
   const [restoreResult, setRestoreResult] = useState(null);
   const [confirmFull, setConfirmFull] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadPhase, setUploadPhase] = useState('');
 
   const handleFileSelect = (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
     if (!file.name.endsWith('.zip')) {
-      toast({ title: 'Format invalide', description: 'Veuillez sélectionner un fichier ZIP de sauvegarde FSAO', variant: 'destructive' });
+      toast({ title: 'Format invalide', description: 'Veuillez selectionner un fichier ZIP de sauvegarde FSAO', variant: 'destructive' });
       event.target.value = '';
       return;
     }
     setSelectedFile(file);
     setRestoreResult(null);
     setConfirmFull(false);
+    setUploadProgress(0);
+    setUploadPhase('');
   };
 
   const handleRestore = async () => {
@@ -40,26 +46,97 @@ const RestoreTab = () => {
     try {
       setRestoring(true);
       setConfirmFull(false);
+      setUploadProgress(0);
+
       const backend_url = getBackendURL();
       const token = localStorage.getItem('token');
-      const formData = new FormData();
-      formData.append('file', selectedFile);
+      const authHeaders = { Authorization: `Bearer ${token}` };
 
-      const response = await axios.post(
-        `${backend_url}/api/restore/backup`,
-        formData,
-        {
-          params: { mode: restoreMode },
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'multipart/form-data' },
-          timeout: 300000
+      const totalChunks = Math.ceil(selectedFile.size / CHUNK_SIZE);
+
+      // Utiliser l'upload chunke pour les gros fichiers (>5 Mo) ou toujours pour eviter les limites Nginx
+      if (selectedFile.size > CHUNK_SIZE) {
+        // --- Upload chunke ---
+        setUploadPhase('Initialisation...');
+
+        // 1. Init
+        const initForm = new FormData();
+        initForm.append('filename', selectedFile.name);
+        initForm.append('filesize', selectedFile.size);
+        const initRes = await axios.post(`${backend_url}/api/restore/chunked/init`, initForm, { headers: authHeaders });
+        const sessionId = initRes.data.session_id;
+
+        // 2. Upload chunks
+        for (let i = 0; i < totalChunks; i++) {
+          const start = i * CHUNK_SIZE;
+          const end = Math.min(start + CHUNK_SIZE, selectedFile.size);
+          const blob = selectedFile.slice(start, end);
+
+          const chunkForm = new FormData();
+          chunkForm.append('session_id', sessionId);
+          chunkForm.append('chunk_index', i);
+          chunkForm.append('chunk', blob, `chunk_${i}`);
+
+          await axios.post(`${backend_url}/api/restore/chunked/upload`, chunkForm, {
+            headers: authHeaders,
+            timeout: 60000
+          });
+
+          const progress = Math.round(((i + 1) / totalChunks) * 80);
+          setUploadProgress(progress);
+          setUploadPhase(`Envoi ${i + 1}/${totalChunks} (${Math.round(end / 1024 / 1024)} Mo / ${Math.round(selectedFile.size / 1024 / 1024)} Mo)`);
         }
-      );
 
-      setRestoreResult(response.data.stats || response.data);
-      toast({ title: 'Restauration terminée', description: response.data.message });
+        // 3. Complete - trigger restore
+        setUploadPhase('Restauration en cours...');
+        setUploadProgress(85);
+
+        const completeForm = new FormData();
+        completeForm.append('session_id', sessionId);
+        completeForm.append('total_chunks', totalChunks);
+        completeForm.append('mode', restoreMode);
+
+        const response = await axios.post(`${backend_url}/api/restore/chunked/complete`, completeForm, {
+          headers: authHeaders,
+          timeout: 600000
+        });
+
+        setUploadProgress(100);
+        setUploadPhase('Termine !');
+        setRestoreResult(response.data.stats || response.data);
+        toast({ title: 'Restauration terminee', description: response.data.message });
+
+      } else {
+        // --- Upload classique pour petits fichiers ---
+        setUploadPhase('Envoi du fichier...');
+        setUploadProgress(30);
+
+        const formData = new FormData();
+        formData.append('file', selectedFile);
+
+        const response = await axios.post(
+          `${backend_url}/api/restore/backup`,
+          formData,
+          {
+            params: { mode: restoreMode },
+            headers: { ...authHeaders, 'Content-Type': 'multipart/form-data' },
+            timeout: 300000,
+            onUploadProgress: (e) => {
+              if (e.total) setUploadProgress(Math.round((e.loaded / e.total) * 80));
+            }
+          }
+        );
+
+        setUploadProgress(100);
+        setUploadPhase('Termine !');
+        setRestoreResult(response.data.stats || response.data);
+        toast({ title: 'Restauration terminee', description: response.data.message });
+      }
+
       setSelectedFile(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
     } catch (error) {
+      setUploadPhase('');
       toast({ title: 'Erreur', description: formatErrorMessage(error, 'Impossible de restaurer la sauvegarde'), variant: 'destructive' });
     } finally {
       setRestoring(false);
@@ -81,10 +158,11 @@ const RestoreTab = () => {
         </CardHeader>
         <CardContent className="space-y-5">
           <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-sm text-gray-600 space-y-2">
-            <p className="font-medium text-gray-900">Comment utiliser cette fonctionnalité :</p>
+            <p className="font-medium text-gray-900">Comment utiliser cette fonctionnalite :</p>
             <ul className="list-disc list-inside space-y-1">
-              <li>Sélectionnez un fichier <strong>.zip</strong> généré par les sauvegardes automatiques de FSAO Iris</li>
-              <li>Le ZIP doit contenir un fichier <strong>data.xlsx</strong> (données) et éventuellement un dossier <strong>uploads/</strong> (fichiers joints)</li>
+              <li>Selectionnez un fichier <strong>.zip</strong> genere par les sauvegardes automatiques de FSAO Iris</li>
+              <li>Le ZIP doit contenir un fichier <strong>data.xlsx</strong> (donnees) et eventuellement un dossier <strong>uploads/</strong> (fichiers joints)</li>
+              <li>Les fichiers volumineux sont envoyes par morceaux pour eviter les limites de taille du serveur</li>
               <li>Choisissez le mode de restauration puis cliquez sur "Restaurer"</li>
             </ul>
           </div>
@@ -103,7 +181,7 @@ const RestoreTab = () => {
                   <Shield size={18} className="text-blue-600" />
                   <span className="font-semibold text-gray-900">Fusionner</span>
                 </div>
-                <p className="text-xs text-gray-500">Ajoute les nouvelles données et met à jour les existantes. Les données actuelles sont conservées.</p>
+                <p className="text-xs text-gray-500">Ajoute les nouvelles donnees et met a jour les existantes. Les donnees actuelles sont conservees.</p>
               </button>
               <button
                 type="button"
@@ -113,19 +191,19 @@ const RestoreTab = () => {
               >
                 <div className="flex items-center gap-2 mb-1">
                   <AlertTriangle size={18} className="text-red-600" />
-                  <span className="font-semibold text-gray-900">Restauration complète</span>
+                  <span className="font-semibold text-gray-900">Restauration complete</span>
                 </div>
-                <p className="text-xs text-gray-500">Vide les collections avant d'importer. Toutes les données actuelles seront remplacées par le contenu du backup.</p>
+                <p className="text-xs text-gray-500">Vide les collections avant d'importer. Toutes les donnees actuelles seront remplacees par le contenu du backup.</p>
               </button>
             </div>
           </div>
 
-          {/* Sélection du fichier */}
+          {/* Selection du fichier */}
           <div className="space-y-2">
             <label className="text-sm font-medium text-gray-700">Fichier de sauvegarde (.zip)</label>
             <div
-              onClick={() => fileInputRef.current?.click()}
-              className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:border-purple-400 hover:bg-purple-50/30 transition-all"
+              onClick={() => !restoring && fileInputRef.current?.click()}
+              className={`border-2 border-dashed border-gray-300 rounded-lg p-6 text-center transition-all ${restoring ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:border-purple-400 hover:bg-purple-50/30'}`}
               data-testid="restore-file-dropzone"
             >
               <FileArchive size={36} className="mx-auto mb-2 text-gray-400" />
@@ -133,11 +211,14 @@ const RestoreTab = () => {
                 <div>
                   <p className="text-sm font-semibold text-purple-700">{selectedFile.name}</p>
                   <p className="text-xs text-gray-500 mt-1">{(selectedFile.size / 1024 / 1024).toFixed(2)} Mo</p>
+                  {selectedFile.size > CHUNK_SIZE && (
+                    <p className="text-xs text-blue-600 mt-1">Envoi par morceaux ({Math.ceil(selectedFile.size / CHUNK_SIZE)} parties de 5 Mo)</p>
+                  )}
                 </div>
               ) : (
                 <div>
-                  <p className="text-sm text-gray-600">Cliquez pour sélectionner un fichier ZIP de backup</p>
-                  <p className="text-xs text-gray-400 mt-1">backup_gmao_*.zip</p>
+                  <p className="text-sm text-gray-600">Cliquez pour selectionner un fichier ZIP de backup</p>
+                  <p className="text-xs text-gray-400 mt-1">backup_gmao_*.zip (aucune limite de taille)</p>
                 </div>
               )}
             </div>
@@ -151,14 +232,31 @@ const RestoreTab = () => {
             />
           </div>
 
-          {/* Avertissement restauration complète */}
-          {restoreMode === 'full' && selectedFile && (
+          {/* Barre de progression */}
+          {restoring && (
+            <div className="space-y-2" data-testid="restore-progress">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-600">{uploadPhase}</span>
+                <span className="font-semibold text-purple-700">{uploadProgress}%</span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all duration-300 bg-purple-600"
+                  style={{ width: `${uploadProgress}%` }}
+                  data-testid="restore-progress-bar"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Avertissement restauration complete */}
+          {restoreMode === 'full' && selectedFile && !restoring && (
             <div className="bg-red-50 border border-red-300 rounded-lg p-4">
               <div className="flex items-start gap-3">
                 <AlertTriangle size={20} className="text-red-600 mt-0.5 flex-shrink-0" />
                 <div className="text-sm">
-                  <p className="font-semibold text-red-800">Attention : Restauration complète</p>
-                  <p className="text-red-700 mt-1">Toutes les données existantes dans les modules présents dans le backup seront supprimées et remplacées. Cette action est irréversible.</p>
+                  <p className="font-semibold text-red-800">Attention : Restauration complete</p>
+                  <p className="text-red-700 mt-1">Toutes les donnees existantes dans les modules presents dans le backup seront supprimees et remplacees. Cette action est irreversible.</p>
                 </div>
               </div>
             </div>
@@ -167,7 +265,7 @@ const RestoreTab = () => {
           {/* Confirmation pour mode full */}
           {confirmFull && (
             <div className="bg-red-100 border-2 border-red-400 rounded-lg p-4 space-y-3">
-              <p className="text-sm font-bold text-red-800">Confirmez-vous la restauration complète ? Toutes les données actuelles seront écrasées.</p>
+              <p className="text-sm font-bold text-red-800">Confirmez-vous la restauration complete ? Toutes les donnees actuelles seront ecrasees.</p>
               <div className="flex gap-3">
                 <Button
                   onClick={handleRestore}
@@ -199,7 +297,7 @@ const RestoreTab = () => {
               ) : (
                 <>
                   <Upload size={20} className="mr-2" />
-                  {restoreMode === 'full' ? 'Restaurer (écraser les données)' : 'Restaurer (fusionner)'}
+                  {restoreMode === 'full' ? 'Restaurer (ecraser les donnees)' : 'Restaurer (fusionner)'}
                 </>
               )}
             </Button>
@@ -207,13 +305,13 @@ const RestoreTab = () => {
         </CardContent>
       </Card>
 
-      {/* Résultat de la restauration */}
+      {/* Resultat de la restauration */}
       {restoreResult && (
         <Card data-testid="restore-result-card">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <CheckCircle size={20} className="text-green-600" />
-              Résultat de la restauration
+              Resultat de la restauration
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -224,11 +322,11 @@ const RestoreTab = () => {
               </div>
               <div className="flex items-center gap-3 p-4 bg-green-50 rounded-lg">
                 <CheckCircle size={24} className="text-green-600" />
-                <div><p className="text-sm text-gray-600">Insérés</p><p className="text-2xl font-bold text-green-600">{restoreResult.inserted}</p></div>
+                <div><p className="text-sm text-gray-600">Inseres</p><p className="text-2xl font-bold text-green-600">{restoreResult.inserted}</p></div>
               </div>
               <div className="flex items-center gap-3 p-4 bg-amber-50 rounded-lg">
                 <RotateCcw size={24} className="text-amber-600" />
-                <div><p className="text-sm text-gray-600">Mis à jour</p><p className="text-2xl font-bold text-amber-600">{restoreResult.updated}</p></div>
+                <div><p className="text-sm text-gray-600">Mis a jour</p><p className="text-2xl font-bold text-amber-600">{restoreResult.updated}</p></div>
               </div>
               <div className="flex items-center gap-3 p-4 bg-purple-50 rounded-lg">
                 <FolderOpen size={24} className="text-purple-600" />
@@ -238,13 +336,13 @@ const RestoreTab = () => {
 
             {restoreResult.collections_cleared > 0 && (
               <div className="mb-4 p-3 bg-orange-50 border border-orange-200 rounded-lg text-sm text-orange-800">
-                {restoreResult.collections_cleared} collection(s) vidée(s) avant import (mode restauration complète)
+                {restoreResult.collections_cleared} collection(s) videe(s) avant import (mode restauration complete)
               </div>
             )}
 
             {restoreResult.modules && Object.keys(restoreResult.modules).length > 0 && (
               <div className="space-y-4">
-                <h3 className="font-semibold text-lg">Détails par module</h3>
+                <h3 className="font-semibold text-lg">Details par module</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {Object.entries(restoreResult.modules).map(([moduleName, moduleStats]) => (
                     <div key={moduleName} className="border rounded-lg p-4">
@@ -253,10 +351,10 @@ const RestoreTab = () => {
                       </h4>
                       <div className="space-y-1 text-sm">
                         <div className="flex justify-between"><span className="text-gray-600">Total:</span><span className="font-medium">{moduleStats.total}</span></div>
-                        <div className="flex justify-between"><span className="text-green-600">Insérés:</span><span className="font-medium text-green-600">{moduleStats.inserted}</span></div>
-                        <div className="flex justify-between"><span className="text-amber-600">Mis à jour:</span><span className="font-medium text-amber-600">{moduleStats.updated}</span></div>
+                        <div className="flex justify-between"><span className="text-green-600">Inseres:</span><span className="font-medium text-green-600">{moduleStats.inserted}</span></div>
+                        <div className="flex justify-between"><span className="text-amber-600">Mis a jour:</span><span className="font-medium text-amber-600">{moduleStats.updated}</span></div>
                         {moduleStats.skipped > 0 && (
-                          <div className="flex justify-between"><span className="text-red-600">Ignorés:</span><span className="font-medium text-red-600">{moduleStats.skipped}</span></div>
+                          <div className="flex justify-between"><span className="text-red-600">Ignores:</span><span className="font-medium text-red-600">{moduleStats.skipped}</span></div>
                         )}
                       </div>
                     </div>
