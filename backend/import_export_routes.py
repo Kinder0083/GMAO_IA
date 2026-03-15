@@ -393,7 +393,11 @@ def clean_item_for_export(item: dict) -> dict:
     """Nettoyer un item pour l'export (convertir types non sérialisables)"""
     import json
     cleaned = {k: v for k, v in item.items() if k != "_id"}
-    cleaned["id"] = str(item.get("_id", item.get("id", "")))
+    # Préserver le id original (UUID) s'il existe, sinon utiliser _id
+    if "id" in cleaned and cleaned["id"]:
+        cleaned["id"] = str(cleaned["id"])
+    else:
+        cleaned["id"] = str(item.get("_id", ""))
     
     for key, value in cleaned.items():
         if isinstance(value, datetime):
@@ -455,13 +459,19 @@ async def process_import_item(item: dict, module: str, collection_name: str, cur
     
     # --- Restaurer l'_id original (ObjectId) pour préserver les références ---
     item_id = cleaned.pop("id", None)
+    original_id_str = cleaned.pop("_oid", None)  # noqa: F841  # ID ObjectId original si exporté séparément
+    
     if item_id:
+        item_id_str = str(item_id)
         try:
-            cleaned["_id"] = ObjectId(str(item_id))
+            cleaned["_id"] = ObjectId(item_id_str)
         except Exception:
             cleaned["_id"] = ObjectId()
+        # Toujours préserver id comme string pour les modèles Pydantic
+        cleaned["id"] = item_id_str
     else:
         cleaned["_id"] = ObjectId()
+        cleaned["id"] = str(cleaned["_id"])
     
     # --- Convertir les champs *_id en ObjectId ---
     id_fields = [
@@ -701,6 +711,67 @@ async def export_data(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+
+# --- Migration : ajouter le champ 'id' manquant aux documents restaurés ---
+
+@router.post("/restore/fix-missing-ids")
+async def fix_missing_ids(
+    current_user: dict = Depends(get_current_admin_user)
+):
+    """
+    Corrige les documents restaurés qui n'ont pas de champ 'id'.
+    Ajoute id = str(_id) pour chaque document concerné.
+    """
+    stats = {}
+    total_fixed = 0
+
+    for module_name, collection_name in EXPORT_MODULES.items():
+        try:
+            # Trouver les documents sans champ 'id'
+            count = await db[collection_name].count_documents({"id": {"$exists": False}})
+            if count > 0:
+                # Récupérer et corriger chaque document
+                cursor = db[collection_name].find({"id": {"$exists": False}})
+                fixed = 0
+                async for doc in cursor:
+                    await db[collection_name].update_one(
+                        {"_id": doc["_id"]},
+                        {"$set": {"id": str(doc["_id"])}}
+                    )
+                    fixed += 1
+                stats[collection_name] = fixed
+                total_fixed += fixed
+                logger.info(f"[Fix IDs] {collection_name}: {fixed} documents corrigés")
+        except Exception as e:
+            stats[collection_name] = f"erreur: {str(e)}"
+            logger.error(f"[Fix IDs] Erreur sur {collection_name}: {e}")
+
+    # Aussi corriger la collection users
+    try:
+        user_count = await db["users"].count_documents({"id": {"$exists": False}})
+        if user_count > 0:
+            cursor = db["users"].find({"id": {"$exists": False}})
+            fixed = 0
+            async for doc in cursor:
+                await db["users"].update_one(
+                    {"_id": doc["_id"]},
+                    {"$set": {"id": str(doc["_id"])}}
+                )
+                fixed += 1
+            stats["users"] = fixed
+            total_fixed += fixed
+    except Exception as e:
+        stats["users"] = f"erreur: {str(e)}"
+
+    logger.info(f"[Fix IDs] Total: {total_fixed} documents corrigés")
+    return {
+        "success": True,
+        "message": f"{total_fixed} documents corrigés (champ 'id' ajouté)",
+        "total_fixed": total_fixed,
+        "details": stats
+    }
+
+
 # --- Upload chunké pour gros fichiers (contourne la limite Nginx) ---
 
 @router.post("/restore/chunked/init")
@@ -883,9 +954,26 @@ async def _do_restore(content: bytes, mode: str, current_user: dict):
 
     logger.info(f"[Restore] Terminé: {stats['inserted']} insérés, {stats['updated']} mis à jour, {stats['skipped']} ignorés, {restored_files} fichiers, {collections_cleared} collections vidées")
 
+    # Post-restore: s'assurer que tous les documents ont un champ 'id'
+    ids_fixed = 0
+    for module_name, collection_name in EXPORT_MODULES.items():
+        try:
+            cursor = db[collection_name].find({"id": {"$exists": False}})
+            async for doc in cursor:
+                await db[collection_name].update_one(
+                    {"_id": doc["_id"]},
+                    {"$set": {"id": str(doc["_id"])}}
+                )
+                ids_fixed += 1
+        except Exception as e:
+            logger.warning(f"[Restore] Fix ID {collection_name}: {e}")
+    if ids_fixed > 0:
+        logger.info(f"[Restore] Post-fix: {ids_fixed} documents corrigés (champ 'id' ajouté)")
+        stats["ids_fixed"] = ids_fixed
+
     return {
         "success": True,
-        "message": f"Restauration réussie: {stats['inserted']} insérés, {stats['updated']} mis à jour, {restored_files} fichiers restaurés" + (f", {collections_cleared} collections vidées" if mode == "full" else ""),
+        "message": f"Restauration réussie: {stats['inserted']} insérés, {stats['updated']} mis à jour, {restored_files} fichiers restaurés" + (f", {collections_cleared} collections vidées" if mode == "full" else "") + (f", {ids_fixed} IDs corrigés" if ids_fixed > 0 else ""),
         "stats": stats
     }
 

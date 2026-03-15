@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
-import { RotateCcw, Upload, AlertTriangle, CheckCircle, XCircle, Database, FileArchive, FolderOpen, Shield } from 'lucide-react';
+import { RotateCcw, Upload, AlertTriangle, CheckCircle, Database, FileArchive, FolderOpen, Shield, Wrench } from 'lucide-react';
 import { useToast } from '../hooks/use-toast';
 import axios from 'axios';
 import { getBackendURL } from '../utils/config';
@@ -20,6 +20,33 @@ const RestoreTab = () => {
   const [confirmFull, setConfirmFull] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadPhase, setUploadPhase] = useState('');
+  const [fixingIds, setFixingIds] = useState(false);
+  const [fixResult, setFixResult] = useState(null);
+
+  const handleFixMissingIds = async () => {
+    try {
+      setFixingIds(true);
+      setFixResult(null);
+      const backend_url = getBackendURL();
+      const token = localStorage.getItem('token');
+      const response = await axios.post(`${backend_url}/api/restore/fix-missing-ids`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setFixResult(response.data);
+      toast({
+        title: 'Correction terminee',
+        description: response.data.message
+      });
+    } catch (error) {
+      toast({
+        title: 'Erreur',
+        description: formatErrorMessage(error, 'Impossible de corriger les donnees'),
+        variant: 'destructive'
+      });
+    } finally {
+      setFixingIds(false);
+    }
+  };
 
   const handleFileSelect = (event) => {
     const file = event.target.files?.[0];
@@ -301,6 +328,55 @@ const RestoreTab = () => {
                 </>
               )}
             </Button>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Outil de reparation des donnees */}
+      <Card data-testid="fix-ids-card">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Wrench size={24} className="text-orange-600" />
+            Reparation des donnees restaurees
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 text-sm text-gray-700">
+            <p>Si apres une restauration certaines donnees n'apparaissent pas (ex: les DI sont comptees dans le tableau de bord mais invisibles dans le menu), utilisez ce bouton pour corriger les identifiants manquants.</p>
+          </div>
+          <Button
+            data-testid="fix-missing-ids-button"
+            onClick={handleFixMissingIds}
+            disabled={fixingIds}
+            variant="outline"
+            className="border-orange-500 text-orange-700 hover:bg-orange-50"
+          >
+            {fixingIds ? (
+              <>
+                <RotateCcw size={18} className="mr-2 animate-spin" />
+                Correction en cours...
+              </>
+            ) : (
+              <>
+                <Wrench size={18} className="mr-2" />
+                Corriger les identifiants manquants
+              </>
+            )}
+          </Button>
+          {fixResult && (
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+              <p className="font-semibold text-green-800">{fixResult.message}</p>
+              {fixResult.details && Object.keys(fixResult.details).length > 0 && (
+                <div className="mt-2 text-sm text-green-700 space-y-1">
+                  {Object.entries(fixResult.details).map(([col, count]) => (
+                    <div key={col} className="flex justify-between">
+                      <span>{col}</span>
+                      <span className="font-medium">{count} corrige(s)</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
         </CardContent>
       </Card>

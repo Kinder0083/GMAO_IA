@@ -30,7 +30,11 @@ def _clean_item_for_export(item: dict) -> dict:
     """Nettoyer un item MongoDB pour l'export Excel"""
     import json
     cleaned = {k: v for k, v in item.items() if k != "_id"}
-    cleaned["id"] = str(item.get("_id", item.get("id", "")))
+    # Préserver le id original (UUID) s'il existe, sinon utiliser _id
+    if "id" in cleaned and cleaned["id"]:
+        cleaned["id"] = str(cleaned["id"])
+    else:
+        cleaned["id"] = str(item.get("_id", ""))
     for key, value in cleaned.items():
         if isinstance(value, datetime):
             cleaned[key] = value.isoformat()
