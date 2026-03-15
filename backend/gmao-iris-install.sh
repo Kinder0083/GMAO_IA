@@ -426,15 +426,33 @@ curl -fsSL https://deb.nodesource.com/setup_20.x | bash - >/dev/null 2>&1
 apt-get install -y -qq nodejs
 npm install -g yarn >/dev/null 2>&1
 
-# MongoDB
-curl -fsSL https://www.mongodb.org/static/pgp/server-7.0.asc | \
-  gpg -o /usr/share/keyrings/mongodb-server-7.0.gpg --dearmor
-echo "deb [signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg] http://repo.mongodb.org/apt/debian bookworm/mongodb-org/7.0 main" > /etc/apt/sources.list.d/mongodb-org-7.0.list
-apt-get update -qq
-apt-get install -y -qq mongodb-org
+# MongoDB - Détection automatique du support AVX
+echo "--- Détection CPU pour MongoDB ---"
+if grep -q avx /proc/cpuinfo 2>/dev/null; then
+    echo "  CPU AVX détecté -> MongoDB 7.0"
+    curl -fsSL https://www.mongodb.org/static/pgp/server-7.0.asc | \
+      gpg -o /usr/share/keyrings/mongodb-server.gpg --dearmor
+    echo "deb [signed-by=/usr/share/keyrings/mongodb-server.gpg] http://repo.mongodb.org/apt/debian bookworm/mongodb-org/7.0 main" \
+      > /etc/apt/sources.list.d/mongodb-org.list
+    apt-get update -qq
+    apt-get install -y -qq mongodb-org
+else
+    echo "  ⚠ AVX non supporté -> MongoDB 4.4 (compatible)"
+    # libssl1.1 requis par MongoDB 4.4 mais absent sur Debian 12
+    echo "deb http://deb.debian.org/debian bullseye main" > /etc/apt/sources.list.d/bullseye.list
+    apt-get update -qq
+    apt-get install -y -qq libssl1.1
+    rm -f /etc/apt/sources.list.d/bullseye.list
+    # Installer MongoDB 4.4 depuis les repos buster
+    curl -fsSL https://www.mongodb.org/static/pgp/server-4.4.asc | \
+      gpg -o /usr/share/keyrings/mongodb-server.gpg --dearmor
+    echo "deb [signed-by=/usr/share/keyrings/mongodb-server.gpg trusted=yes] http://repo.mongodb.org/apt/debian buster/mongodb-org/4.4 main" \
+      > /etc/apt/sources.list.d/mongodb-org.list
+    apt-get update -qq
+    apt-get install -y -qq mongodb-org || apt-get install -y --fix-broken -qq mongodb-org
+fi
 
 # Fix MongoDB pour containers LXC non-privilegies
-# Le ExecStartPre de mongod tente de modifier transparent_hugepage qui nexiste pas en LXC
 mkdir -p /etc/systemd/system/mongod.service.d
 printf "[Service]\nExecStartPre=\n" > /etc/systemd/system/mongod.service.d/lxc-fix.conf
 systemctl daemon-reload
@@ -461,9 +479,14 @@ ok "Système installé"
 # Vérification robuste de MongoDB avec diagnostics
 msg "Vérification de MongoDB..."
 pct exec $CTID -- bash -c '
+# Fonction de test MongoDB compatible 4.4 (mongo) et 7.0 (mongosh)
+mongo_ping() {
+    (mongosh --quiet --eval "db.runCommand({ping:1})" 2>/dev/null || mongo --quiet --eval "db.runCommand({ping:1})" 2>/dev/null) | grep -q "ok"
+}
+
 READY=0
 for i in $(seq 1 15); do
-    if mongosh --quiet --eval "db.runCommand({ping:1})" 2>/dev/null | grep -q "ok"; then
+    if mongo_ping; then
         echo "  ✓ MongoDB prêt (tentative $i)"
         READY=1
         break
@@ -477,22 +500,23 @@ if [ "$READY" -eq 0 ]; then
     systemctl status mongod --no-pager 2>&1 | head -20 || true
     echo "--- Logs MongoDB ---"
     tail -30 /var/log/mongodb/mongod.log 2>/dev/null || echo "(pas de logs)"
-    echo "--- Journal systemd ---"
-    journalctl -u mongod --no-pager -n 15 2>/dev/null || true
     echo ""
-    echo "  Tentative de démarrage direct..."
-    systemctl stop mongod 2>/dev/null || true
-    sleep 1
-    mkdir -p /var/lib/mongodb /var/log/mongodb
-    chown -R mongodb:mongodb /var/lib/mongodb /var/log/mongodb 2>/dev/null || true
-    mongod --dbpath /var/lib/mongodb --logpath /var/log/mongodb/mongod.log --fork --bind_ip 127.0.0.1 --port 27017 2>&1 || true
+    echo "  Tentative de redémarrage..."
+    systemctl restart mongod 2>&1 || true
     sleep 5
-    if mongosh --quiet --eval "db.runCommand({ping:1})" 2>/dev/null | grep -q "ok"; then
-        echo "  ✓ MongoDB démarré en mode direct"
-    else
-        echo "  ❌ MongoDB ne démarre pas - dernières lignes du log:"
-        tail -10 /var/log/mongodb/mongod.log 2>/dev/null || true
-    fi
+    for j in $(seq 1 10); do
+        if mongo_ping; then
+            echo "  ✓ MongoDB prêt après redémarrage (tentative $j)"
+            READY=1
+            break
+        fi
+        sleep 2
+    done
+fi
+
+if [ "$READY" -eq 0 ]; then
+    echo "  ❌ MongoDB ne démarre pas"
+    echo "  Vérifiez que votre CPU supporte la version MongoDB installée"
 fi
 '
 
@@ -620,14 +644,13 @@ echo "🔐 Création des comptes administrateurs..."
 # S'assurer que MongoDB est bien démarré
 echo "  Vérification de MongoDB..."
 for attempt in 1 2 3 4 5 6 7 8 9 10; do
-    if mongosh --quiet --eval "db.runCommand({ping:1})" 2>/dev/null | grep -q "ok"; then
+    if (mongosh --quiet --eval "db.runCommand({ping:1})" 2>/dev/null || mongo --quiet --eval "db.runCommand({ping:1})" 2>/dev/null) | grep -q "ok"; then
         echo "  ✓ MongoDB est prêt"
         break
     fi
     if [ "\$attempt" -eq 10 ]; then
-        echo "  ⚠ MongoDB ne répond pas, tentative de démarrage direct..."
-        systemctl stop mongod 2>/dev/null || true
-        mongod --dbpath /var/lib/mongodb --logpath /var/log/mongodb/mongod.log --fork --bind_ip 127.0.0.1 --port 27017 2>&1 || true
+        echo "  ⚠ MongoDB ne répond pas après 10 tentatives"
+        systemctl restart mongod 2>&1 || true
         sleep 5
     else
         echo "  Attente de MongoDB... (\$attempt/10)"

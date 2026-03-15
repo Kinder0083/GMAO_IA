@@ -9,7 +9,8 @@ cd /opt/gmao-iris
 # ── DECONNECTER TOUS LES UTILISATEURS ──
 # Insère un flag force_logout dans MongoDB
 # Le frontend le détecte en <30s et déconnecte automatiquement tous les utilisateurs
-mongosh --quiet --eval "
+MONGO_CMD=$(command -v mongosh 2>/dev/null || command -v mongo 2>/dev/null || echo "mongosh")
+$MONGO_CMD --quiet --eval "
   db = db.getSiblingDB('gmao_iris');
   db.system_settings.updateOne(
     { key: 'force_logout_at' },
