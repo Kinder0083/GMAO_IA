@@ -152,12 +152,28 @@ export function usePushNotifications() {
   return { permission, isSubscribed, isSupported, subscribe, unsubscribe, testNotification };
 }
 
+// Stockage global de l'evenement beforeinstallprompt
+// L'evenement ne se declenche qu'une fois au chargement ; on le stocke pour
+// que tout composant monte apres puisse y acceder.
+if (!window.__pwaInstallEvent) {
+  window.__pwaInstallEvent = null;
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    window.__pwaInstallEvent = e;
+    window.dispatchEvent(new Event('pwa-install-available'));
+  });
+  window.addEventListener('appinstalled', () => {
+    window.__pwaInstallEvent = null;
+    window.dispatchEvent(new Event('pwa-app-installed'));
+  });
+}
+
 export function useInstallPrompt() {
-  const [installPrompt, setInstallPrompt] = useState(null);
+  const [installPrompt, setInstallPrompt] = useState(() => window.__pwaInstallEvent);
   const [isInstalled, setIsInstalled] = useState(false);
 
   useEffect(() => {
-    // Verifier si deja installe via getInstalledRelatedApps (plus fiable que display-mode)
+    // Verifier si deja installe
     const checkInstalled = async () => {
       try {
         if ('getInstalledRelatedApps' in navigator) {
@@ -167,37 +183,43 @@ export function useInstallPrompt() {
           }
         }
       } catch {}
-      // display-mode: standalone = on est DANS l'app installee (pas le navigateur)
       if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true) {
         setIsInstalled(true);
       }
     };
     checkInstalled();
 
-    // TOUJOURS ecouter beforeinstallprompt meme si on pense que c'est installe
-    // Chrome ne le declenche pas si c'est vraiment installe
-    const handler = (e) => {
-      e.preventDefault();
-      setInstallPrompt(e);
-      // Si on recoit cet event, c'est que ce n'est PAS installe
+    // Si l'evenement a deja ete capture avant le mount de ce hook
+    if (window.__pwaInstallEvent) {
+      setInstallPrompt(window.__pwaInstallEvent);
+      setIsInstalled(false);
+    }
+
+    // Ecouter les nouveaux evenements via le relay global
+    const onAvailable = () => {
+      setInstallPrompt(window.__pwaInstallEvent);
       setIsInstalled(false);
     };
-
-    window.addEventListener('beforeinstallprompt', handler);
-    window.addEventListener('appinstalled', () => {
+    const onInstalled = () => {
       setIsInstalled(true);
       setInstallPrompt(null);
-    });
+    };
+
+    window.addEventListener('pwa-install-available', onAvailable);
+    window.addEventListener('pwa-app-installed', onInstalled);
 
     return () => {
-      window.removeEventListener('beforeinstallprompt', handler);
+      window.removeEventListener('pwa-install-available', onAvailable);
+      window.removeEventListener('pwa-app-installed', onInstalled);
     };
   }, []);
 
   const install = useCallback(async () => {
-    if (!installPrompt) return false;
-    installPrompt.prompt();
-    const result = await installPrompt.userChoice;
+    const prompt = installPrompt || window.__pwaInstallEvent;
+    if (!prompt) return false;
+    prompt.prompt();
+    const result = await prompt.userChoice;
+    window.__pwaInstallEvent = null;
     setInstallPrompt(null);
     if (result.outcome === 'accepted') {
       setIsInstalled(true);
@@ -205,5 +227,5 @@ export function useInstallPrompt() {
     return result.outcome === 'accepted';
   }, [installPrompt]);
 
-  return { canInstall: !!installPrompt && !isInstalled, isInstalled, install };
+  return { canInstall: (!!installPrompt || !!window.__pwaInstallEvent) && !isInstalled, isInstalled, install };
 }

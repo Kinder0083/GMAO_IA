@@ -1,6 +1,7 @@
 {
   "name": "FSAO Iris",
   "short_name": "FSAO Iris",
+  "id": "/",
   "description": "Application de gestion de maintenance industrielle",
   "start_url": "/",
   "display": "standalone",

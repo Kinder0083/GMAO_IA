@@ -377,11 +377,18 @@ const Settings = () => {
                 <Button
                   variant="outline"
                   className="w-full justify-start"
-                  disabled={!canInstall}
+                  disabled={isInstalled}
                   onClick={async () => {
-                    const accepted = await install();
-                    if (accepted) {
-                      toast({ title: 'Application installee', description: 'FSAO Iris est maintenant disponible sur votre appareil.' });
+                    if (canInstall) {
+                      const accepted = await install();
+                      if (accepted) {
+                        toast({ title: 'Application installee', description: 'FSAO Iris est maintenant disponible sur votre appareil.' });
+                      }
+                    } else {
+                      toast({
+                        title: 'Installation manuelle',
+                        description: 'Utilisez le menu de votre navigateur (3 points) puis "Installer l\'application" ou "Ajouter a l\'ecran d\'accueil".',
+                      });
                     }
                   }}
                   data-testid="install-app-btn"
@@ -394,7 +401,7 @@ const Settings = () => {
                     ? 'L\'application est installee sur cet appareil'
                     : canInstall
                       ? 'Installez l\'application pour un acces rapide'
-                      : 'Ouvrez dans un navigateur compatible pour installer'}
+                      : 'Via le menu du navigateur : "Installer l\'application"'}
                 </p>
               </div>
             </CardContent>
