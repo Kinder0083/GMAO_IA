@@ -79,6 +79,7 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     # Remove password field if it exists (support both 'password' and 'hashed_password')
     user.pop("password", None)
     user.pop("hashed_password", None)
+    user["token_iat"] = payload.get("iat", 0)
     
     return user
 

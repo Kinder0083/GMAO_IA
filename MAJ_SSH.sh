@@ -6,17 +6,25 @@
 
 cd /opt/gmao-iris
 
+# ── DECONNECTER TOUS LES UTILISATEURS ──
+# Insère un flag force_logout dans MongoDB
+# Le frontend le détecte en <30s et déconnecte automatiquement tous les utilisateurs
+mongosh --quiet --eval "
+  db = db.getSiblingDB('gmao_iris');
+  db.system_settings.updateOne(
+    { key: 'force_logout_at' },
+    { \$set: { key: 'force_logout_at', timestamp: Date.now() / 1000 } },
+    { upsert: true }
+  );
+  print('[OK] Force logout envoyé à tous les utilisateurs');
+"
+echo "Attente 10s pour que les navigateurs detectent la deconnexion..."
+sleep 10
+
 # ── Trouver la config NGINX ──
 NGINX_CONF=$(for f in /etc/nginx/sites-enabled/gmao-iris /etc/nginx/sites-enabled/fsao-iris /etc/nginx/sites-enabled/default /etc/nginx/conf.d/gmao-iris.conf /etc/nginx/conf.d/default.conf; do [ -f "$f" ] && echo "$f" && break; done)
 NGINX_REAL=$(readlink -f "$NGINX_CONF" 2>/dev/null || echo "$NGINX_CONF")
 NGINX_BACKUP="${NGINX_REAL}.backup_pre_maintenance"
-
-# ── DECONNECTER TOUS LES UTILISATEURS ──
-# Rotation de la SECRET_KEY : invalide tous les tokens JWT existants
-# Les utilisateurs seront obligés de se reconnecter après la mise à jour
-NEW_SECRET=$(openssl rand -hex 32)
-sed -i "s/^SECRET_KEY=.*/SECRET_KEY=\"$NEW_SECRET\"/" backend/.env
-echo "[OK] Tous les utilisateurs ont été déconnectés (SECRET_KEY rotée)"
 
 # ── ACTIVER LA PAGE DE MAINTENANCE ──
 touch /opt/gmao-iris/maintenance.flag
@@ -50,7 +58,7 @@ EOF
 nginx -t && nginx -s reload
 echo "[OK] Page de maintenance activée"
 
-# ── Sauvegarder les .env (avec la nouvelle SECRET_KEY) ──
+# ── Sauvegarder les .env ──
 cp backend/.env /tmp/backend.env
 cp frontend/.env /tmp/frontend.env 2>/dev/null
 

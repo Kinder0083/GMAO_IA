@@ -60,6 +60,28 @@ const InactivityHandler = () => {
     resetActivityTimer();
   };
 
+  // Polling force-logout : vérifie toutes les 30s si l'admin a forcé la déconnexion
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    const checkForceLogout = async () => {
+      try {
+        await api.get('/auth/session-check');
+      } catch (err) {
+        if (err.response?.status === 401) {
+          // Session invalidée par l'admin → déconnexion immédiate
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          window.location.href = '/login';
+        }
+      }
+    };
+
+    const interval = setInterval(checkForceLogout, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
   // Détection d'activité utilisateur
   useEffect(() => {
     const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click'];

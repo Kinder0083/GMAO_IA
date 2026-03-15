@@ -649,6 +649,30 @@ async def get_me(current_user: dict = Depends(get_current_user)):
     return User(**current_user)
 
 
+@api_router.get("/auth/session-check", tags=["Authentification"])
+async def session_check(current_user: dict = Depends(get_current_user)):
+    """Verifie si la session est encore valide (force_logout global)."""
+    flag = await db.system_settings.find_one({"key": "force_logout_at"}, {"_id": 0})
+    if flag:
+        token_iat = current_user.get("token_iat", 0)
+        if token_iat < flag.get("timestamp", 0):
+            raise HTTPException(status_code=401, detail="Session invalidée par l'administrateur")
+    return {"valid": True}
+
+@api_router.post("/admin/force-logout-all", tags=["Administration"])
+async def force_logout_all(current_user: dict = Depends(get_current_admin_user)):
+    """Force la deconnexion de tous les utilisateurs."""
+    import time
+    ts = time.time()
+    await db.system_settings.update_one(
+        {"key": "force_logout_at"},
+        {"$set": {"key": "force_logout_at", "timestamp": ts}},
+        upsert=True
+    )
+    return {"message": "Tous les utilisateurs seront déconnectés", "timestamp": ts}
+
+
+
 @api_router.post("/auth/forgot-password", response_model=MessageResponse, tags=["Authentification"],
     summary="Mot de passe oublie",
     description="Envoie un email avec un lien de reinitialisation du mot de passe. Le token est valable 1 heure.",
