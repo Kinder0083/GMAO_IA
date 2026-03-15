@@ -11,6 +11,21 @@ Application GMAO (Gestion de Maintenance Assistee par Ordinateur) pour la gestio
 - **Realtime**: WebSocket via RealtimeManager
 - **AI**: Gemini, OpenAI (GPT-5.2), Claude (via emergentintegrations)
 
+## Session 16 Fevrier 2026
+
+### Bug Fix P0 - Script d'installation gmao-iris-install.sh
+- **Probleme** : Le script d'installation sur Proxmox echouait avec 3 erreurs :
+  1. Conflit bcrypt/passlib : `bcrypt==4.1.3` incompatible avec `passlib==1.7.4`
+  2. Erreur syntaxe bash : `[: : integer expression expected]` - `$attempt` et `$?` expands par le shell hote dans un heredoc non-quote
+  3. MongoDB pas encore pret lors de la creation des admins
+- **Corrections** :
+  - `requirements.txt` : `bcrypt==4.1.3` -> `bcrypt==3.2.2`
+  - `gmao-iris-install.sh` : `$attempt` -> `\$attempt`, `$?` -> `\$?` dans le bloc APPEOF
+  - Ajout `pip install "bcrypt<4.0.0"` apres requirements.txt (securite si le repo GitHub n'est pas encore maj)
+  - Ajout `systemctl enable mongod` + boucle d'attente MongoDB etendue a 10 tentatives
+  - Synchronisation `/app/gmao-iris-install.sh` et `/app/backend/gmao-iris-install.sh`
+- **Testing** : Backend health OK, login OK, syntaxe bash validee
+
 ## Session 15 Mars 2026
 
 ### Bug Fix P0 - Creation MP depuis Arbre des Causes
@@ -18,7 +33,7 @@ Application GMAO (Gestion de Maintenance Assistee par Ordinateur) pour la gestio
 - **Cause racine** : Collection MongoDB incorrecte (`preventive_maintenance` singulier au lieu de `preventive_maintenances` pluriel) + structure de donnees incompatible avec le modele `PreventiveMaintenanceBase`
 - **Corrections** :
   - `accident_analysis_routes.py` : Collection corrigee + structure adaptee (equipement_id, prochaineMaintenance, duree, dateCreation, statut=ACTIF)
-  - `AccidentAnalysisDetail.jsx` : Frequence corrigee `MENSUELLE` → `MENSUEL`
+  - `AccidentAnalysisDetail.jsx` : Frequence corrigee `MENSUELLE` -> `MENSUEL`
   - Collection unifiee dans `ai_chat_routes.py`, `ai_maintenance_routes.py`, `gmao_data_service.py`
 - **Testing** : 100% backend (9/9), 100% frontend - iteration_130
 
@@ -50,18 +65,16 @@ Application GMAO (Gestion de Maintenance Assistee par Ordinateur) pour la gestio
 ### Fix - Menus manquants dans Organisation du menu
 - Ajout Consignations LOTO, Historique IA, Tendances IA, Arbre des Causes dans DEFAULT_MENU_ITEMS et migration backend
 
+### Scripting - MAJ_SSH.sh
+- Script de mise a jour avec page de maintenance et deconnexion forcee des utilisateurs
 
 ## Session 14 Mars 2026
 
 ### Phase 21 - Integration Arbre des Causes (Permissions, README, Manuel)
 - **Permissions** : Ajout `accidentAnalysis` dans `UserPermissions` (models.py) pour tous les roles
-  - ADMIN/QHSE/TECHNICIEN = full (view+edit+delete)
-  - DIRECTEUR/PROD/RSP_PROD/INDUS = view+edit
-  - LOGISTIQUE/LABO/ADV/VISUALISEUR = view only
-  - AFFICHAGE = aucun acces
 - **PermissionsGrid.jsx** : Ajout de l'entree dans la grille frontend
 - **Migration startup** : Migration automatique des permissions au demarrage du serveur
-- **README.md** : Section complete "IA - Arbre des Causes" avec description des 5 phases
+- **README.md** : Section complete "IA - Arbre des Causes"
 - **Manuel utilisateur** : Section detaillee dans manual_default_content.json
 - **Icone sidebar** : Import `GitBranch` dans menuConfig.js
 
@@ -72,13 +85,11 @@ Application GMAO (Gestion de Maintenance Assistee par Ordinateur) pour la gestio
   - 5 endpoints IA : QQOQCP, 5 Pourquoi, Ishikawa (5M), ALARM, Generation d'actions
   - 3 endpoints de creation d'actions correctives : OT, Maintenance Preventive, Checklist
   - Configuration du modele IA (GET/PUT /settings/ai-config)
-  - Fallback chain LLM (OpenAI → Gemini → Anthropic)
+  - Fallback chain LLM (OpenAI -> Gemini -> Anthropic)
 - **Frontend** :
   - `AccidentAnalysisPage.jsx` : Page de liste avec creation, recherche, suppression
   - `AccidentAnalysisDetail.jsx` : Page de detail avec stepper 5 phases
   - `AccidentAISettings.jsx` : Configuration du modele IA dans Parametres speciaux
-- **Menu** : Entree "Arbre des Causes" ajoutee dans la sidebar
-- **Routes** : `/accident-analysis` et `/accident-analysis/:id`
 - **Testing** : Backend 92% (AI timeout expected), Frontend 100% (iteration_128)
 
 ## Prioritized Backlog
@@ -87,6 +98,7 @@ Application GMAO (Gestion de Maintenance Assistee par Ordinateur) pour la gestio
 - (DONE) Integration permissions, README, manuel
 - (DONE) Bug creation MP depuis Arbre des Causes
 - (DONE) Actions correctives manuelles
+- (DONE) Script installation gmao-iris-install.sh
 
 ### P1
 - Validation utilisateur de tous les bugs corriges
@@ -99,8 +111,12 @@ Application GMAO (Gestion de Maintenance Assistee par Ordinateur) pour la gestio
 - Admin: buenogy@gmail.com / Admin2024!
 
 ## Key Files
+- `/app/gmao-iris-install.sh` - Script d'installation Proxmox (corrige)
+- `/app/backend/gmao-iris-install.sh` - Copie synchronisee
+- `/app/MAJ_SSH.sh` - Script de mise a jour SSH
+- `/app/backend/requirements.txt` - bcrypt==3.2.2 (corrige)
 - `/app/backend/accident_analysis_routes.py` - Routes backend Arbre des Causes
-- `/app/backend/models.py` - Permissions accidentAnalysis (ligne ~74)
+- `/app/backend/models.py` - Permissions accidentAnalysis
 - `/app/frontend/src/pages/AccidentAnalysisPage.jsx` - Page liste
 - `/app/frontend/src/pages/AccidentAnalysisDetail.jsx` - Page detail avec 5 phases
 - `/app/frontend/src/components/Settings/AccidentAISettings.jsx` - Config IA

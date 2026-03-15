@@ -553,6 +553,9 @@ pip install --upgrade pip
 # Installer les dépendances de base
 pip install -r requirements.txt
 
+# Forcer bcrypt compatible avec passlib (bcrypt 4.x casse passlib 1.7.4)
+pip install "bcrypt<4.0.0"
+
 # Installer emergentintegrations depuis le repo Emergent
 echo "📦 Installation de emergentintegrations..."
 pip install emergentintegrations --extra-index-url https://d33sy5i8bnduwe.cloudfront.net/simple/ || {
@@ -565,18 +568,20 @@ echo "🔐 Création des comptes administrateurs..."
 
 # S'assurer que MongoDB est bien démarré
 echo "  Vérification de MongoDB..."
-for attempt in 1 2 3 4 5 6; do
+systemctl enable mongod >/dev/null 2>&1
+systemctl start mongod >/dev/null 2>&1
+for attempt in 1 2 3 4 5 6 7 8 9 10; do
     if mongosh --quiet --eval "db.runCommand({ping:1})" 2>/dev/null | grep -q "ok"; then
         echo "  ✓ MongoDB est prêt"
         break
     fi
-    if [ "$attempt" -eq 6 ]; then
+    if [ "\$attempt" -eq 10 ]; then
         echo "  ⚠ MongoDB ne répond pas, tentative de redémarrage..."
         systemctl restart mongod
-        sleep 5
+        sleep 10
     else
-        echo "  Attente de MongoDB... ($attempt/6)"
-        sleep 5
+        echo "  Attente de MongoDB... (\$attempt/10)"
+        sleep 3
     fi
 done
 
@@ -655,7 +660,7 @@ async def create_admins():
 asyncio.run(create_admins())
 PYEOF
 
-if [ $? -eq 0 ]; then
+if [ \$? -eq 0 ]; then
     echo "✅ Comptes administrateurs créés"
 else
     echo "⚠️  Avertissement: Problème création admins (vous pourrez utiliser buenogy@gmail.com / Admin2024!)"

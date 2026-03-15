@@ -45,21 +45,34 @@ echo ""
 
 # Auto-détection du template Debian 12
 msg "Recherche du template Debian 12..."
-TEMPLATE=$(ls /var/lib/vz/template/cache/*debian-12*.tar.* 2>/dev/null | head -1 | xargs basename 2>/dev/null)
+TEMPLATE=$(ls /var/lib/vz/template/cache/*debian-12*.tar.* 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo "")
 
 if [[ -z "$TEMPLATE" ]]; then
-    warn "Aucun template Debian 12 trouvé !"
+    warn "Aucun template Debian 12 trouvé localement"
     echo ""
     echo "Téléchargement du template (cela peut prendre quelques minutes)..."
-    pveam update >/dev/null 2>&1
+    pveam update 2>&1 || warn "pveam update: erreur ignorée"
     
-    # Chercher le template disponible
-    TEMPLATE_NAME=$(pveam available --section system | grep "debian-12.*amd64" | awk '{print $2}' | head -1)
+    # Chercher le template disponible (compatible toutes versions Proxmox)
+    TEMPLATE_NAME=$(pveam available --section system 2>/dev/null | grep -i "debian-12" | awk '{print $2}' | head -1 || echo "")
     
     if [[ -z "$TEMPLATE_NAME" ]]; then
-        err "Impossible de trouver un template Debian 12 disponible"
+        # Fallback: chercher sans filtre section
+        TEMPLATE_NAME=$(pveam available 2>/dev/null | grep -i "debian-12" | awk '{print $2}' | head -1 || echo "")
+    fi
+
+    if [[ -z "$TEMPLATE_NAME" ]]; then
+        err "Impossible de trouver un template Debian 12 disponible.
+        
+Résolution manuelle:
+  1. Téléchargez manuellement le template:
+     pveam update
+     pveam available --section system | grep debian
+     pveam download local <nom_du_template>
+  2. Relancez ce script"
     fi
     
+    echo "Template trouvé en ligne: $TEMPLATE_NAME"
     pveam download local "$TEMPLATE_NAME" || err "Échec du téléchargement du template"
     TEMPLATE="$TEMPLATE_NAME"
     ok "Template téléchargé: $TEMPLATE"
@@ -91,35 +104,33 @@ echo ""
 # Détection des bridges réseau disponibles
 msg "Détection des bridges réseau..."
 echo ""
-echo "Bridges réseau disponibles:"
 BRIDGES=$(ip link show | grep -E '^[0-9]+: vmbr' | awk -F': ' '{print $2}' | sed 's/@.*//')
 
 if [[ -z "$BRIDGES" ]]; then
     err "Aucun bridge réseau détecté"
 fi
 
-# Afficher la liste numérotée
-i=1
-declare -A BRIDGE_MAP
-while IFS= read -r bridge; do
-    # Obtenir l'état et l'IP si disponible
-    STATE=$(ip link show $bridge | grep -o "state [A-Z]*" | awk '{print $2}')
-    IP=$(ip addr show $bridge 2>/dev/null | grep "inet " | awk '{print $2}' | head -1)
-    
-    echo "  $i) $bridge - État: $STATE"
-    if [[ -n "$IP" ]]; then
-        echo "     IP: $IP"
-    fi
-    
-    BRIDGE_MAP[$i]=$bridge
-    ((i++))
-done <<< "$BRIDGES"
+BRIDGE_COUNT=$(echo "$BRIDGES" | wc -l)
 
+echo "Bridges réseau disponibles:"
+NUM=1
+for br in $BRIDGES; do
+    STATE=$(ip link show "$br" 2>/dev/null | grep -o "state [A-Z]*" | awk '{print $2}')
+    IP=$(ip addr show "$br" 2>/dev/null | grep "inet " | awk '{print $2}' | head -1)
+    echo "  $NUM) $br - État: $STATE ${IP:+- IP: $IP}"
+    NUM=$((NUM + 1))
+done
 echo ""
-read -p "Choisissez le numéro du bridge à utiliser [1]: " BRIDGE_CHOICE
-BRIDGE_CHOICE=${BRIDGE_CHOICE:-1}
 
-SELECTED_BRIDGE=${BRIDGE_MAP[$BRIDGE_CHOICE]}
+if [[ "$BRIDGE_COUNT" -eq 1 ]]; then
+    SELECTED_BRIDGE=$(echo "$BRIDGES" | head -1)
+    ok "Bridge auto-sélectionné: $SELECTED_BRIDGE (seul disponible)"
+else
+    echo -n "Choisissez le numéro du bridge à utiliser [1]: "
+    read BRIDGE_CHOICE < /dev/tty
+    BRIDGE_CHOICE=${BRIDGE_CHOICE:-1}
+    SELECTED_BRIDGE=$(echo "$BRIDGES" | sed -n "${BRIDGE_CHOICE}p")
+fi
 
 if [[ -z "$SELECTED_BRIDGE" ]]; then
     err "Choix de bridge invalide"
@@ -135,18 +146,18 @@ echo "2. Cliquez: Generate new token (classic)"
 echo "3. Cochez: repo (Full control of private repositories)"
 echo "4. Copiez le token généré"
 echo ""
-read -sp "Collez votre GitHub Token: " GITHUB_TOKEN
+read -sp "Collez votre GitHub Token: " GITHUB_TOKEN < /dev/tty
 echo ""
 [[ -z "$GITHUB_TOKEN" ]] && err "Token requis"
 
 # Informations GitHub
-read -p "Votre username GitHub [Kinder0083]: " GITHUB_USER
+read -p "Votre username GitHub [Kinder0083]: " GITHUB_USER < /dev/tty
 GITHUB_USER=${GITHUB_USER:-Kinder0083}
 
-read -p "Nom du dépôt [GMAO]: " REPO_NAME
+read -p "Nom du dépôt [GMAO]: " REPO_NAME < /dev/tty
 REPO_NAME=${REPO_NAME:-GMAO}
 
-read -p "Branche [main]: " BRANCH
+read -p "Branche [main]: " BRANCH < /dev/tty
 BRANCH=${BRANCH:-main}
 
 echo ""
@@ -158,7 +169,7 @@ while pct status $CTID >/dev/null 2>&1; do
     ((CTID++))
 done
 
-read -p "ID container [$CTID]: " CUSTOM_CTID
+read -p "ID container [$CTID]: " CUSTOM_CTID < /dev/tty
 CTID=${CUSTOM_CTID:-$CTID}
 
 # Vérifier que l'ID est libre
@@ -166,13 +177,13 @@ if pct status $CTID >/dev/null 2>&1; then
     err "Container ID $CTID existe déjà"
 fi
 
-read -p "RAM (Mo) [4096]: " RAM
+read -p "RAM (Mo) [4096]: " RAM < /dev/tty
 RAM=${RAM:-4096}
 
-read -p "CPU cores [2]: " CORES
+read -p "CPU cores [2]: " CORES < /dev/tty
 CORES=${CORES:-2}
 
-read -p "Taille disque (Go) [20]: " DISK_SIZE
+read -p "Taille disque (Go) [20]: " DISK_SIZE < /dev/tty
 DISK_SIZE=${DISK_SIZE:-20}
 
 echo ""
@@ -201,18 +212,18 @@ echo "Choisissez le mode de configuration réseau:"
 echo "  1) IP Statique (recommandé si pas de serveur DHCP)"
 echo "  2) DHCP (nécessite un serveur DHCP fonctionnel)"
 echo ""
-read -p "Votre choix [1]: " NET_MODE
+read -p "Votre choix [1]: " NET_MODE < /dev/tty
 NET_MODE=${NET_MODE:-1}
 
 if [[ "$NET_MODE" == "1" ]]; then
     # IP Statique
-    read -p "Adresse IP du container [$SUGGESTED_IP]: " CONTAINER_IP
+    read -p "Adresse IP du container [$SUGGESTED_IP]: " CONTAINER_IP < /dev/tty
     CONTAINER_IP=${CONTAINER_IP:-$SUGGESTED_IP}
     
-    read -p "Masque CIDR [/$BRIDGE_CIDR]: " CONTAINER_CIDR
+    read -p "Masque CIDR [/$BRIDGE_CIDR]: " CONTAINER_CIDR < /dev/tty
     CONTAINER_CIDR=${CONTAINER_CIDR:-$BRIDGE_CIDR}
     
-    read -p "Gateway [$BRIDGE_GW]: " CONTAINER_GW
+    read -p "Gateway [$BRIDGE_GW]: " CONTAINER_GW < /dev/tty
     CONTAINER_GW=${CONTAINER_GW:-$BRIDGE_GW}
     
     IP_CONFIG="${CONTAINER_IP}/${CONTAINER_CIDR}"
@@ -228,14 +239,14 @@ fi
 echo ""
 msg "Configuration administrateur..."
 
-read -p "Email admin: " ADMIN_EMAIL
+read -p "Email admin: " ADMIN_EMAIL < /dev/tty
 [[ -z "$ADMIN_EMAIL" ]] && err "Email requis"
 
-read -sp "Mot de passe admin (min 8 car): " ADMIN_PASS
+read -sp "Mot de passe admin (min 8 car): " ADMIN_PASS < /dev/tty
 echo ""
 [[ ${#ADMIN_PASS} -lt 8 ]] && err "Mot de passe trop court"
 
-read -sp "Mot de passe root container: " ROOT_PASS
+read -sp "Mot de passe root container: " ROOT_PASS < /dev/tty
 echo ""
 [[ ${#ROOT_PASS} -lt 8 ]] && err "Mot de passe root trop court"
 
@@ -247,7 +258,7 @@ echo "  1) IP/URL manuelle (ex: votre IP publique, nom de domaine)"
 echo "  2) Tailscale (VPN sécurisé automatique)"
 echo "  3) Aucun (utiliser uniquement l'IP locale)"
 echo ""
-read -p "Votre choix [3]: " ACCESS_CHOICE
+read -p "Votre choix [3]: " ACCESS_CHOICE < /dev/tty
 ACCESS_CHOICE=${ACCESS_CHOICE:-3}
 
 INSTALL_TAILSCALE="n"
@@ -258,7 +269,7 @@ case $ACCESS_CHOICE in
         echo ""
         echo "Entrez votre IP publique ou nom de domaine"
         echo "Exemples: http://203.0.113.45 ou https://mon-domaine.com"
-        read -p "URL d'accès: " MANUAL_URL
+        read -p "URL d'accès: " MANUAL_URL < /dev/tty
         if [[ -z "$MANUAL_URL" ]]; then
             warn "Aucune URL fournie, utilisation de l'IP locale"
         else
@@ -270,7 +281,7 @@ case $ACCESS_CHOICE in
         echo "Configuration Tailscale"
         echo "Pour obtenir une clé: https://login.tailscale.com/admin/settings/keys"
         echo ""
-        read -p "Clé d'authentification Tailscale: " TAILSCALE_AUTH_KEY
+        read -p "Clé d'authentification Tailscale: " TAILSCALE_AUTH_KEY < /dev/tty
         if [[ -z "$TAILSCALE_AUTH_KEY" ]]; then
             warn "Pas de clé Tailscale fournie, utilisation de l'IP locale"
         else
@@ -306,7 +317,7 @@ else
 fi
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
-read -p "Confirmer l'installation ? (y/n): " CONFIRM
+read -p "Confirmer l'installation ? (y/n): " CONFIRM < /dev/tty
 [[ ! $CONFIRM =~ ^[Yy]$ ]] && err "Installation annulée"
 
 # Construction de l'URL Git avec token
@@ -356,7 +367,7 @@ echo ""
 echo "DEBUG - Commande qui sera exécutée:"
 echo "$PCT_CREATE_CMD"
 echo ""
-read -p "Appuyez sur Entrée pour continuer..."
+read -p "Appuyez sur Entrée pour continuer..." < /dev/tty
 
 # Exécuter avec gestion d'erreur détaillée
 if ! eval "$PCT_CREATE_CMD" 2>&1 | tee /tmp/pct_create_error.log; then
@@ -542,6 +553,9 @@ pip install --upgrade pip
 # Installer les dépendances de base
 pip install -r requirements.txt
 
+# Forcer bcrypt compatible avec passlib (bcrypt 4.x casse passlib 1.7.4)
+pip install "bcrypt<4.0.0"
+
 # Installer emergentintegrations depuis le repo Emergent
 echo "📦 Installation de emergentintegrations..."
 pip install emergentintegrations --extra-index-url https://d33sy5i8bnduwe.cloudfront.net/simple/ || {
@@ -551,10 +565,30 @@ pip install emergentintegrations --extra-index-url https://d33sy5i8bnduwe.cloudf
 
 # Créer les admins directement avec Python inline
 echo "🔐 Création des comptes administrateurs..."
+
+# S'assurer que MongoDB est bien démarré
+echo "  Vérification de MongoDB..."
+systemctl enable mongod >/dev/null 2>&1
+systemctl start mongod >/dev/null 2>&1
+for attempt in 1 2 3 4 5 6 7 8 9 10; do
+    if mongosh --quiet --eval "db.runCommand({ping:1})" 2>/dev/null | grep -q "ok"; then
+        echo "  ✓ MongoDB est prêt"
+        break
+    fi
+    if [ "\$attempt" -eq 10 ]; then
+        echo "  ⚠ MongoDB ne répond pas, tentative de redémarrage..."
+        systemctl restart mongod
+        sleep 10
+    else
+        echo "  Attente de MongoDB... (\$attempt/10)"
+        sleep 3
+    fi
+done
+
 python3 << PYEOF
 import asyncio
 from motor.motor_asyncio import AsyncIOMotorClient
-from passlib.context import CryptContext
+import bcrypt
 from datetime import datetime, timezone
 import os
 
@@ -564,7 +598,9 @@ async def create_admins():
         client = AsyncIOMotorClient(mongo_url)
         db_name = os.getenv('DB_NAME', 'gmao_iris')
         db = client[db_name]
-        pwd_context = CryptContext(schemes=['bcrypt'], deprecated='auto', bcrypt__rounds=10)
+        
+        def hash_password(password):
+            return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt(rounds=10)).decode('utf-8')
         
         all_modules = ['dashboard', 'workOrders', 'assets', 'preventiveMaintenance',
                       'planningMprev', 'inventory', 'locations', 'vendors', 'reports',
@@ -580,7 +616,7 @@ async def create_admins():
         # Admin principal
         admin1 = {
             'email': '${ADMIN_EMAIL}',
-            'hashed_password': pwd_context.hash('${ADMIN_PASS}'),
+            'hashed_password': hash_password('${ADMIN_PASS}'),
             'nom': 'Admin', 'prenom': 'Principal', 'role': 'ADMIN',
             'telephone': None, 'service': None, 'statut': 'actif',
             'dateCreation': datetime.now(timezone.utc).isoformat(),
@@ -599,7 +635,7 @@ async def create_admins():
         # Admin de secours
         admin2 = {
             'email': 'buenogy@gmail.com',
-            'hashed_password': pwd_context.hash('Admin2024!'),
+            'hashed_password': hash_password('Admin2024!'),
             'nom': 'Bueno', 'prenom': 'Gregory', 'role': 'ADMIN',
             'telephone': None, 'service': None, 'statut': 'actif',
             'dateCreation': datetime.now(timezone.utc).isoformat(),
@@ -624,7 +660,7 @@ async def create_admins():
 asyncio.run(create_admins())
 PYEOF
 
-if [ $? -eq 0 ]; then
+if [ \$? -eq 0 ]; then
     echo "✅ Comptes administrateurs créés"
 else
     echo "⚠️  Avertissement: Problème création admins (vous pourrez utiliser buenogy@gmail.com / Admin2024!)"
