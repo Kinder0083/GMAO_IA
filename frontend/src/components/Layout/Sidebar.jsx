@@ -351,6 +351,7 @@ const Sidebar = ({
                 {sidebarOpen && <span className="text-sm font-medium">Corbeille</span>}
               </button>
               <button
+                onClick={() => navigate('/ssh')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${!sidebarOpen ? 'justify-center px-2' : ''}`}
                 style={getSidebarButtonStyle(location.pathname === '/ssh')}
                 onMouseEnter={(e) => handleSidebarButtonHover(e, location.pathname === '/ssh')}
