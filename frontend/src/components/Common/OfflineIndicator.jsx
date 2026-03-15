@@ -1,5 +1,5 @@
 import React from 'react';
-import { Wifi, WifiOff, RefreshCw, HardDrive, AlertTriangle } from 'lucide-react';
+import { Wifi, WifiOff, HardDrive, AlertTriangle } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import useOnlineStatus from '../../hooks/useOnlineStatus';
 
@@ -22,32 +22,26 @@ const OfflineIndicator = () => {
 
   const totalPending = pendingSyncCount + failedSyncCount;
 
+  // Determiner l'etat et le style
+  const getState = () => {
+    if (!isOnline) return { color: 'bg-red-50 text-red-600 border-red-200', label: 'Hors ligne', icon: <WifiOff size={13} /> };
+    if (syncInProgress) return { color: 'bg-orange-50 text-orange-600 border-orange-200', label: 'Synchro', icon: <Wifi size={13} className="animate-pulse" /> };
+    if (failedSyncCount > 0) return { color: 'bg-amber-50 text-amber-600 border-amber-200', label: 'En ligne', icon: <Wifi size={13} /> };
+    return { color: 'bg-emerald-50 text-emerald-600 border-emerald-200', label: 'En ligne', icon: <Wifi size={13} /> };
+  };
+
+  const state = getState();
+
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <div
-          className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium transition-all duration-300 cursor-pointer ${
-            !isOnline
-              ? 'bg-red-50 text-red-600 border border-red-200 animate-pulse'
-              : syncInProgress
-                ? 'bg-blue-50 text-blue-600 border border-blue-200'
-                : failedSyncCount > 0
-                  ? 'bg-amber-50 text-amber-600 border border-amber-200'
-                  : 'bg-emerald-50 text-emerald-600 border border-emerald-200'
-          }`}
+          className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium transition-all duration-300 cursor-pointer border ${state.color}`}
           data-testid="offline-indicator"
           onClick={isOnline && totalPending > 0 ? forceSyncNow : undefined}
         >
-          {!isOnline ? (
-            <WifiOff size={13} />
-          ) : syncInProgress ? (
-            <RefreshCw size={13} className="animate-spin" />
-          ) : (
-            <Wifi size={13} />
-          )}
-          <span className="hidden sm:inline">
-            {!isOnline ? 'Hors ligne' : syncInProgress ? 'Sync...' : 'En ligne'}
-          </span>
+          {state.icon}
+          <span className="hidden sm:inline">{state.label}</span>
           {totalPending > 0 && (
             <span
               className={`flex items-center gap-0.5 ml-0.5 px-1.5 py-0.5 rounded-full text-[10px] ${
@@ -57,7 +51,7 @@ const OfflineIndicator = () => {
               }`}
               data-testid="pending-sync-count"
             >
-              {failedSyncCount > 0 ? <AlertTriangle size={9} /> : <RefreshCw size={9} />}
+              <AlertTriangle size={9} />
               {totalPending}
             </span>
           )}
@@ -68,7 +62,7 @@ const OfflineIndicator = () => {
           <div className="space-y-1.5">
             <p className="font-medium text-emerald-400">Connecte</p>
             {syncInProgress ? (
-              <p className="text-xs text-blue-300">Synchronisation en cours...</p>
+              <p className="text-xs text-orange-300">Synchronisation en cours...</p>
             ) : pendingSyncCount > 0 ? (
               <p className="text-xs text-amber-300">
                 {pendingSyncCount} modification{pendingSyncCount > 1 ? 's' : ''} en attente
@@ -96,17 +90,17 @@ const OfflineIndicator = () => {
         ) : (
           <div className="space-y-1.5">
             <p className="font-medium text-red-400">Hors ligne</p>
-            <p className="text-xs text-gray-300">Les donnees en cache sont disponibles en lecture</p>
-            <p className="text-xs text-gray-300">Les modifications seront synchronisees au retour en ligne</p>
+            <p className="text-xs text-gray-300">Les donnees en cache sont disponibles</p>
+            <p className="text-xs text-gray-300">Synchronisation automatique au retour en ligne</p>
             {totalPending > 0 && (
               <p className="text-xs text-amber-400">
-                {totalPending} modification{totalPending > 1 ? 's' : ''} en attente de synchronisation
+                {totalPending} modification{totalPending > 1 ? 's' : ''} en attente
               </p>
             )}
             {storageInfo && storageInfo.fileCount > 0 && (
               <p className="text-xs text-gray-400 flex items-center gap-1">
                 <HardDrive size={10} />
-                {storageInfo.fileCount} fichier{storageInfo.fileCount > 1 ? 's' : ''} stocke{storageInfo.fileCount > 1 ? 's' : ''} localement ({storageInfo.formattedSize})
+                {storageInfo.fileCount} fichier{storageInfo.fileCount > 1 ? 's' : ''} ({storageInfo.formattedSize})
               </p>
             )}
           </div>
