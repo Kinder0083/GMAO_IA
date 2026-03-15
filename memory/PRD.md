@@ -41,6 +41,16 @@ Application GMAO (Gestion de Maintenance Assistee par Ordinateur) pour la gestio
   - Etats adaptatifs : desactive si deja active/installe, messages contextuels selon l'etat
 - **Testing** : Screenshot OK
 
+### Fix - Affichage hors ligne / synchro
+- Suppression bannieres intrusives OfflineBanner.jsx, indicateur header: vert/rouge/orange
+
+### Fix - Bug authentification user.prenom
+- Protection optionnelle user?.prenom dans Login.jsx et server.py
+
+### Fix - Menus manquants dans Organisation du menu
+- Ajout Consignations LOTO, Historique IA, Tendances IA, Arbre des Causes dans DEFAULT_MENU_ITEMS et migration backend
+
+
 ## Session 14 Mars 2026
 
 ### Phase 21 - Integration Arbre des Causes (Permissions, README, Manuel)

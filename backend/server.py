@@ -4854,7 +4854,10 @@ async def migrate_menu_preferences(current_user: dict = Depends(get_current_user
             { "id": "iot-dashboard", "label": "Dashboard IoT", "path": "/iot-dashboard", "icon": "BarChart3", "module": "iotDashboard", "visible": True, "favorite": False, "order": 23 },
             { "id": "mqtt-logs", "label": "Logs MQTT", "path": "/mqtt-logs", "icon": "Terminal", "module": "mqttLogs", "visible": True, "favorite": False, "order": 24 },
             { "id": "whiteboard", "label": "Tableau d'affichage", "path": "/whiteboard", "icon": "Presentation", "module": "whiteboard", "visible": True, "favorite": False, "order": 25 },
-            { "id": "accident-analysis", "label": "Arbre des Causes", "path": "/accident-analysis", "icon": "GitBranch", "module": "accidentAnalysis", "visible": True, "favorite": False, "order": 26 }
+            { "id": "consignations-loto", "label": "Consignations LOTO", "path": "/consignations-loto", "icon": "Shield", "module": "consignationsLoto", "visible": True, "favorite": False, "order": 26 },
+            { "id": "surveillance-ai-history", "label": "Historique IA", "path": "/surveillance-ai-history", "icon": "History", "module": "surveillance", "visible": True, "favorite": False, "order": 27 },
+            { "id": "surveillance-ai-dashboard", "label": "Tendances IA", "path": "/surveillance-ai-dashboard", "icon": "TrendingUp", "module": "surveillance", "visible": True, "favorite": False, "order": 28 },
+            { "id": "accident-analysis", "label": "Arbre des Causes", "path": "/accident-analysis", "icon": "GitBranch", "module": "accidentAnalysis", "visible": True, "favorite": False, "order": 29 }
         ]
         
         # Récupérer les préférences actuelles

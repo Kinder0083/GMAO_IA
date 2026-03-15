@@ -56,7 +56,10 @@ import {
   Camera,
   Zap,
   FileBarChart,
-  Presentation
+  Presentation,
+  History,
+  TrendingUp,
+  GitBranch
 } from 'lucide-react';
 
 // Liste des icônes disponibles pour les catégories
@@ -81,6 +84,9 @@ const AVAILABLE_ICONS = [
   { id: 'Zap', icon: Zap, label: 'M.E.S.' },
   { id: 'Presentation', icon: Presentation, label: 'Dashboard Service' },
   { id: 'FileBarChart', icon: FileBarChart, label: 'Rapports M.E.S.' },
+  { id: 'History', icon: History, label: 'Historique' },
+  { id: 'TrendingUp', icon: TrendingUp, label: 'Tendances' },
+  { id: 'GitBranch', icon: GitBranch, label: 'Arbre des Causes' },
 ];
 
 const DEFAULT_MENU_ITEMS = [
@@ -119,7 +125,11 @@ const DEFAULT_MENU_ITEMS = [
   { id: 'sensors', label: 'Capteurs MQTT', path: '/sensors', icon: 'Activity', module: 'sensors', visible: true, favorite: false, order: 24, category_id: null },
   { id: 'iot-dashboard', label: 'Dashboard IoT', path: '/iot-dashboard', icon: 'BarChart3', module: 'iotDashboard', visible: true, favorite: false, order: 25, category_id: null },
   { id: 'mqtt-logs', label: 'Logs MQTT', path: '/mqtt-logs', icon: 'Terminal', module: 'mqttLogs', visible: true, favorite: false, order: 26, category_id: null },
-  { id: 'whiteboard', label: 'Tableau d\'affichage', path: '/whiteboard', icon: 'Presentation', module: 'whiteboard', visible: true, favorite: false, order: 27, category_id: null }
+  { id: 'whiteboard', label: 'Tableau d\'affichage', path: '/whiteboard', icon: 'Presentation', module: 'whiteboard', visible: true, favorite: false, order: 27, category_id: null },
+  { id: 'consignations-loto', label: 'Consignations LOTO', path: '/consignations-loto', icon: 'Shield', module: 'consignationsLoto', visible: true, favorite: false, order: 28, category_id: null },
+  { id: 'surveillance-ai-history', label: 'Historique IA', path: '/surveillance-ai-history', icon: 'History', module: 'surveillance', visible: true, favorite: false, order: 29, category_id: null },
+  { id: 'surveillance-ai-dashboard', label: 'Tendances IA', path: '/surveillance-ai-dashboard', icon: 'TrendingUp', module: 'surveillance', visible: true, favorite: false, order: 30, category_id: null },
+  { id: 'accident-analysis', label: 'Arbre des Causes', path: '/accident-analysis', icon: 'GitBranch', module: 'accidentAnalysis', visible: true, favorite: false, order: 31, category_id: null }
 ];
 
 const MenuOrganizationSection = () => {
