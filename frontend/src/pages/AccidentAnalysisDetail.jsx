@@ -579,16 +579,41 @@ function IshikawaDiagram({ ishikawa }) {
 function ActionsPhase({ analysis, onSave, phaseDataRef, onReload, aiLoading, setAiLoading, toast }) {
   const [actions, setActions] = useState(analysis.actions_correctives || []);
   const [selected, setSelected] = useState(() => {
-    // Par defaut, toutes selectionnees
     return new Set((analysis.actions_correctives || []).map((_, i) => i));
   });
   const [aiActions, setAiActions] = useState(null);
   const [creatingAction, setCreatingAction] = useState(null);
   const [archiving, setArchiving] = useState(false);
+  const [showManualForm, setShowManualForm] = useState(false);
+  const [manualAction, setManualAction] = useState({ titre: '', description: '', type: 'OT_CORRECTIF', priorite: 'MOYENNE' });
 
   React.useEffect(() => {
     phaseDataRef.current = () => ({ actions_correctives: actions });
   }, [actions, phaseDataRef]);
+
+  const addManualAction = () => {
+    if (!manualAction.titre.trim()) {
+      toast({ title: 'Le titre est requis', variant: 'destructive' });
+      return;
+    }
+    const newAction = { ...manualAction, source: 'MANUELLE' };
+    const newActions = [...actions, newAction];
+    setActions(newActions);
+    setSelected(prev => new Set([...prev, newActions.length - 1]));
+    setManualAction({ titre: '', description: '', type: 'OT_CORRECTIF', priorite: 'MOYENNE' });
+    setShowManualForm(false);
+    toast({ title: 'Action ajoutee' });
+  };
+
+  const removeAction = (idx) => {
+    const newActions = actions.filter((_, i) => i !== idx);
+    setActions(newActions);
+    setSelected(prev => {
+      const next = new Set();
+      prev.forEach(i => { if (i < idx) next.add(i); else if (i > idx) next.add(i - 1); });
+      return next;
+    });
+  };
 
   const generateActions = async () => {
     setAiLoading(true);
@@ -670,7 +695,7 @@ function ActionsPhase({ analysis, onSave, phaseDataRef, onReload, aiLoading, set
         titre: action.titre,
         description: action.description,
         priorite: action.priorite,
-        frequence: 'MENSUELLE',
+        frequence: 'MENSUEL',
       });
       toast({ title: 'Maintenance preventive creee', description: result.titre });
       onReload();
@@ -713,6 +738,10 @@ function ActionsPhase({ analysis, onSave, phaseDataRef, onReload, aiLoading, set
             <Wrench className="h-5 w-5 text-green-600" /> Actions correctives & preventives
           </CardTitle>
           <div className="flex gap-2 flex-wrap">
+            <Button size="sm" variant="outline" onClick={() => setShowManualForm(v => !v)} data-testid="add-manual-action-btn">
+              <Plus className="h-4 w-4 mr-1" />
+              Ajouter manuellement
+            </Button>
             <Button size="sm" variant="outline" onClick={generateActions} disabled={aiLoading} data-testid="ai-generate-actions-btn">
               {aiLoading ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Brain className="h-4 w-4 mr-1" />}
               Generer via IA
@@ -749,12 +778,77 @@ function ActionsPhase({ analysis, onSave, phaseDataRef, onReload, aiLoading, set
         )}
       </CardHeader>
       <CardContent>
-        {actions.length === 0 ? (
+        {/* Manual action form */}
+        {showManualForm && (
+          <div className="mb-4 p-4 border-2 border-dashed border-blue-300 rounded-lg bg-blue-50/30" data-testid="manual-action-form">
+            <h4 className="font-medium text-gray-800 mb-3 flex items-center gap-2">
+              <Plus className="h-4 w-4 text-blue-600" /> Nouvelle action manuelle
+            </h4>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="sm:col-span-2">
+                <label className="text-xs font-medium text-gray-500 mb-1 block">Titre *</label>
+                <Input
+                  value={manualAction.titre}
+                  onChange={e => setManualAction(p => ({ ...p, titre: e.target.value }))}
+                  placeholder="Titre de l'action"
+                  data-testid="manual-action-titre"
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="text-xs font-medium text-gray-500 mb-1 block">Description</label>
+                <textarea
+                  className="w-full border rounded-md p-2 text-sm min-h-[60px] resize-y focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={manualAction.description}
+                  onChange={e => setManualAction(p => ({ ...p, description: e.target.value }))}
+                  placeholder="Description detaillee de l'action"
+                  data-testid="manual-action-description"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-500 mb-1 block">Type</label>
+                <select
+                  className="w-full border rounded-md p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={manualAction.type}
+                  onChange={e => setManualAction(p => ({ ...p, type: e.target.value }))}
+                  data-testid="manual-action-type"
+                >
+                  <option value="OT_CORRECTIF">OT Correctif</option>
+                  <option value="MAINTENANCE_PREVENTIVE">Maintenance Preventive</option>
+                  <option value="CHECKLIST">Checklist</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-500 mb-1 block">Priorite</label>
+                <select
+                  className="w-full border rounded-md p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={manualAction.priorite}
+                  onChange={e => setManualAction(p => ({ ...p, priorite: e.target.value }))}
+                  data-testid="manual-action-priorite"
+                >
+                  <option value="URGENTE">Urgente</option>
+                  <option value="HAUTE">Haute</option>
+                  <option value="MOYENNE">Moyenne</option>
+                  <option value="BASSE">Basse</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex gap-2 mt-3">
+              <Button size="sm" onClick={addManualAction} data-testid="confirm-manual-action-btn">
+                <Check className="h-4 w-4 mr-1" /> Ajouter
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setShowManualForm(false)} data-testid="cancel-manual-action-btn">
+                Annuler
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {actions.length === 0 && !showManualForm ? (
           <div className="text-center py-8 text-gray-400">
             <Wrench className="h-10 w-10 mx-auto mb-2" />
-            <p>Cliquez sur "Generer via IA" pour obtenir des actions correctives basees sur votre analyse.</p>
+            <p>Cliquez sur "Generer via IA" ou "Ajouter manuellement" pour creer des actions correctives.</p>
           </div>
-        ) : (
+        ) : actions.length > 0 && (
           <div className="space-y-3">
             {actions.map((action, i) => {
               const isSelected = selected.has(i);
@@ -776,13 +870,23 @@ function ActionsPhase({ analysis, onSave, phaseDataRef, onReload, aiLoading, set
                       {isSelected && <Check className="h-3 w-3" />}
                     </button>
                     <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
                         <h4 className="font-medium text-gray-900">{action.titre}</h4>
                         <Badge className={PRIO_COLORS[action.priorite] || ''}>{action.priorite}</Badge>
                         <Badge variant="outline">{action.type?.replace('_', ' ')}</Badge>
+                        {action.source === 'MANUELLE' && <Badge className="bg-blue-100 text-blue-800 text-[10px]">Manuelle</Badge>}
                       </div>
                       <p className="text-sm text-gray-600">{action.description}</p>
                       {action.categorie_5m && <p className="text-xs text-gray-400 mt-1">Categorie 5M: {action.categorie_5m}</p>}
+                      {action.source === 'MANUELLE' && (
+                        <button
+                          onClick={() => removeAction(i)}
+                          className="text-xs text-red-500 hover:text-red-700 mt-1"
+                          data-testid={`remove-action-${i}`}
+                        >
+                          Supprimer
+                        </button>
+                      )}
                       {isSelected && (
                         <div className="flex gap-2 mt-3">
                           {(action.type === 'OT_CORRECTIF' || !action.type) && (

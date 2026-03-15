@@ -599,26 +599,32 @@ async def create_work_order_from_analysis(analysis_id: str, data: dict, current_
 @router.post("/{analysis_id}/create-preventive")
 async def create_preventive_from_analysis(analysis_id: str, data: dict, current_user: dict = Depends(get_current_user)):
     """Cree une maintenance preventive a partir d'une action identifiee."""
+    from dateutil.relativedelta import relativedelta
     doc = await db.accident_analyses.find_one({"_id": ObjectId(analysis_id)})
     if not doc:
         raise HTTPException(status_code=404, detail="Analyse non trouvee")
 
     now = datetime.now(timezone.utc)
+    freq = data.get("frequence", "MENSUEL")
+    freq_map = {"HEBDOMADAIRE": relativedelta(weeks=1), "MENSUEL": relativedelta(months=1),
+                "TRIMESTRIEL": relativedelta(months=3), "ANNUEL": relativedelta(years=1)}
+    prochaine = now + freq_map.get(freq, relativedelta(months=1))
+
     mp = {
         "titre": data.get("titre", f"Prevention - {doc.get('titre', '')}"),
-        "description": data.get("description", ""),
-        "type_maintenance": "PREVENTIVE",
-        "frequence": data.get("frequence", "MENSUELLE"),
-        "priorite": data.get("priorite", "HAUTE"),
-        "statut": "ACTIVE",
+        "equipement_id": data.get("equipement_id", ""),
+        "frequence": freq,
+        "prochaineMaintenance": prochaine,
+        "assigne_a_id": data.get("assigne_a_id"),
+        "duree": data.get("duree", 1.0),
+        "statut": "ACTIF",
+        "dateCreation": now,
+        "derniereMaintenance": None,
         "origine": "ANALYSE_ACCIDENT",
         "analyse_accident_id": analysis_id,
-        "created_at": now,
-        "updated_at": now,
-        "created_by": current_user.get("id"),
-        "created_by_name": f"{current_user.get('prenom', '')} {current_user.get('nom', '')}".strip(),
+        "description": data.get("description", ""),
     }
-    result = await db.preventive_maintenance.insert_one(mp)
+    result = await db.preventive_maintenances.insert_one(mp)
     mp_id = str(result.inserted_id)
 
     await db.accident_analyses.update_one(
@@ -738,6 +744,7 @@ def _build_pdf_html(analysis: dict, selected_action_indices: list = None) -> str
     for i, a in enumerate(actions):
         prio = a.get("priorite", "")
         prio_class = "prio-haute" if prio in ("URGENTE", "HAUTE") else "prio-moyenne" if prio == "MOYENNE" else ""
+        source = "Manuelle" if a.get("source") == "MANUELLE" else "IA"
         actions_html += f"""
         <tr>
             <td class='label'>{i+1}</td>
@@ -745,6 +752,7 @@ def _build_pdf_html(analysis: dict, selected_action_indices: list = None) -> str
             <td>{a.get('description', '')}</td>
             <td class='{prio_class}'>{prio}</td>
             <td>{(a.get('type', '') or '').replace('_', ' ')}</td>
+            <td>{source}</td>
         </tr>"""
 
     # Elements generes
@@ -830,7 +838,7 @@ def _build_pdf_html(analysis: dict, selected_action_indices: list = None) -> str
 {"<table><tr><th>Categorie</th><th>Facteurs identifies</th></tr>" + alarm_html + "</table>" if alarm_html else "<p style='color:#999;'>Non renseigne</p>"}
 
 <h2>5. Actions correctives et preventives retenues</h2>
-{"<table><tr><th>#</th><th>Action</th><th>Description</th><th>Priorite</th><th>Type</th></tr>" + actions_html + "</table>" if actions_html else "<p style='color:#999;'>Aucune action</p>"}
+{"<table><tr><th>#</th><th>Action</th><th>Description</th><th>Priorite</th><th>Type</th><th>Source</th></tr>" + actions_html + "</table>" if actions_html else "<p style='color:#999;'>Aucune action</p>"}
 
 {generes_html}
 
