@@ -734,6 +734,24 @@ async def process_import_item(item: dict, module: str, collection_name: str, cur
         if "statut" not in cleaned:
             cleaned["statut"] = "OPERATIONNEL"
     
+    # --- Traitement spécial pour user_preferences: dédupliquer par user_id ---
+    if collection_name == "user_preferences" and "user_id" in cleaned:
+        uid = cleaned["user_id"]
+        existing_by_uid = await db[collection_name].find_one({"user_id": uid})
+        if existing_by_uid:
+            # Remplacer le document existant par les données restaurées
+            update_data = {k: v for k, v in cleaned.items() if k != "_id"}
+            await db[collection_name].update_one(
+                {"_id": existing_by_uid["_id"]},
+                {"$set": update_data}
+            )
+            # Supprimer les doublons éventuels
+            await db[collection_name].delete_many({"user_id": uid, "_id": {"$ne": existing_by_uid["_id"]}})
+            return {"action": "updated", "id": str(existing_by_uid["_id"])}
+        else:
+            await db[collection_name].insert_one(cleaned)
+            return {"action": "inserted", "id": str(cleaned["_id"])}
+    
     # --- Mode replace: vérifier si existe ---
     if mode == "replace":
         existing = await db[collection_name].find_one({"_id": cleaned["_id"]})
@@ -1246,6 +1264,38 @@ async def _do_restore(content: bytes, mode: str, current_user: dict):
         stats["errors"].extend(module_stats["errors"][:5])
 
     logger.info(f"[Restore] Terminé: {stats['inserted']} insérés, {stats['updated']} mis à jour, {stats['skipped']} ignorés, {restored_files} fichiers, {collections_cleared} collections vidées")
+
+    # Post-restore: nettoyer les doublons dans user_preferences
+    dupes_cleaned = 0
+    try:
+        pipeline = [
+            {"$group": {"_id": "$user_id", "count": {"$sum": 1}, "docs": {"$push": {"id": "$_id", "updated_at": "$updated_at", "primary_color": "$primary_color", "menu_categories": "$menu_categories"}}}},
+            {"$match": {"count": {"$gt": 1}}}
+        ]
+        async for group in db.user_preferences.aggregate(pipeline):
+            docs = group["docs"]
+            # Garder le doc le plus personnalisé (catégories non vides, couleur non par défaut, ou plus récent)
+            best = docs[0]
+            for d in docs:
+                cats = d.get("menu_categories") or []
+                color = d.get("primary_color", "#2563eb")
+                updated = str(d.get("updated_at", ""))
+                best_cats = best.get("menu_categories") or []
+                best_color = best.get("primary_color", "#2563eb")
+                best_updated = str(best.get("updated_at", ""))
+                if (len(cats) > len(best_cats)) or \
+                   (color != "#2563eb" and best_color == "#2563eb") or \
+                   (updated > best_updated and len(cats) >= len(best_cats)):
+                    best = d
+            ids_to_delete = [d["id"] for d in docs if d["id"] != best["id"]]
+            if ids_to_delete:
+                await db.user_preferences.delete_many({"_id": {"$in": ids_to_delete}})
+                dupes_cleaned += len(ids_to_delete)
+        if dupes_cleaned > 0:
+            logger.info(f"[Restore] Post-fix: {dupes_cleaned} doublon(s) user_preferences supprimé(s)")
+            stats["preferences_dupes_cleaned"] = dupes_cleaned
+    except Exception as e:
+        logger.warning(f"[Restore] Nettoyage doublons user_preferences: {e}")
 
     # Post-restore: s'assurer que tous les documents ont un champ 'id'
     ids_fixed = 0

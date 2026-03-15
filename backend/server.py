@@ -4652,7 +4652,34 @@ async def get_user_preferences(current_user: dict = Depends(get_current_user)):
     """Récupérer les préférences de l'utilisateur connecté"""
     try:
         user_id = current_user.get("id")
-        preferences = await db.user_preferences.find_one({"user_id": user_id})
+        
+        # Dédupliquer: si plusieurs docs existent pour le même user_id,
+        # garder celui avec les données les plus personnalisées (updated_at le plus récent)
+        count = await db.user_preferences.count_documents({"user_id": user_id})
+        if count > 1:
+            all_prefs = await db.user_preferences.find({"user_id": user_id}).to_list(length=100)
+            # Préférer celui qui a des menu_categories non vides ou des couleurs non par défaut
+            best = all_prefs[0]
+            for p in all_prefs:
+                cats = p.get("menu_categories", [])
+                color = p.get("primary_color", "#2563eb")
+                updated = p.get("updated_at", "")
+                best_cats = best.get("menu_categories", [])
+                best_color = best.get("primary_color", "#2563eb")
+                best_updated = best.get("updated_at", "")
+                # Critères: catégories non vides, couleur personnalisée, ou plus récent
+                if (len(cats) > len(best_cats)) or \
+                   (color != "#2563eb" and best_color == "#2563eb") or \
+                   (str(updated) > str(best_updated) and len(cats) >= len(best_cats)):
+                    best = p
+            # Supprimer les doublons
+            ids_to_delete = [p["_id"] for p in all_prefs if p["_id"] != best["_id"]]
+            if ids_to_delete:
+                await db.user_preferences.delete_many({"_id": {"$in": ids_to_delete}})
+                logger.info(f"[PREFS] Nettoyé {len(ids_to_delete)} doublon(s) pour user_id={user_id}")
+            preferences = best
+        else:
+            preferences = await db.user_preferences.find_one({"user_id": user_id})
         
         if not preferences:
             # Créer des préférences par défaut

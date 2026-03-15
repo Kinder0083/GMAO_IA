@@ -7,11 +7,13 @@ import axios from 'axios';
 import { getBackendURL } from '../utils/config';
 import { formatErrorMessage } from '../utils/errorFormatter';
 import { modules } from './importExportModules';
+import { usePreferences } from '../contexts/PreferencesContext';
 
 const CHUNK_SIZE = 5 * 1024 * 1024; // 5 Mo par chunk
 
 const RestoreTab = () => {
   const { toast } = useToast();
+  const { loadPreferences } = usePreferences();
   const fileInputRef = useRef(null);
   const [selectedFile, setSelectedFile] = useState(null);
   const [restoreMode, setRestoreMode] = useState('merge');
@@ -182,6 +184,9 @@ const RestoreTab = () => {
         setRestoreResult(response.data.stats || response.data);
         toast({ title: 'Restauration terminee', description: response.data.message });
       }
+
+      // Recharger les préférences utilisateur pour appliquer les personnalisations restaurées
+      try { await loadPreferences(); } catch (e) { /* ignore */ }
 
       setSelectedFile(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
