@@ -328,6 +328,71 @@ async def get_drive_status(current_user: dict = Depends(get_current_admin_user))
         return {"connected": False}
     return {"connected": True, "updated_at": creds.get("updated_at")}
 
+# --- Google Drive Configuration ---
+
+class DriveConfigUpdate(BaseModel):
+    google_client_id: str
+    google_client_secret: str
+    google_drive_redirect_uri: str
+
+
+@router.get("/drive/config")
+async def get_drive_config_status(current_user: dict = Depends(get_current_admin_user)):
+    """Vérifie si Google Drive est configuré (sans exposer les secrets)"""
+    client_id = os.environ.get("GOOGLE_CLIENT_ID", "")
+    client_secret = os.environ.get("GOOGLE_CLIENT_SECRET", "")
+    redirect_uri = os.environ.get("GOOGLE_DRIVE_REDIRECT_URI", "")
+    configured = bool(client_id and client_secret and redirect_uri)
+    return {
+        "configured": configured,
+        "client_id_set": bool(client_id),
+        "client_id_preview": (client_id[:20] + "...") if len(client_id) > 20 else client_id if client_id else "",
+        "client_secret_set": bool(client_secret),
+        "redirect_uri": redirect_uri if redirect_uri else "",
+    }
+
+
+@router.post("/drive/config")
+async def save_drive_config(data: DriveConfigUpdate, current_user: dict = Depends(get_current_admin_user)):
+    """Sauvegarde la configuration Google Drive dans le fichier .env"""
+    try:
+        env_path = Path(__file__).parent / ".env"
+        if not env_path.exists():
+            raise HTTPException(status_code=500, detail="Fichier .env introuvable")
+
+        env_content = env_path.read_text()
+        env_lines = env_content.splitlines()
+
+        updates = {
+            "GOOGLE_CLIENT_ID": data.google_client_id.strip(),
+            "GOOGLE_CLIENT_SECRET": data.google_client_secret.strip(),
+            "GOOGLE_DRIVE_REDIRECT_URI": data.google_drive_redirect_uri.strip(),
+        }
+
+        for key, value in updates.items():
+            found = False
+            for i, line in enumerate(env_lines):
+                if line.startswith(f"{key}=") or line.startswith(f"# {key}="):
+                    env_lines[i] = f"{key}={value}"
+                    found = True
+                    break
+            if not found:
+                env_lines.append(f"{key}={value}")
+            os.environ[key] = value
+
+        env_path.write_text("\n".join(env_lines) + "\n")
+
+        logger.info(f"[Drive Config] Configuration Google Drive mise à jour par {current_user.get('email')}")
+        return {"success": True, "message": "Configuration Google Drive sauvegardée. Les variables sont actives immédiatement."}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[Drive Config] Erreur sauvegarde: {e}")
+        raise HTTPException(status_code=500, detail=f"Erreur lors de la sauvegarde: {str(e)}")
+
+
+
 
 DRIVE_SCOPES = ['https://www.googleapis.com/auth/drive.file']
 
