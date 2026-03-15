@@ -12,7 +12,7 @@ import os
 
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
 if not BASE_URL:
-    BASE_URL = "https://cause-tree-debug.preview.emergentagent.com"
+    BASE_URL = "https://backup-restore-tool.preview.emergentagent.com"
 
 # Test credentials
 TEST_EMAIL = "admin@test.com"
