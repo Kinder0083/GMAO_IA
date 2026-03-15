@@ -15,7 +15,7 @@ class ConnectivityManager {
     this._listeners = new Set();
     this._pingInterval = null;
     this._consecutiveFailures = 0;
-    this._FAILURE_THRESHOLD = 1;
+    this._FAILURE_THRESHOLD = 3;
     this._backendUrl = '';
 
     // Écouter les événements navigateur comme baseline
