@@ -322,9 +322,10 @@ def serialize_doc(doc, _is_root=True):
     if doc is None:
         return None
     
-    # Convertir le _id principal
+    # Convertir le _id principal - préserver id existant s'il est présent
     if "_id" in doc:
-        doc["id"] = str(doc["_id"])
+        if "id" not in doc or not doc["id"]:
+            doc["id"] = str(doc["_id"])
         del doc["_id"]
     
     # Supprimer les champs sensibles si présents
@@ -1311,7 +1312,25 @@ async def get_work_orders(
         if "numero" not in wo or not wo["numero"]:
             wo["numero"] = "N/A"
     
-    return [WorkOrder(**wo) for wo in work_orders]
+    result = []
+    for wo in work_orders:
+        # Compléter les champs obligatoires manquants (données restaurées)
+        wo.setdefault("id", str(wo.get("_id", "")))
+        wo.setdefault("titre", wo.get("title", "Sans titre"))
+        wo.setdefault("description", wo.get("desc", ""))
+        wo.setdefault("statut", wo.get("status", "EN_ATTENTE"))
+        wo.setdefault("priorite", wo.get("priority", "AUCUNE"))
+        wo.setdefault("dateCreation", wo.get("date_creation", datetime.utcnow()))
+        wo.setdefault("createdBy", wo.get("created_by", "inconnu"))
+        if isinstance(wo.get("priorite"), str):
+            wo["priorite"] = wo["priorite"].upper()
+        if isinstance(wo.get("statut"), str) and wo["statut"] not in VALID_STATUTS:
+            wo["statut"] = STATUT_MAP.get(wo["statut"].lower(), "EN_ATTENTE")
+        try:
+            result.append(WorkOrder(**wo))
+        except Exception as e:
+            logger.warning(f"OT {wo.get('id','?')} invalide: {str(e)[:150]}")
+    return result
 
 @api_router.get("/work-orders/{wo_id}",
     summary="Detail d'un ordre de travail", response_model=WorkOrder, tags=["Ordres de Travail"])
@@ -7516,7 +7535,37 @@ async def get_all_intervention_requests(current_user: dict = Depends(require_per
         for req in all_reqs:
             if req.get("work_order_id") and req["work_order_id"] in deleted_wo_ids:
                 req["is_work_order_deleted"] = True
-            requests.append(InterventionRequest(**req))
+            # Compléter les champs obligatoires manquants (données restaurées)
+            if "id" not in req:
+                req["id"] = str(req.get("_id", ""))
+            if "titre" not in req:
+                req["titre"] = req.get("title", "Sans titre")
+            if "description" not in req:
+                req["description"] = req.get("desc", "")
+            if "created_by" not in req:
+                req["created_by"] = req.get("createdBy", req.get("demandeur_id", "inconnu"))
+            if "date_creation" not in req:
+                req["date_creation"] = req.get("dateCreation", req.get("created_at", datetime.utcnow()))
+            if "priorite" not in req:
+                req["priorite"] = req.get("priority", "AUCUNE")
+            elif isinstance(req.get("priorite"), str):
+                req["priorite"] = req["priorite"].upper()
+            try:
+                requests.append(InterventionRequest(**req))
+            except Exception as e:
+                logger.warning(f"DI {req.get('id','?')} invalide, tentative de correction: {str(e)[:100]}")
+                # Dernier recours : forcer les valeurs par défaut
+                req.setdefault("titre", "Sans titre")
+                req.setdefault("description", "")
+                req.setdefault("priorite", "AUCUNE")
+                req.setdefault("created_by", "inconnu")
+                req.setdefault("date_creation", datetime.utcnow())
+                if isinstance(req.get("priorite"), str):
+                    req["priorite"] = req["priorite"].upper()
+                try:
+                    requests.append(InterventionRequest(**req))
+                except Exception as e2:
+                    logger.error(f"DI {req.get('id','?')} définitivement invalide: {str(e2)[:200]}")
         return requests
     except Exception as e:
         logger.error(f"Erreur récupération demandes: {str(e)}")

@@ -342,7 +342,14 @@ const RestoreTab = () => {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 text-sm text-gray-700">
-            <p>Si apres une restauration certaines donnees n'apparaissent pas (ex: les DI sont comptees dans le tableau de bord mais invisibles dans le menu), utilisez ce bouton pour corriger les identifiants manquants.</p>
+            <p><strong>Utilisez ce bouton apres avoir restaure un backup provenant d'une autre installation.</strong></p>
+            <p className="mt-1">Il corrige automatiquement :</p>
+            <ul className="list-disc list-inside mt-1 space-y-0.5">
+              <li>Les identifiants manquants</li>
+              <li>Les champs obligatoires vides (titre, description, priorite...)</li>
+              <li>Les enums mal formees (priorite en minuscule, etc.)</li>
+              <li>Les noms de champs alternatifs (anglais/francais)</li>
+            </ul>
           </div>
           <Button
             data-testid="fix-missing-ids-button"
@@ -359,7 +366,7 @@ const RestoreTab = () => {
             ) : (
               <>
                 <Wrench size={18} className="mr-2" />
-                Corriger les identifiants manquants
+                Reparer les donnees restaurees
               </>
             )}
           </Button>

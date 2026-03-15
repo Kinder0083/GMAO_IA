@@ -712,61 +712,110 @@ async def export_data(
 
 
 
-# --- Migration : ajouter le champ 'id' manquant aux documents restaurés ---
+# --- Migration : corriger les données restaurées (IDs manquants, champs requis, types) ---
+
+# Champs obligatoires par collection avec valeurs par défaut
+REQUIRED_FIELDS_DEFAULTS = {
+    "intervention_requests": {
+        "titre": "Sans titre",
+        "description": "",
+        "priorite": "AUCUNE",
+        "created_by": "inconnu",
+        "created_by_name": "Inconnu",
+        "date_creation": None,  # sera datetime.utcnow()
+        "attachments": [],
+        "refused": False,
+    },
+    "work_orders": {
+        "titre": "Sans titre",
+        "description": "",
+        "statut": "EN_ATTENTE",
+        "priorite": "AUCUNE",
+        "created_by": "inconnu",
+        "date_creation": None,
+    },
+}
+
+# Champs qui doivent être en MAJUSCULE (enums)
+UPPERCASE_FIELDS = ["priorite", "statut", "status", "categorie"]
+
 
 @router.post("/restore/fix-missing-ids")
 async def fix_missing_ids(
     current_user: dict = Depends(get_current_admin_user)
 ):
     """
-    Corrige les documents restaurés qui n'ont pas de champ 'id'.
-    Ajoute id = str(_id) pour chaque document concerné.
+    Corrige les documents restaurés :
+    - Ajoute les champs 'id' manquants
+    - Complète les champs obligatoires manquants (titre, description, priorite, etc.)
+    - Normalise les enums en majuscule (priorite, statut)
     """
     stats = {}
     total_fixed = 0
 
-    for module_name, collection_name in EXPORT_MODULES.items():
+    all_collections = list(EXPORT_MODULES.items()) + [("users", "users")]
+
+    for module_name, collection_name in all_collections:
         try:
-            # Trouver les documents sans champ 'id'
-            count = await db[collection_name].count_documents({"id": {"$exists": False}})
-            if count > 0:
-                # Récupérer et corriger chaque document
-                cursor = db[collection_name].find({"id": {"$exists": False}})
-                fixed = 0
-                async for doc in cursor:
+            fixed = 0
+            defaults = REQUIRED_FIELDS_DEFAULTS.get(collection_name, {})
+
+            cursor = db[collection_name].find()
+            async for doc in cursor:
+                updates = {}
+
+                # 1. Corriger id manquant
+                if "id" not in doc or not doc["id"]:
+                    updates["id"] = str(doc["_id"])
+
+                # 2. Compléter les champs requis manquants
+                for field, default_val in defaults.items():
+                    if field not in doc or doc[field] is None:
+                        if default_val is None:
+                            from datetime import datetime as dt
+                            updates[field] = dt.utcnow()
+                        else:
+                            updates[field] = default_val
+
+                # 3. Normaliser les enums en majuscule
+                for field in UPPERCASE_FIELDS:
+                    val = doc.get(field)
+                    if isinstance(val, str) and val != val.upper():
+                        updates[field] = val.upper()
+
+                # 4. Mapper les noms de champs alternatifs
+                field_aliases = {
+                    "title": "titre",
+                    "priority": "priorite",
+                    "status": "statut",
+                    "requestedBy": "created_by",
+                    "dateCreation": "date_creation",
+                    "equipment": "equipement",
+                    "desc": "description",
+                }
+                for old_name, new_name in field_aliases.items():
+                    if old_name in doc and new_name not in doc:
+                        updates[new_name] = doc[old_name]
+
+                if updates:
                     await db[collection_name].update_one(
                         {"_id": doc["_id"]},
-                        {"$set": {"id": str(doc["_id"])}}
+                        {"$set": updates}
                     )
                     fixed += 1
+
+            if fixed > 0:
                 stats[collection_name] = fixed
                 total_fixed += fixed
-                logger.info(f"[Fix IDs] {collection_name}: {fixed} documents corrigés")
+                logger.info(f"[Fix Data] {collection_name}: {fixed} documents corrigés")
         except Exception as e:
             stats[collection_name] = f"erreur: {str(e)}"
-            logger.error(f"[Fix IDs] Erreur sur {collection_name}: {e}")
+            logger.error(f"[Fix Data] Erreur sur {collection_name}: {e}")
 
-    # Aussi corriger la collection users
-    try:
-        user_count = await db["users"].count_documents({"id": {"$exists": False}})
-        if user_count > 0:
-            cursor = db["users"].find({"id": {"$exists": False}})
-            fixed = 0
-            async for doc in cursor:
-                await db["users"].update_one(
-                    {"_id": doc["_id"]},
-                    {"$set": {"id": str(doc["_id"])}}
-                )
-                fixed += 1
-            stats["users"] = fixed
-            total_fixed += fixed
-    except Exception as e:
-        stats["users"] = f"erreur: {str(e)}"
-
-    logger.info(f"[Fix IDs] Total: {total_fixed} documents corrigés")
+    logger.info(f"[Fix Data] Total: {total_fixed} documents corrigés")
     return {
         "success": True,
-        "message": f"{total_fixed} documents corrigés (champ 'id' ajouté)",
+        "message": f"{total_fixed} documents corrigés (IDs, champs requis, enums)",
         "total_fixed": total_fixed,
         "details": stats
     }
