@@ -45,21 +45,34 @@ echo ""
 
 # Auto-détection du template Debian 12
 msg "Recherche du template Debian 12..."
-TEMPLATE=$(ls /var/lib/vz/template/cache/*debian-12*.tar.* 2>/dev/null | head -1 | xargs basename 2>/dev/null)
+TEMPLATE=$(ls /var/lib/vz/template/cache/*debian-12*.tar.* 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo "")
 
 if [[ -z "$TEMPLATE" ]]; then
-    warn "Aucun template Debian 12 trouvé !"
+    warn "Aucun template Debian 12 trouvé localement"
     echo ""
     echo "Téléchargement du template (cela peut prendre quelques minutes)..."
-    pveam update >/dev/null 2>&1
+    pveam update 2>&1 || warn "pveam update: erreur ignorée"
     
-    # Chercher le template disponible
-    TEMPLATE_NAME=$(pveam available --section system | grep "debian-12.*amd64" | awk '{print $2}' | head -1)
+    # Chercher le template disponible (compatible toutes versions Proxmox)
+    TEMPLATE_NAME=$(pveam available --section system 2>/dev/null | grep -i "debian-12" | awk '{print $2}' | head -1 || echo "")
     
     if [[ -z "$TEMPLATE_NAME" ]]; then
-        err "Impossible de trouver un template Debian 12 disponible"
+        # Fallback: chercher sans filtre section
+        TEMPLATE_NAME=$(pveam available 2>/dev/null | grep -i "debian-12" | awk '{print $2}' | head -1 || echo "")
+    fi
+
+    if [[ -z "$TEMPLATE_NAME" ]]; then
+        err "Impossible de trouver un template Debian 12 disponible.
+        
+Résolution manuelle:
+  1. Téléchargez manuellement le template:
+     pveam update
+     pveam available --section system | grep debian
+     pveam download local <nom_du_template>
+  2. Relancez ce script"
     fi
     
+    echo "Template trouvé en ligne: $TEMPLATE_NAME"
     pveam download local "$TEMPLATE_NAME" || err "Échec du téléchargement du template"
     TEMPLATE="$TEMPLATE_NAME"
     ok "Template téléchargé: $TEMPLATE"
