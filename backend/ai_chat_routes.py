@@ -1064,21 +1064,35 @@ async def update_global_llm_keys(
 
 # ==================== Vérification des versions LLM ====================
 
-# Versions connues des modèles (à mettre à jour)
+# Source unique de vérité pour les modèles IA disponibles
+# Utilisée par AccidentAISettings, FormAIModelSettings, et le vérificateur de versions
+AVAILABLE_AI_MODELS = [
+    {"provider": "openai", "model": "gpt-5.2", "label": "OpenAI GPT-5.2"},
+    {"provider": "openai", "model": "gpt-4o", "label": "OpenAI GPT-4o"},
+    {"provider": "openai", "model": "gpt-4o-mini", "label": "OpenAI GPT-4o Mini (Rapide)"},
+    {"provider": "google", "model": "gemini-2.5-flash", "label": "Google Gemini 2.5 Flash"},
+    {"provider": "google", "model": "gemini-2.5-pro-preview-05-06", "label": "Google Gemini 2.5 Pro"},
+    {"provider": "anthropic", "model": "claude-sonnet-4-5-20250929", "label": "Claude Sonnet 4.5"},
+    {"provider": "deepseek", "model": "deepseek-chat", "label": "DeepSeek Chat"},
+    {"provider": "deepseek", "model": "deepseek-coder", "label": "DeepSeek Coder"},
+    {"provider": "mistral", "model": "mistral-large-latest", "label": "Mistral Large"},
+]
+
+# Versions connues des modèles (référence pour le vérificateur)
 KNOWN_LLM_VERSIONS = {
     "gemini": {
         "latest": "gemini-2.5-flash",
-        "versions": ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.5-flash-lite"],
+        "versions": ["gemini-2.5-flash", "gemini-2.5-pro-preview-05-06", "gemini-2.5-flash-lite"],
         "last_check": None
     },
     "openai": {
-        "latest": "gpt-4o",
-        "versions": ["gpt-5.1", "gpt-4o", "gpt-4o-mini"],
+        "latest": "gpt-5.2",
+        "versions": ["gpt-5.2", "gpt-4o", "gpt-4o-mini"],
         "last_check": None
     },
     "anthropic": {
-        "latest": "claude-4-sonnet-20250514",
-        "versions": ["claude-4-sonnet-20250514", "claude-3-5-haiku-20241022"],
+        "latest": "claude-sonnet-4-5-20250929",
+        "versions": ["claude-sonnet-4-5-20250929", "claude-3-5-haiku-20241022"],
         "last_check": None
     },
     "deepseek": {
@@ -1123,15 +1137,29 @@ async def get_llm_versions(
         raise HTTPException(status_code=500, detail="Erreur récupération versions LLM")
 
 
+@router.get("/available-models")
+async def get_available_models(
+    current_user: dict = Depends(get_current_admin_user)
+):
+    """Retourne la liste unifiée des modèles IA disponibles pour les sélecteurs frontend"""
+    try:
+        # Lire depuis la DB (mis à jour par check_llm_updates)
+        stored = await db.llm_versions.find_one({"id": "current"}, {"_id": 0})
+        if stored and stored.get("available_models"):
+            return {"models": stored["available_models"]}
+        # Fallback : retourner la liste par défaut du code
+        return {"models": AVAILABLE_AI_MODELS}
+    except Exception as e:
+        logger.error(f"Erreur récupération modèles disponibles: {e}")
+        return {"models": AVAILABLE_AI_MODELS}
+
+
 @router.post("/check-llm-updates")
 async def check_llm_updates(
     current_user: dict = Depends(get_current_admin_user)
 ):
-    """Vérifier manuellement les mises à jour des modèles LLM (admin seulement)"""
+    """Vérifier et synchroniser les modèles LLM disponibles (admin seulement)"""
     try:
-        # Simuler une vérification (dans un vrai système, on ferait des appels API)
-        # Pour l'instant, on met à jour la date de dernière vérification
-        
         now = datetime.now(timezone.utc).isoformat()
         
         # Calculer la prochaine vérification (prochain lundi à 3h GMT)
@@ -1142,9 +1170,12 @@ async def check_llm_updates(
             days_until_monday = 7
         next_monday = today.replace(hour=3, minute=0, second=0, microsecond=0) + timedelta(days=days_until_monday)
         
+        # Synchroniser les modèles disponibles depuis le code (source de vérité)
         await db.llm_versions.update_one(
             {"id": "current"},
             {"$set": {
+                "versions": KNOWN_LLM_VERSIONS,
+                "available_models": AVAILABLE_AI_MODELS,
                 "last_check": now,
                 "next_check": next_monday.isoformat(),
                 "checked_by": current_user.get("id")
@@ -1152,18 +1183,12 @@ async def check_llm_updates(
             upsert=True
         )
         
-        # Vérifier s'il y a des nouvelles versions (simulation)
-        new_versions_found = []
-        
-        # Dans un vrai système, on comparerait avec les API des fournisseurs
-        # Pour l'instant, on retourne juste le statut
-        
         return {
             "success": True,
-            "message": "Vérification effectuée",
+            "message": f"Modèles synchronisés : {len(AVAILABLE_AI_MODELS)} modèles disponibles",
             "last_check": now,
             "next_check": next_monday.isoformat(),
-            "new_versions": new_versions_found
+            "models_count": len(AVAILABLE_AI_MODELS)
         }
         
     except Exception as e:

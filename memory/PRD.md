@@ -11,6 +11,18 @@ Application GMAO (Gestion de Maintenance Assistee par Ordinateur) pour la gestio
 - **Realtime**: WebSocket via RealtimeManager
 - **AI**: Gemini, OpenAI (GPT-5.2), Claude (via emergentintegrations)
 
+
+## Session 15 Mars 2026 (suite)
+
+### Feature - Centralisation des modèles IA
+- **Probleme** : 3 listes de modèles hardcodées et incohérentes (FormAI avait GPT-4o/Gemini 2.0 Flash/Claude 4, AccidentAI avait GPT-5.2/Gemini 2.5/Claude 4.5, backend avait GPT-5.1)
+- **Corrections** :
+  - Backend : `AVAILABLE_AI_MODELS` source unique + endpoint `GET /api/ai/available-models`
+  - `check_llm_updates` synchronise réellement les modèles dans MongoDB
+  - Frontend : les 2 composants fetch depuis l'API, fallback local si erreur
+  - 9 modèles unifiés : GPT-5.2, GPT-4o, GPT-4o Mini, Gemini 2.5 Flash/Pro, Claude 4.5, DeepSeek Chat/Coder, Mistral Large
+- **Testing** : API curl OK (9 modèles), Screenshot dropdown confirmé
+
 ## Session 16 Fevrier 2026
 
 ### Bug Fix P0 - Script d'installation gmao-iris-install.sh

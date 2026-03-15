@@ -3,29 +3,35 @@ import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Label } from '../ui/label';
-import { Sparkles, Save } from 'lucide-react';
-import { documentationsAPI } from '../../services/api';
+import { Sparkles, Save, RefreshCw } from 'lucide-react';
+import api, { documentationsAPI } from '../../services/api';
 import { useToast } from '../../hooks/use-toast';
 
-const AI_MODELS = [
-  { provider: 'openai', model: 'gpt-4o', label: 'OpenAI GPT-4o (Recommandé)' },
-  { provider: 'openai', model: 'gpt-4o-mini', label: 'OpenAI GPT-4o Mini (Rapide)' },
-  { provider: 'google', model: 'gemini-2.0-flash', label: 'Google Gemini 2.0 Flash' },
-  { provider: 'google', model: 'gemini-2.5-pro-preview-05-06', label: 'Google Gemini 2.5 Pro' },
-  { provider: 'anthropic', model: 'claude-sonnet-4-20250514', label: 'Claude Sonnet 4' },
+const FALLBACK_MODELS = [
+  { provider: 'openai', model: 'gpt-5.2', label: 'OpenAI GPT-5.2' },
+  { provider: 'openai', model: 'gpt-4o', label: 'OpenAI GPT-4o' },
+  { provider: 'google', model: 'gemini-2.5-flash', label: 'Google Gemini 2.5 Flash' },
+  { provider: 'anthropic', model: 'claude-sonnet-4-5-20250929', label: 'Claude Sonnet 4.5' },
 ];
 
 export default function FormAIModelSettings() {
   const { toast } = useToast();
+  const [models, setModels] = useState(FALLBACK_MODELS);
   const [selectedModel, setSelectedModel] = useState('openai|gpt-4o');
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    documentationsAPI.getAIModelConfig?.().then(config => {
+    Promise.all([
+      api.get('/ai/available-models').then(r => r.data?.models).catch(() => null),
+      documentationsAPI.getAIModelConfig?.().catch(() => null)
+    ]).then(([fetchedModels, config]) => {
+      if (fetchedModels?.length) setModels(fetchedModels);
       if (config?.provider && config?.model) {
         setSelectedModel(`${config.provider}|${config.model}`);
       }
-    }).catch(() => {});
+      setLoading(false);
+    });
   }, []);
 
   const handleSave = async () => {
@@ -33,7 +39,7 @@ export default function FormAIModelSettings() {
     try {
       const [provider, model] = selectedModel.split('|');
       await documentationsAPI.updateAIModelConfig({ provider, model });
-      toast({ title: 'Sauvegardé', description: `Modèle IA : ${AI_MODELS.find(m => `${m.provider}|${m.model}` === selectedModel)?.label}` });
+      toast({ title: 'Sauvegardé', description: `Modèle IA : ${models.find(m => `${m.provider}|${m.model}` === selectedModel)?.label}` });
     } catch {
       toast({ title: 'Erreur', description: 'Impossible de sauvegarder', variant: 'destructive' });
     } finally {
@@ -56,20 +62,26 @@ export default function FormAIModelSettings() {
         <div className="flex items-end gap-3">
           <div className="flex-1">
             <Label>Modèle IA</Label>
-            <Select value={selectedModel} onValueChange={setSelectedModel}>
-              <SelectTrigger data-testid="ai-model-select">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {AI_MODELS.map(m => (
-                  <SelectItem key={`${m.provider}|${m.model}`} value={`${m.provider}|${m.model}`}>
-                    {m.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {loading ? (
+              <div className="flex items-center gap-2 h-10 text-sm text-gray-500">
+                <RefreshCw className="h-4 w-4 animate-spin" /> Chargement...
+              </div>
+            ) : (
+              <Select value={selectedModel} onValueChange={setSelectedModel}>
+                <SelectTrigger data-testid="ai-model-select">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {models.map(m => (
+                    <SelectItem key={`${m.provider}|${m.model}`} value={`${m.provider}|${m.model}`}>
+                      {m.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
-          <Button onClick={handleSave} disabled={saving} data-testid="ai-model-save-btn">
+          <Button onClick={handleSave} disabled={saving || loading} data-testid="ai-model-save-btn">
             <Save className="h-4 w-4 mr-1" /> {saving ? 'Sauvegarde...' : 'Sauvegarder'}
           </Button>
         </div>

@@ -11574,15 +11574,18 @@ async def check_llm_versions_job():
     """Vérifie les nouvelles versions des modèles LLM et notifie les admins"""
     try:
         from datetime import datetime, timezone, timedelta
-        logger.info("🔍 Vérification automatique des versions LLM...")
+        from ai_chat_routes import KNOWN_LLM_VERSIONS, AVAILABLE_AI_MODELS
+        logger.info("Vérification automatique des versions LLM...")
         
-        # Mettre à jour la date de dernière vérification
+        # Mettre à jour la date de dernière vérification + synchroniser les modèles
         now = datetime.now(timezone.utc)
         next_monday = now + timedelta(days=7)
         
         await db.llm_versions.update_one(
             {"id": "current"},
             {"$set": {
+                "versions": KNOWN_LLM_VERSIONS,
+                "available_models": AVAILABLE_AI_MODELS,
                 "last_check": now.isoformat(),
                 "next_check": next_monday.isoformat(),
                 "checked_by": "scheduler"
@@ -11590,10 +11593,10 @@ async def check_llm_versions_job():
             upsert=True
         )
         
-        logger.info("✅ Vérification des versions LLM terminée")
+        logger.info("Vérification des versions LLM terminée")
         
     except Exception as e:
-        logger.error(f"❌ Erreur vérification versions LLM: {e}")
+        logger.error(f"Erreur vérification versions LLM: {e}")
 
 
 @app.on_event("startup")
