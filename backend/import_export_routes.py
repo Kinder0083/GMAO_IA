@@ -185,6 +185,13 @@ EXPORT_MODULES = {
     "training-sessions": "training_sessions",
     # --- Fichiers Excel uploadés ---
     "uploaded-excel-files": "uploaded_excel_files",
+    # --- Collections manquantes ---
+    "automations": "automations",
+    "backup-schedules": "backup_schedules",
+    "llm-versions": "llm_versions",
+    "changelog-seen": "changelog_seen",
+    "releases-user-seen": "releases_user_seen",
+    "menu-badge-seen": "menu_badge_seen",
 }
 
 # Mappings de colonnes pour l'import (noms français/anglais vers noms internes)
@@ -517,6 +524,17 @@ SHEET_TO_MODULE = {
     "training_sessions": "training-sessions",
     "uploaded-excel-files": "uploaded-excel-files",
     "uploaded_excel_files": "uploaded-excel-files",
+    "automations": "automations",
+    "backup-schedules": "backup-schedules",
+    "backup_schedules": "backup-schedules",
+    "llm-versions": "llm-versions",
+    "llm_versions": "llm-versions",
+    "changelog-seen": "changelog-seen",
+    "changelog_seen": "changelog-seen",
+    "releases-user-seen": "releases-user-seen",
+    "releases_user_seen": "releases-user-seen",
+    "menu-badge-seen": "menu-badge-seen",
+    "menu_badge_seen": "menu-badge-seen",
 }
 
 
@@ -608,27 +626,41 @@ async def process_import_item(item: dict, module: str, collection_name: str, cur
     # Les modèles Pydantic attendent des strings pour ces champs.
     # Seul le champ _id (MongoDB) doit être un ObjectId.
     
-    # --- Parser les champs JSON (listes/dicts stockés comme strings) ---
-    json_fields = [
-        "comments", "attachments", "historique", "permissions", "parts_used",
-        "time_entries", "history", "recipient_ids", "recipient_names",
-        "reactions", "attached_files", "equipment_ids"
-    ]
-    for field in json_fields:
-        if field in cleaned:
-            val = cleaned[field]
-            if isinstance(val, str):
+    # --- Parser les champs JSON (listes/dicts stockés comme strings par l'export Excel) ---
+    # Approche générique : tout string qui ressemble à du JSON est parsé
+    for field in list(cleaned.keys()):
+        val = cleaned[field]
+        if isinstance(val, str) and len(val) >= 2:
+            first = val[0]
+            if first in ('[', '{'):
                 try:
                     parsed = json.loads(val)
                     cleaned[field] = parsed
-                except Exception:
+                except (json.JSONDecodeError, ValueError):
                     if val in ("[]", ""):
                         cleaned[field] = []
                     elif val in ("{}", ""):
                         cleaned[field] = {}
-            elif not isinstance(val, (list, dict)):
-                cleaned[field] = []
-        # Ne PAS forcer des listes vides si le champ n'existe pas
+    
+    # Aussi forcer les champs connus comme listes/dicts si vides ou mal typés
+    known_list_fields = [
+        "comments", "attachments", "historique", "permissions", "parts_used",
+        "time_entries", "history", "recipient_ids", "recipient_names",
+        "reactions", "attached_files", "equipment_ids",
+        "menu_items", "menu_categories", "dashboard_widgets", "header_icon_order",
+        "actions", "alerts", "recipients", "tags", "steps",
+    ]
+    for field in known_list_fields:
+        if field in cleaned:
+            val = cleaned[field]
+            if not isinstance(val, (list, dict)):
+                if isinstance(val, str):
+                    try:
+                        cleaned[field] = json.loads(val)
+                    except Exception:
+                        cleaned[field] = []
+                else:
+                    cleaned[field] = []
     
     # --- Convertir les champs numériques ---
     num_fields = ["quantite", "seuil_alerte", "prix_unitaire", "prixUnitaire",
