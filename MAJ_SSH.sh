@@ -11,6 +11,13 @@ NGINX_CONF=$(for f in /etc/nginx/sites-enabled/gmao-iris /etc/nginx/sites-enable
 NGINX_REAL=$(readlink -f "$NGINX_CONF" 2>/dev/null || echo "$NGINX_CONF")
 NGINX_BACKUP="${NGINX_REAL}.backup_pre_maintenance"
 
+# ── DECONNECTER TOUS LES UTILISATEURS ──
+# Rotation de la SECRET_KEY : invalide tous les tokens JWT existants
+# Les utilisateurs seront obligés de se reconnecter après la mise à jour
+NEW_SECRET=$(openssl rand -hex 32)
+sed -i "s/^SECRET_KEY=.*/SECRET_KEY=\"$NEW_SECRET\"/" backend/.env
+echo "[OK] Tous les utilisateurs ont été déconnectés (SECRET_KEY rotée)"
+
 # ── ACTIVER LA PAGE DE MAINTENANCE ──
 touch /opt/gmao-iris/maintenance.flag
 cp "$NGINX_REAL" "$NGINX_BACKUP"
@@ -41,8 +48,9 @@ server {
 }
 EOF
 nginx -t && nginx -s reload
+echo "[OK] Page de maintenance activée"
 
-# ── Sauvegarder les .env ──
+# ── Sauvegarder les .env (avec la nouvelle SECRET_KEY) ──
 cp backend/.env /tmp/backend.env
 cp frontend/.env /tmp/frontend.env 2>/dev/null
 
@@ -68,6 +76,7 @@ cd frontend && yarn install && CI=false yarn build && cd ..
 cp "$NGINX_BACKUP" "$NGINX_REAL"
 rm -f /opt/gmao-iris/maintenance.flag
 nginx -t && nginx -s reload
+echo "[OK] Mode maintenance désactivé"
 
 # ── Redémarrer ──
 reboot
