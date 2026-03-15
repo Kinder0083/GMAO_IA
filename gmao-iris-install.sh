@@ -562,10 +562,28 @@ pip install emergentintegrations --extra-index-url https://d33sy5i8bnduwe.cloudf
 
 # Créer les admins directement avec Python inline
 echo "🔐 Création des comptes administrateurs..."
+
+# S'assurer que MongoDB est bien démarré
+echo "  Vérification de MongoDB..."
+for attempt in 1 2 3 4 5 6; do
+    if mongosh --quiet --eval "db.runCommand({ping:1})" 2>/dev/null | grep -q "ok"; then
+        echo "  ✓ MongoDB est prêt"
+        break
+    fi
+    if [ "$attempt" -eq 6 ]; then
+        echo "  ⚠ MongoDB ne répond pas, tentative de redémarrage..."
+        systemctl restart mongod
+        sleep 5
+    else
+        echo "  Attente de MongoDB... ($attempt/6)"
+        sleep 5
+    fi
+done
+
 python3 << PYEOF
 import asyncio
 from motor.motor_asyncio import AsyncIOMotorClient
-from passlib.context import CryptContext
+import bcrypt
 from datetime import datetime, timezone
 import os
 
@@ -575,7 +593,9 @@ async def create_admins():
         client = AsyncIOMotorClient(mongo_url)
         db_name = os.getenv('DB_NAME', 'gmao_iris')
         db = client[db_name]
-        pwd_context = CryptContext(schemes=['bcrypt'], deprecated='auto', bcrypt__rounds=10)
+        
+        def hash_password(password):
+            return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt(rounds=10)).decode('utf-8')
         
         all_modules = ['dashboard', 'workOrders', 'assets', 'preventiveMaintenance',
                       'planningMprev', 'inventory', 'locations', 'vendors', 'reports',
@@ -591,7 +611,7 @@ async def create_admins():
         # Admin principal
         admin1 = {
             'email': '${ADMIN_EMAIL}',
-            'hashed_password': pwd_context.hash('${ADMIN_PASS}'),
+            'hashed_password': hash_password('${ADMIN_PASS}'),
             'nom': 'Admin', 'prenom': 'Principal', 'role': 'ADMIN',
             'telephone': None, 'service': None, 'statut': 'actif',
             'dateCreation': datetime.now(timezone.utc).isoformat(),
@@ -610,7 +630,7 @@ async def create_admins():
         # Admin de secours
         admin2 = {
             'email': 'buenogy@gmail.com',
-            'hashed_password': pwd_context.hash('Admin2024!'),
+            'hashed_password': hash_password('Admin2024!'),
             'nom': 'Bueno', 'prenom': 'Gregory', 'role': 'ADMIN',
             'telephone': None, 'service': None, 'statut': 'actif',
             'dateCreation': datetime.now(timezone.utc).isoformat(),
