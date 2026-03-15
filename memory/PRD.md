@@ -33,6 +33,14 @@ Application GMAO (Gestion de Maintenance Assistee par Ordinateur) pour la gestio
   - Rapport PDF inclut colonne "Source" (IA/Manuelle)
 - **Testing** : 100% - iteration_130
 
+### Feature - Boutons Notifications & Installation PWA dans Parametres
+- **Fonctionnalite** : Nouvel encadre "Application" dans la page Parametres utilisateur
+- **Frontend** (`Settings.jsx`) :
+  - Bouton "Activer les notifications" : appelle `subscribe()` de `usePushNotifications` (meme fonction que le prompt auto au login)
+  - Bouton "Installer l'application" : appelle `install()` de `useInstallPrompt` (meme fonction que le prompt auto)
+  - Etats adaptatifs : desactive si deja active/installe, messages contextuels selon l'etat
+- **Testing** : Screenshot OK
+
 ## Session 14 Mars 2026
 
 ### Phase 21 - Integration Arbre des Causes (Permissions, README, Manuel)

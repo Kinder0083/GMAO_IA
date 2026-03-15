@@ -4,7 +4,7 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { useToast } from '../hooks/use-toast';
-import { User, Mail, Phone, Lock, Bell, Globe, Info, HelpCircle } from 'lucide-react';
+import { User, Mail, Phone, Lock, Bell, Globe, Info, HelpCircle, Download, BellRing } from 'lucide-react';
 import { Switch } from '../components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../components/ui/tooltip';
@@ -14,6 +14,7 @@ import { GuidedTourSettings, ChangelogAdmin } from '../components/Settings';
 import { authAPI } from '../services/api';
 import api from '../services/api';
 import { formatErrorMessage } from '../utils/errorFormatter';
+import { usePushNotifications, useInstallPrompt } from '../hooks/usePWA';
 
 const Settings = () => {
   const { toast } = useToast();
@@ -21,7 +22,10 @@ const Settings = () => {
   const [saving, setSaving] = useState(false);
   const [changePasswordDialogOpen, setChangePasswordDialogOpen] = useState(false);
   const [supportDialogOpen, setSupportDialogOpen] = useState(false);
-  const [responsableInfo, setResponsableInfo] = useState(null); // Info du responsable de service
+  const [responsableInfo, setResponsableInfo] = useState(null);
+  const [notifLoading, setNotifLoading] = useState(false);
+  const { permission, isSubscribed, isSupported, subscribe } = usePushNotifications();
+  const { canInstall, isInstalled, install } = useInstallPrompt();
   const [settings, setSettings] = useState({
     nom: '',
     prenom: '',
@@ -322,6 +326,76 @@ const Settings = () => {
                   <option value="es">Español</option>
                   <option value="de">Deutsch</option>
                 </select>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Download size={20} className="text-blue-600" />
+                Application
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div>
+                <Button
+                  variant="outline"
+                  className="w-full justify-start"
+                  disabled={!isSupported || permission === 'granted' || notifLoading}
+                  onClick={async () => {
+                    setNotifLoading(true);
+                    try {
+                      const result = await subscribe();
+                      if (result.permissionGranted) {
+                        toast({ title: 'Notifications activees', description: result.subscribed ? 'Vous recevrez les notifications push.' : 'Permission accordee.' });
+                      } else {
+                        toast({ title: 'Permission refusee', description: 'Activez les notifications dans les parametres de votre navigateur.', variant: 'destructive' });
+                      }
+                    } catch {
+                      toast({ title: 'Erreur', variant: 'destructive' });
+                    } finally {
+                      setNotifLoading(false);
+                    }
+                  }}
+                  data-testid="enable-notifications-btn"
+                >
+                  <BellRing className="h-4 w-4 mr-2 flex-shrink-0" />
+                  {notifLoading ? 'Activation...' : permission === 'granted' ? 'Notifications activees' : 'Activer les notifications'}
+                </Button>
+                <p className="text-xs text-gray-500 mt-1">
+                  {!isSupported
+                    ? 'Notifications non supportees par ce navigateur'
+                    : permission === 'granted'
+                      ? 'Les notifications push sont actives sur cet appareil'
+                      : permission === 'denied'
+                        ? 'Bloquees - reactivez-les dans les parametres du navigateur'
+                        : 'Recevez des alertes en temps reel'}
+                </p>
+              </div>
+              <div>
+                <Button
+                  variant="outline"
+                  className="w-full justify-start"
+                  disabled={!canInstall}
+                  onClick={async () => {
+                    const accepted = await install();
+                    if (accepted) {
+                      toast({ title: 'Application installee', description: 'FSAO Iris est maintenant disponible sur votre appareil.' });
+                    }
+                  }}
+                  data-testid="install-app-btn"
+                >
+                  <Download className="h-4 w-4 mr-2 flex-shrink-0" />
+                  {isInstalled ? 'Application installee' : 'Installer l\'application'}
+                </Button>
+                <p className="text-xs text-gray-500 mt-1">
+                  {isInstalled
+                    ? 'L\'application est installee sur cet appareil'
+                    : canInstall
+                      ? 'Installez l\'application pour un acces rapide'
+                      : 'Ouvrez dans un navigateur compatible pour installer'}
+                </p>
               </div>
             </CardContent>
           </Card>
