@@ -111,28 +111,36 @@ if [[ -z "$BRIDGES" ]]; then
     err "Aucun bridge réseau détecté"
 fi
 
-# Afficher la liste numérotée
+# Stocker les bridges dans un tableau indexé
+BRIDGE_LIST=()
 i=1
-declare -A BRIDGE_MAP
 while IFS= read -r bridge; do
-    # Obtenir l'état et l'IP si disponible
-    STATE=$(ip link show $bridge | grep -o "state [A-Z]*" | awk '{print $2}')
-    IP=$(ip addr show $bridge 2>/dev/null | grep "inet " | awk '{print $2}' | head -1)
+    BRIDGE_LIST+=("$bridge")
+    STATE=$(ip link show "$bridge" 2>/dev/null | grep -o "state [A-Z]*" | awk '{print $2}')
+    IP=$(ip addr show "$bridge" 2>/dev/null | grep "inet " | awk '{print $2}' | head -1)
     
     echo "  $i) $bridge - État: $STATE"
     if [[ -n "$IP" ]]; then
         echo "     IP: $IP"
     fi
-    
-    BRIDGE_MAP[$i]=$bridge
-    ((i++))
+    ((i++)) || true
 done <<< "$BRIDGES"
 
+BRIDGE_COUNT=${#BRIDGE_LIST[@]}
 echo ""
-read -p "Choisissez le numéro du bridge à utiliser [1]: " BRIDGE_CHOICE
-BRIDGE_CHOICE=${BRIDGE_CHOICE:-1}
 
-SELECTED_BRIDGE=${BRIDGE_MAP[$BRIDGE_CHOICE]}
+if [[ $BRIDGE_COUNT -eq 1 ]]; then
+    # Un seul bridge : sélection automatique
+    SELECTED_BRIDGE="${BRIDGE_LIST[0]}"
+    ok "Bridge auto-sélectionné: $SELECTED_BRIDGE (seul disponible)"
+else
+    read -p "Choisissez le numéro du bridge à utiliser [1]: " BRIDGE_CHOICE < /dev/tty
+    BRIDGE_CHOICE=${BRIDGE_CHOICE:-1}
+    
+    # Convertir en index (0-based)
+    IDX=$((BRIDGE_CHOICE - 1))
+    SELECTED_BRIDGE="${BRIDGE_LIST[$IDX]}"
+fi
 
 if [[ -z "$SELECTED_BRIDGE" ]]; then
     err "Choix de bridge invalide"
@@ -148,18 +156,18 @@ echo "2. Cliquez: Generate new token (classic)"
 echo "3. Cochez: repo (Full control of private repositories)"
 echo "4. Copiez le token généré"
 echo ""
-read -sp "Collez votre GitHub Token: " GITHUB_TOKEN
+read -sp "Collez votre GitHub Token: " GITHUB_TOKEN < /dev/tty
 echo ""
 [[ -z "$GITHUB_TOKEN" ]] && err "Token requis"
 
 # Informations GitHub
-read -p "Votre username GitHub [Kinder0083]: " GITHUB_USER
+read -p "Votre username GitHub [Kinder0083]: " GITHUB_USER < /dev/tty
 GITHUB_USER=${GITHUB_USER:-Kinder0083}
 
-read -p "Nom du dépôt [GMAO]: " REPO_NAME
+read -p "Nom du dépôt [GMAO]: " REPO_NAME < /dev/tty
 REPO_NAME=${REPO_NAME:-GMAO}
 
-read -p "Branche [main]: " BRANCH
+read -p "Branche [main]: " BRANCH < /dev/tty
 BRANCH=${BRANCH:-main}
 
 echo ""
@@ -171,7 +179,7 @@ while pct status $CTID >/dev/null 2>&1; do
     ((CTID++))
 done
 
-read -p "ID container [$CTID]: " CUSTOM_CTID
+read -p "ID container [$CTID]: " CUSTOM_CTID < /dev/tty
 CTID=${CUSTOM_CTID:-$CTID}
 
 # Vérifier que l'ID est libre
@@ -179,13 +187,13 @@ if pct status $CTID >/dev/null 2>&1; then
     err "Container ID $CTID existe déjà"
 fi
 
-read -p "RAM (Mo) [4096]: " RAM
+read -p "RAM (Mo) [4096]: " RAM < /dev/tty
 RAM=${RAM:-4096}
 
-read -p "CPU cores [2]: " CORES
+read -p "CPU cores [2]: " CORES < /dev/tty
 CORES=${CORES:-2}
 
-read -p "Taille disque (Go) [20]: " DISK_SIZE
+read -p "Taille disque (Go) [20]: " DISK_SIZE < /dev/tty
 DISK_SIZE=${DISK_SIZE:-20}
 
 echo ""
@@ -214,7 +222,7 @@ echo "Choisissez le mode de configuration réseau:"
 echo "  1) IP Statique (recommandé si pas de serveur DHCP)"
 echo "  2) DHCP (nécessite un serveur DHCP fonctionnel)"
 echo ""
-read -p "Votre choix [1]: " NET_MODE
+read -p "Votre choix [1]: " NET_MODE < /dev/tty
 NET_MODE=${NET_MODE:-1}
 
 if [[ "$NET_MODE" == "1" ]]; then
@@ -241,14 +249,14 @@ fi
 echo ""
 msg "Configuration administrateur..."
 
-read -p "Email admin: " ADMIN_EMAIL
+read -p "Email admin: " ADMIN_EMAIL < /dev/tty
 [[ -z "$ADMIN_EMAIL" ]] && err "Email requis"
 
-read -sp "Mot de passe admin (min 8 car): " ADMIN_PASS
+read -sp "Mot de passe admin (min 8 car): " ADMIN_PASS < /dev/tty
 echo ""
 [[ ${#ADMIN_PASS} -lt 8 ]] && err "Mot de passe trop court"
 
-read -sp "Mot de passe root container: " ROOT_PASS
+read -sp "Mot de passe root container: " ROOT_PASS < /dev/tty
 echo ""
 [[ ${#ROOT_PASS} -lt 8 ]] && err "Mot de passe root trop court"
 
@@ -260,7 +268,7 @@ echo "  1) IP/URL manuelle (ex: votre IP publique, nom de domaine)"
 echo "  2) Tailscale (VPN sécurisé automatique)"
 echo "  3) Aucun (utiliser uniquement l'IP locale)"
 echo ""
-read -p "Votre choix [3]: " ACCESS_CHOICE
+read -p "Votre choix [3]: " ACCESS_CHOICE < /dev/tty
 ACCESS_CHOICE=${ACCESS_CHOICE:-3}
 
 INSTALL_TAILSCALE="n"
@@ -319,7 +327,7 @@ else
 fi
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
-read -p "Confirmer l'installation ? (y/n): " CONFIRM
+read -p "Confirmer l'installation ? (y/n): " CONFIRM < /dev/tty
 [[ ! $CONFIRM =~ ^[Yy]$ ]] && err "Installation annulée"
 
 # Construction de l'URL Git avec token
@@ -369,7 +377,7 @@ echo ""
 echo "DEBUG - Commande qui sera exécutée:"
 echo "$PCT_CREATE_CMD"
 echo ""
-read -p "Appuyez sur Entrée pour continuer..."
+read -p "Appuyez sur Entrée pour continuer..." < /dev/tty
 
 # Exécuter avec gestion d'erreur détaillée
 if ! eval "$PCT_CREATE_CMD" 2>&1 | tee /tmp/pct_create_error.log; then
