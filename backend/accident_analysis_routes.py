@@ -407,8 +407,12 @@ Reponds TOUJOURS en JSON:
 SYSTEM_ACTIONS = """Tu es un expert en maintenance industrielle et en prevention des accidents.
 A partir de l'analyse complete d'un accident (QQOQCP, 5 Pourquoi, Ishikawa, ALARM), genere un plan d'actions correctives et preventives.
 Chaque action doit etre concrete, assignable et mesurable.
+
+Pour les actions de type CHECKLIST, inclus une liste detaillee de points de controle dans le champ "checklist_items".
+Pour les actions de type MAINTENANCE_PREVENTIVE, propose une frequence adaptee dans le champ "frequence_suggere".
+
 Reponds TOUJOURS en JSON:
-{"actions": [{"type": "OT_CORRECTIF|MAINTENANCE_PREVENTIVE|CHECKLIST", "titre": "...", "description": "...", "priorite": "URGENTE|HAUTE|MOYENNE|BASSE", "categorie_5m": "...", "delai_jours": 7}], "synthese": "..."}"""
+{"actions": [{"type": "OT_CORRECTIF|MAINTENANCE_PREVENTIVE|CHECKLIST", "titre": "...", "description": "...", "priorite": "URGENTE|HAUTE|MOYENNE|BASSE", "categorie_5m": "...", "delai_jours": 7, "checklist_items": ["Point de controle 1", "Point de controle 2"], "frequence_suggere": "HEBDOMADAIRE|MENSUEL|TRIMESTRIEL|ANNUEL"}], "synthese": "..."}"""
 
 
 @router.post("/{analysis_id}/ai/qqoqcp")
@@ -598,11 +602,15 @@ async def create_work_order_from_analysis(analysis_id: str, data: dict, current_
 
 @router.post("/{analysis_id}/create-preventive")
 async def create_preventive_from_analysis(analysis_id: str, data: dict, current_user: dict = Depends(get_current_user)):
-    """Cree une maintenance preventive a partir d'une action identifiee."""
+    """Cree une maintenance preventive a partir d'une action identifiee (semi-automatique)."""
     from dateutil.relativedelta import relativedelta
     doc = await db.accident_analyses.find_one({"_id": ObjectId(analysis_id)})
     if not doc:
         raise HTTPException(status_code=404, detail="Analyse non trouvee")
+
+    equipement_id = data.get("equipement_id", "")
+    if not equipement_id:
+        raise HTTPException(status_code=400, detail="Un equipement est requis pour creer une maintenance preventive")
 
     now = datetime.now(timezone.utc)
     freq = data.get("frequence", "MENSUEL")
@@ -612,10 +620,10 @@ async def create_preventive_from_analysis(analysis_id: str, data: dict, current_
 
     mp = {
         "titre": data.get("titre", f"Prevention - {doc.get('titre', '')}"),
-        "equipement_id": data.get("equipement_id", ""),
+        "equipement_id": equipement_id,
         "frequence": freq,
         "prochaineMaintenance": prochaine,
-        "assigne_a_id": data.get("assigne_a_id"),
+        "assigne_a_id": data.get("assigne_a_id") or None,
         "duree": data.get("duree", 1.0),
         "statut": "ACTIF",
         "dateCreation": now,
@@ -623,6 +631,7 @@ async def create_preventive_from_analysis(analysis_id: str, data: dict, current_
         "origine": "ANALYSE_ACCIDENT",
         "analyse_accident_id": analysis_id,
         "description": data.get("description", ""),
+        "checklist_template_id": data.get("checklist_template_id") or None,
     }
     result = await db.preventive_maintenances.insert_one(mp)
     mp_id = str(result.inserted_id)
@@ -636,33 +645,55 @@ async def create_preventive_from_analysis(analysis_id: str, data: dict, current_
 
 @router.post("/{analysis_id}/create-checklist")
 async def create_checklist_from_analysis(analysis_id: str, data: dict, current_user: dict = Depends(get_current_user)):
-    """Cree une checklist de prevention a partir d'une action identifiee."""
+    """Cree un modele de checklist dans checklist_templates (semi-automatique)."""
     doc = await db.accident_analyses.find_one({"_id": ObjectId(analysis_id)})
     if not doc:
         raise HTTPException(status_code=404, detail="Analyse non trouvee")
 
     now = datetime.now(timezone.utc)
-    checklist = {
-        "titre": data.get("titre", f"Checklist prevention - {doc.get('titre', '')}"),
+    
+    # Construire les items de checklist au format attendu par checklist_templates
+    raw_items = data.get("items", [])
+    checklist_items = []
+    for i, item in enumerate(raw_items):
+        if isinstance(item, str):
+            checklist_items.append({
+                "id": str(ObjectId()),
+                "label": item,
+                "type": "YES_NO",
+                "required": True,
+                "order": i
+            })
+        elif isinstance(item, dict):
+            checklist_items.append({
+                "id": item.get("id", str(ObjectId())),
+                "label": item.get("label", ""),
+                "type": item.get("type", "YES_NO"),
+                "required": item.get("required", True),
+                "order": item.get("order", i)
+            })
+
+    template = {
+        "name": data.get("titre", f"Checklist prevention - {doc.get('titre', '')}"),
         "description": data.get("description", ""),
-        "items": data.get("items", []),
-        "type": "PREVENTION_ACCIDENT",
+        "items": checklist_items,
+        "equipment_ids": data.get("equipment_ids", []),
+        "is_template": True,
         "origine": "ANALYSE_ACCIDENT",
         "analyse_accident_id": analysis_id,
-        "statut": "ACTIVE",
-        "created_at": now,
-        "updated_at": now,
-        "created_by": current_user.get("id"),
+        "created_by_id": current_user.get("id"),
         "created_by_name": f"{current_user.get('prenom', '')} {current_user.get('nom', '')}".strip(),
+        "created_at": now.isoformat(),
+        "updated_at": now.isoformat(),
     }
-    result = await db.checklists.insert_one(checklist)
+    result = await db.checklist_templates.insert_one(template)
     cl_id = str(result.inserted_id)
 
     await db.accident_analyses.update_one(
         {"_id": ObjectId(analysis_id)},
-        {"$push": {"checklists_generees": {"checklist_id": cl_id, "titre": checklist["titre"], "created_at": now.isoformat()}}}
+        {"$push": {"checklists_generees": {"checklist_id": cl_id, "titre": template["name"], "created_at": now.isoformat()}}}
     )
-    return {"id": cl_id, "titre": checklist["titre"]}
+    return {"id": cl_id, "titre": template["name"]}
 
 
 # =============================================

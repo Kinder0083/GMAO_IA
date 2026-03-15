@@ -7,6 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Badge } from '../components/ui/badge';
 import { Input } from '../components/ui/input';
 import AlarmPhaseCheckbox from './AccidentAnalysis/AlarmPhaseCheckbox';
+import CreateChecklistDialog from './AccidentAnalysis/CreateChecklistDialog';
+import CreatePreventiveDialog from './AccidentAnalysis/CreatePreventiveDialog';
 import {
   ArrowLeft, ArrowRight, GitBranch, Brain, Send, Loader2,
   CheckCircle2, Circle, ClipboardList, Calendar, Shield,
@@ -689,39 +691,18 @@ function ActionsPhase({ analysis, onSave, phaseDataRef, onReload, aiLoading, set
   };
 
   const createMP = async (action) => {
-    setCreatingAction(action.titre);
-    try {
-      const result = await accidentAnalysisAPI.createPreventive(analysis.id, {
-        titre: action.titre,
-        description: action.description,
-        priorite: action.priorite,
-        frequence: 'MENSUEL',
-      });
-      toast({ title: 'Maintenance preventive creee', description: result.titre });
-      onReload();
-    } catch {
-      toast({ title: 'Erreur', variant: 'destructive' });
-    } finally {
-      setCreatingAction(null);
-    }
+    setDialogAction(action);
+    setShowPreventiveDialog(true);
   };
 
   const createChecklist = async (action) => {
-    setCreatingAction(action.titre);
-    try {
-      const result = await accidentAnalysisAPI.createChecklist(analysis.id, {
-        titre: action.titre,
-        description: action.description,
-        items: [],
-      });
-      toast({ title: 'Checklist creee', description: result.titre });
-      onReload();
-    } catch {
-      toast({ title: 'Erreur', variant: 'destructive' });
-    } finally {
-      setCreatingAction(null);
-    }
+    setDialogAction(action);
+    setShowChecklistDialog(true);
   };
+
+  const [showChecklistDialog, setShowChecklistDialog] = useState(false);
+  const [showPreventiveDialog, setShowPreventiveDialog] = useState(false);
+  const [dialogAction, setDialogAction] = useState(null);
 
   const PRIO_COLORS = {
     URGENTE: 'bg-red-100 text-red-800',
@@ -982,6 +963,28 @@ function ActionsPhase({ analysis, onSave, phaseDataRef, onReload, aiLoading, set
             </div>
           </div>
         )}
+
+        {/* Dialogues de creation semi-automatique */}
+        <CreateChecklistDialog
+          open={showChecklistDialog}
+          onClose={() => setShowChecklistDialog(false)}
+          action={dialogAction}
+          analysisId={analysis.id}
+          onCreated={(result) => {
+            toast({ title: 'Checklist creee', description: result.titre });
+            onReload();
+          }}
+        />
+        <CreatePreventiveDialog
+          open={showPreventiveDialog}
+          onClose={() => setShowPreventiveDialog(false)}
+          action={dialogAction}
+          analysisId={analysis.id}
+          onCreated={(result) => {
+            toast({ title: 'Maintenance preventive creee', description: result.titre });
+            onReload();
+          }}
+        />
       </CardContent>
     </Card>
   );
