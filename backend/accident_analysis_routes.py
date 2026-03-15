@@ -354,6 +354,27 @@ async def ai_generate_actions(analysis_id: str, current_user: dict = Depends(get
     if not doc:
         raise HTTPException(status_code=404, detail="Analyse non trouvee")
 
+    # Construire les donnees ALARM depuis le nouveau format (grille) ou l'ancien
+    alarm_data = doc.get('alarm_grille', {})
+    if not alarm_data:
+        alarm_data = doc.get('alarm', {})
+    
+    # Transformer alarm_grille en texte lisible pour l'IA
+    alarm_text = ""
+    if alarm_data and isinstance(alarm_data, dict):
+        for phase_id, services in alarm_data.items():
+            if isinstance(services, dict):
+                for service_id, sdata in services.items():
+                    if isinstance(sdata, dict):
+                        checked = sdata.get('checked', [])
+                        obs = sdata.get('observations', '')
+                        if checked or obs:
+                            alarm_text += f"\n  {phase_id}/{service_id}: {', '.join(checked)}"
+                            if obs:
+                                alarm_text += f" (Observations: {obs})"
+    if not alarm_text:
+        alarm_text = json.dumps(alarm_data, ensure_ascii=False)
+
     context = f"""Analyse complete de l'accident:
 Titre: {doc.get('titre', '')}
 Description: {doc.get('description_initiale', '')}
@@ -364,7 +385,7 @@ QQOQCP: {json.dumps(doc.get('qqoqcp', {}), ensure_ascii=False)}
 Cause racine (5 Pourquoi): {doc.get('cinq_pourquoi', {}).get('cause_racine', '')}
 Iterations 5P: {json.dumps(doc.get('cinq_pourquoi', {}).get('iterations', []), ensure_ascii=False)}
 Ishikawa (5M): {json.dumps(doc.get('ishikawa', {}), ensure_ascii=False)}
-ALARM: {json.dumps(doc.get('alarm', {}), ensure_ascii=False)}
+ALARM (facteurs identifies): {alarm_text}
 
 Genere des actions correctives et preventives concretes (OT correctifs, maintenances preventives, checklists)."""
 

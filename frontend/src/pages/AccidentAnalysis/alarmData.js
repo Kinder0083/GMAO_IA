@@ -30,6 +30,7 @@ export const ALARM_PHASES = [
       {
         id: 'maintenance',
         label: 'Maintenance',
+        hasObservations: true,
         items: [
           { id: 'equipement_ancien', label: 'Equipement ancien', tooltip: 'Machine en fin de vie ou obsolete.' },
           { id: 'panne_repetitive', label: 'Panne repetitive', tooltip: 'Probleme qui revient sans cesse au meme endroit.' },
@@ -46,6 +47,7 @@ export const ALARM_PHASES = [
       {
         id: 'logistique',
         label: 'Logistique',
+        hasObservations: true,
         items: [
           { id: 'charge_instable', label: 'Charge instable', tooltip: 'La palette risque de basculer.' },
           { id: 'emballage_abime', label: 'Emballage abime', tooltip: 'Le carton ou le film est dechire.' },
@@ -86,6 +88,7 @@ export const ALARM_PHASES = [
       {
         id: 'maintenance',
         label: 'Maintenance',
+          hasObservations: true,
         items: [
           { id: 'habilitation_echue', label: 'Habilitation echue', tooltip: "Le permis electrique n'est plus a jour." },
           { id: 'manque_experience', label: 'Manque experience', tooltip: 'Technicien nouveau sur ce modele de machine.' },
@@ -102,6 +105,7 @@ export const ALARM_PHASES = [
       {
         id: 'logistique',
         label: 'Logistique',
+          hasObservations: true,
         items: [
           { id: 'certificat_conduite', label: 'Certificat conduite', tooltip: "Le permis de conduire l'engin n'est plus valide." },
           { id: 'baisse_vigilance', label: 'Baisse de vigilance', tooltip: 'Endormissement ou manque de concentration.' },
@@ -142,6 +146,7 @@ export const ALARM_PHASES = [
       {
         id: 'maintenance',
         label: 'Maintenance',
+          hasObservations: true,
         items: [
           { id: 'pas_consignation', label: 'Pas de consignation', tooltip: "L'energie n'a pas ete verrouillee par cadenas." },
           { id: 'schema_absent', label: 'Schema absent', tooltip: 'Le plan electrique manque.' },
@@ -158,6 +163,7 @@ export const ALARM_PHASES = [
       {
         id: 'logistique',
         label: 'Logistique',
+          hasObservations: true,
         items: [
           { id: 'plan_circulation', label: 'Plan circulation', tooltip: "Le sens de circulation n'a pas ete suivi." },
           { id: 'chargement_mal_fait', label: 'Chargement mal fait', tooltip: 'Marchandise mal rangee dans le camion.' },
@@ -198,6 +204,7 @@ export const ALARM_PHASES = [
       {
         id: 'maintenance',
         label: 'Maintenance',
+          hasObservations: true,
         items: [
           { id: 'pas_coordination', label: 'Pas de coordination', tooltip: 'Deux techniciens se genent mutuellement.' },
           { id: 'prod_non_prevenue', label: 'Prod non prevenue', tooltip: 'La prod relance la machine trop tot.' },
@@ -214,6 +221,7 @@ export const ALARM_PHASES = [
       {
         id: 'logistique',
         label: 'Logistique',
+          hasObservations: true,
         items: [
           { id: 'dialogue_chauffeur', label: 'Dialogue chauffeur', tooltip: 'Le chauffeur externe ne comprend pas les consignes.' },
           { id: 'info_zone_manque', label: 'Info zone manque', tooltip: "On ne sait pas qu'une zone est interdite." },
@@ -254,6 +262,7 @@ export const ALARM_PHASES = [
       {
         id: 'maintenance',
         label: 'Maintenance',
+          hasObservations: true,
         items: [
           { id: 'zone_tres_etroite', label: 'Zone tres etroite', tooltip: 'Impossible de bouger les bras pour reparer.' },
           { id: 'pluie_vent', label: 'Pluie ou vent', tooltip: "Conditions difficiles a l'exterieur." },
@@ -270,6 +279,7 @@ export const ALARM_PHASES = [
       {
         id: 'logistique',
         label: 'Logistique',
+          hasObservations: true,
         items: [
           { id: 'sol_trous', label: 'Sol avec trous', tooltip: 'Le chariot tressaille et lache la charge.' },
           { id: 'allees_stock_pleines', label: 'Allees stock pleines', tooltip: 'Plus de place pour circuler normalement.' },
@@ -310,6 +320,7 @@ export const ALARM_PHASES = [
       {
         id: 'maintenance',
         label: 'Maintenance',
+          hasObservations: true,
         items: [
           { id: 'pas_budget', label: 'Pas de budget', tooltip: 'On ne peut pas acheter les bonnes pieces.' },
           { id: 'retard_entretien', label: 'Retard entretien', tooltip: 'La machine aurait du etre revisee il y a un mois.' },
@@ -326,6 +337,7 @@ export const ALARM_PHASES = [
       {
         id: 'logistique',
         label: 'Logistique',
+          hasObservations: true,
         items: [
           { id: 'planning_irrealiste', label: 'Planning irrealiste', tooltip: 'Trop de camions pour le nombre de quais.' },
           { id: 'interimaire_seul', label: 'Interimaire seul', tooltip: "Le nouveau n'est pas accompagne." },
@@ -367,6 +379,7 @@ export const ALARM_PHASES = [
       {
         id: 'maintenance',
         label: 'Maintenance',
+          hasObservations: true,
         items: [
           { id: 'controle_legal', label: 'Controle legal', tooltip: "Visite obligatoire de l'organisme de controle." },
           { id: 'norme_ecologique', label: 'Norme ecologique', tooltip: "Interdiction d'utiliser certains produits chimiques." },
@@ -383,6 +396,7 @@ export const ALARM_PHASES = [
       {
         id: 'logistique',
         label: 'Logistique',
+          hasObservations: true,
         items: [
           { id: 'regle_sociale', label: 'Regle sociale', tooltip: 'Temps de conduite obligatoires a respecter.' },
           { id: 'certification', label: 'Certification', tooltip: "Besoin d'un label pour vendre le produit." },

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
@@ -13,10 +13,14 @@ const SERVICE_COLORS = {
   logistique: { bg: 'bg-green-50', border: 'border-green-200', text: 'text-green-700', badge: 'bg-green-100 text-green-800' },
 };
 
-export default function AlarmPhaseCheckbox({ analysis, onSave, aiLoading, setAiLoading, toast }) {
+export default function AlarmPhaseCheckbox({ analysis, onSave, phaseDataRef, aiLoading, setAiLoading, toast }) {
   // Alarm data: { [phase_id]: { [service_id]: { checked: Set<item_id>, observations: string } } }
   const [alarmData, setAlarmData] = useState(() => initFromAnalysis(analysis));
   const [expandedPhases, setExpandedPhases] = useState(() => new Set([ALARM_PHASES[0].id]));
+
+  useEffect(() => {
+    if (phaseDataRef) phaseDataRef.current = () => ({ alarm_grille: alarmData });
+  }, [alarmData, phaseDataRef]);
 
   const toggleCheck = (phaseId, serviceId, itemId) => {
     setAlarmData(prev => {

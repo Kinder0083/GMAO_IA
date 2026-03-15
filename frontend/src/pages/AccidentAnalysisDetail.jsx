@@ -60,6 +60,7 @@ export default function AccidentAnalysisDetail() {
   const [activePhase, setActivePhase] = useState(0);
   const [aiLoading, setAiLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const phaseDataRef = React.useRef(null); // Ref to get current phase data for auto-save
 
   const load = useCallback(async () => {
     try {
@@ -89,16 +90,31 @@ export default function AccidentAnalysisDetail() {
     }
   }, [id, activePhase, toast]);
 
+  const saveCurrentPhaseAndSwitch = useCallback(async (targetPhase) => {
+    setSaving(true);
+    try {
+      const phaseData = phaseDataRef.current ? phaseDataRef.current() : {};
+      await accidentAnalysisAPI.update(id, { ...phaseData, phase_actuelle: PHASES[targetPhase].key });
+      const freshData = await accidentAnalysisAPI.get(id);
+      setAnalysis(freshData);
+      setActivePhase(targetPhase);
+    } catch {
+      toast({ title: 'Erreur de sauvegarde', variant: 'destructive' });
+    } finally {
+      setSaving(false);
+    }
+  }, [id, toast]);
+
   const goNextPhase = async () => {
     if (activePhase < PHASES.length - 1) {
-      const nextPhase = activePhase + 1;
-      setActivePhase(nextPhase);
-      await accidentAnalysisAPI.update(id, { phase_actuelle: PHASES[nextPhase].key });
+      await saveCurrentPhaseAndSwitch(activePhase + 1);
     }
   };
 
-  const goPrevPhase = () => {
-    if (activePhase > 0) setActivePhase(activePhase - 1);
+  const goPrevPhase = async () => {
+    if (activePhase > 0) {
+      await saveCurrentPhaseAndSwitch(activePhase - 1);
+    }
   };
 
   if (loading) return <div className="flex items-center justify-center min-h-screen"><Loader2 className="h-8 w-8 animate-spin text-gray-400" /></div>;
@@ -148,11 +164,11 @@ export default function AccidentAnalysisDetail() {
 
         {/* Phase Content */}
         <div className="mb-6">
-          {activePhase === 0 && <QQOQCPPhase analysis={analysis} onSave={saveAnalysis} aiLoading={aiLoading} setAiLoading={setAiLoading} toast={toast} />}
-          {activePhase === 1 && <CinqPourquoiPhase analysis={analysis} onSave={saveAnalysis} aiLoading={aiLoading} setAiLoading={setAiLoading} toast={toast} />}
-          {activePhase === 2 && <IshikawaPhase analysis={analysis} onSave={saveAnalysis} aiLoading={aiLoading} setAiLoading={setAiLoading} toast={toast} />}
-          {activePhase === 3 && <AlarmPhaseCheckbox analysis={analysis} onSave={saveAnalysis} aiLoading={aiLoading} setAiLoading={setAiLoading} toast={toast} />}
-          {activePhase === 4 && <ActionsPhase analysis={analysis} onSave={saveAnalysis} onReload={load} aiLoading={aiLoading} setAiLoading={setAiLoading} toast={toast} />}
+          {activePhase === 0 && <QQOQCPPhase analysis={analysis} onSave={saveAnalysis} phaseDataRef={phaseDataRef} aiLoading={aiLoading} setAiLoading={setAiLoading} toast={toast} />}
+          {activePhase === 1 && <CinqPourquoiPhase analysis={analysis} onSave={saveAnalysis} phaseDataRef={phaseDataRef} aiLoading={aiLoading} setAiLoading={setAiLoading} toast={toast} />}
+          {activePhase === 2 && <IshikawaPhase analysis={analysis} onSave={saveAnalysis} phaseDataRef={phaseDataRef} aiLoading={aiLoading} setAiLoading={setAiLoading} toast={toast} />}
+          {activePhase === 3 && <AlarmPhaseCheckbox analysis={analysis} onSave={saveAnalysis} phaseDataRef={phaseDataRef} aiLoading={aiLoading} setAiLoading={setAiLoading} toast={toast} />}
+          {activePhase === 4 && <ActionsPhase analysis={analysis} onSave={saveAnalysis} phaseDataRef={phaseDataRef} onReload={load} aiLoading={aiLoading} setAiLoading={setAiLoading} toast={toast} />}
         </div>
 
         {/* Navigation */}
@@ -177,9 +193,13 @@ export default function AccidentAnalysisDetail() {
 
 
 // ========== QQOQCP Phase ==========
-function QQOQCPPhase({ analysis, onSave, aiLoading, setAiLoading, toast }) {
+function QQOQCPPhase({ analysis, onSave, phaseDataRef, aiLoading, setAiLoading, toast }) {
   const [qqoqcp, setQqoqcp] = useState(analysis.qqoqcp || {});
   const [aiResult, setAiResult] = useState(null);
+
+  React.useEffect(() => {
+    phaseDataRef.current = () => ({ qqoqcp });
+  }, [qqoqcp, phaseDataRef]);
 
   const askAI = async () => {
     setAiLoading(true);
@@ -251,11 +271,15 @@ function QQOQCPPhase({ analysis, onSave, aiLoading, setAiLoading, toast }) {
 
 
 // ========== 5 Pourquoi Phase ==========
-function CinqPourquoiPhase({ analysis, onSave, aiLoading, setAiLoading, toast }) {
+function CinqPourquoiPhase({ analysis, onSave, phaseDataRef, aiLoading, setAiLoading, toast }) {
   const [iterations, setIterations] = useState(analysis.cinq_pourquoi?.iterations || []);
   const [causeRacine, setCauseRacine] = useState(analysis.cinq_pourquoi?.cause_racine || '');
   const [currentReponse, setCurrentReponse] = useState('');
   const [aiResult, setAiResult] = useState(null);
+
+  React.useEffect(() => {
+    phaseDataRef.current = () => ({ cinq_pourquoi: { iterations, cause_racine: causeRacine } });
+  }, [iterations, causeRacine, phaseDataRef]);
 
   const askAI = async () => {
     if (!currentReponse && iterations.length === 0) {
@@ -369,10 +393,14 @@ function CinqPourquoiPhase({ analysis, onSave, aiLoading, setAiLoading, toast })
 
 
 // ========== Ishikawa (5M) Phase ==========
-function IshikawaPhase({ analysis, onSave, aiLoading, setAiLoading, toast }) {
+function IshikawaPhase({ analysis, onSave, phaseDataRef, aiLoading, setAiLoading, toast }) {
   const [ishikawa, setIshikawa] = useState(analysis.ishikawa || {});
   const [userInput, setUserInput] = useState('');
   const [expanded, setExpanded] = useState({});
+
+  React.useEffect(() => {
+    phaseDataRef.current = () => ({ ishikawa });
+  }, [ishikawa, phaseDataRef]);
 
   const askAI = async () => {
     setAiLoading(true);
@@ -534,7 +562,7 @@ function IshikawaDiagram({ ishikawa }) {
 
 
 // ========== Actions Phase ==========
-function ActionsPhase({ analysis, onSave, onReload, aiLoading, setAiLoading, toast }) {
+function ActionsPhase({ analysis, onSave, phaseDataRef, onReload, aiLoading, setAiLoading, toast }) {
   const [actions, setActions] = useState(analysis.actions_correctives || []);
   const [selected, setSelected] = useState(() => {
     // Par defaut, toutes selectionnees
@@ -543,6 +571,10 @@ function ActionsPhase({ analysis, onSave, onReload, aiLoading, setAiLoading, toa
   const [aiActions, setAiActions] = useState(null);
   const [creatingAction, setCreatingAction] = useState(null);
   const [archiving, setArchiving] = useState(false);
+
+  React.useEffect(() => {
+    phaseDataRef.current = () => ({ actions_correctives: actions });
+  }, [actions, phaseDataRef]);
 
   const generateActions = async () => {
     setAiLoading(true);
