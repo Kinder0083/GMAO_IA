@@ -104,42 +104,32 @@ echo ""
 # Détection des bridges réseau disponibles
 msg "Détection des bridges réseau..."
 echo ""
-echo "Bridges réseau disponibles:"
 BRIDGES=$(ip link show | grep -E '^[0-9]+: vmbr' | awk -F': ' '{print $2}' | sed 's/@.*//')
 
 if [[ -z "$BRIDGES" ]]; then
     err "Aucun bridge réseau détecté"
 fi
 
-# Stocker les bridges dans un tableau indexé
-BRIDGE_LIST=()
-i=1
-while IFS= read -r bridge; do
-    BRIDGE_LIST+=("$bridge")
-    STATE=$(ip link show "$bridge" 2>/dev/null | grep -o "state [A-Z]*" | awk '{print $2}')
-    IP=$(ip addr show "$bridge" 2>/dev/null | grep "inet " | awk '{print $2}' | head -1)
-    
-    echo "  $i) $bridge - État: $STATE"
-    if [[ -n "$IP" ]]; then
-        echo "     IP: $IP"
-    fi
-    ((i++)) || true
-done <<< "$BRIDGES"
+BRIDGE_COUNT=$(echo "$BRIDGES" | wc -l)
 
-BRIDGE_COUNT=${#BRIDGE_LIST[@]}
+echo "Bridges réseau disponibles:"
+NUM=1
+for br in $BRIDGES; do
+    STATE=$(ip link show "$br" 2>/dev/null | grep -o "state [A-Z]*" | awk '{print $2}')
+    IP=$(ip addr show "$br" 2>/dev/null | grep "inet " | awk '{print $2}' | head -1)
+    echo "  $NUM) $br - État: $STATE ${IP:+- IP: $IP}"
+    NUM=$((NUM + 1))
+done
 echo ""
 
-if [[ $BRIDGE_COUNT -eq 1 ]]; then
-    # Un seul bridge : sélection automatique
-    SELECTED_BRIDGE="${BRIDGE_LIST[0]}"
+if [[ "$BRIDGE_COUNT" -eq 1 ]]; then
+    SELECTED_BRIDGE=$(echo "$BRIDGES" | head -1)
     ok "Bridge auto-sélectionné: $SELECTED_BRIDGE (seul disponible)"
 else
-    read -p "Choisissez le numéro du bridge à utiliser [1]: " BRIDGE_CHOICE < /dev/tty
+    echo -n "Choisissez le numéro du bridge à utiliser [1]: "
+    read BRIDGE_CHOICE < /dev/tty
     BRIDGE_CHOICE=${BRIDGE_CHOICE:-1}
-    
-    # Convertir en index (0-based)
-    IDX=$((BRIDGE_CHOICE - 1))
-    SELECTED_BRIDGE="${BRIDGE_LIST[$IDX]}"
+    SELECTED_BRIDGE=$(echo "$BRIDGES" | sed -n "${BRIDGE_CHOICE}p")
 fi
 
 if [[ -z "$SELECTED_BRIDGE" ]]; then
