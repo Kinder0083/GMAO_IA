@@ -6,6 +6,7 @@ import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { Input } from '../components/ui/input';
+import AlarmPhaseCheckbox from './AccidentAnalysis/AlarmPhaseCheckbox';
 import {
   ArrowLeft, ArrowRight, GitBranch, Brain, Send, Loader2,
   CheckCircle2, Circle, ClipboardList, Calendar, Shield,
@@ -48,16 +49,7 @@ const ISHIKAWA_CATS = [
   { key: 'matieres', label: 'Matieres', color: '#8B5CF6' },
 ];
 
-// ========== ALARM Categories ==========
-const ALARM_CATS = [
-  { key: 'patient_facteurs', label: 'Facteurs patient/victime' },
-  { key: 'taches_facteurs', label: 'Facteurs taches' },
-  { key: 'individus_facteurs', label: 'Facteurs individuels' },
-  { key: 'equipe_facteurs', label: 'Facteurs equipe' },
-  { key: 'environnement_facteurs', label: 'Facteurs environnement' },
-  { key: 'organisation_facteurs', label: 'Facteurs organisation' },
-  { key: 'contexte_facteurs', label: 'Facteurs contexte institutionnel' },
-];
+// ========== (AlarmPhase moved to AccidentAnalysis/AlarmPhaseCheckbox.jsx) ==========
 
 export default function AccidentAnalysisDetail() {
   const { id } = useParams();
@@ -159,7 +151,7 @@ export default function AccidentAnalysisDetail() {
           {activePhase === 0 && <QQOQCPPhase analysis={analysis} onSave={saveAnalysis} aiLoading={aiLoading} setAiLoading={setAiLoading} toast={toast} />}
           {activePhase === 1 && <CinqPourquoiPhase analysis={analysis} onSave={saveAnalysis} aiLoading={aiLoading} setAiLoading={setAiLoading} toast={toast} />}
           {activePhase === 2 && <IshikawaPhase analysis={analysis} onSave={saveAnalysis} aiLoading={aiLoading} setAiLoading={setAiLoading} toast={toast} />}
-          {activePhase === 3 && <AlarmPhase analysis={analysis} onSave={saveAnalysis} aiLoading={aiLoading} setAiLoading={setAiLoading} toast={toast} />}
+          {activePhase === 3 && <AlarmPhaseCheckbox analysis={analysis} onSave={saveAnalysis} aiLoading={aiLoading} setAiLoading={setAiLoading} toast={toast} />}
           {activePhase === 4 && <ActionsPhase analysis={analysis} onSave={saveAnalysis} onReload={load} aiLoading={aiLoading} setAiLoading={setAiLoading} toast={toast} />}
         </div>
 
@@ -537,132 +529,6 @@ function IshikawaDiagram({ ishikawa }) {
         })}
       </div>
     </div>
-  );
-}
-
-
-// ========== ALARM Phase ==========
-function AlarmPhase({ analysis, onSave, aiLoading, setAiLoading, toast }) {
-  const [alarm, setAlarm] = useState(analysis.alarm || {});
-  const [userInput, setUserInput] = useState('');
-  const [aiResult, setAiResult] = useState(null);
-
-  const askAI = async () => {
-    setAiLoading(true);
-    try {
-      const result = await accidentAnalysisAPI.aiAlarm(analysis.id, { user_input: userInput });
-      setAiResult(result);
-      // Map AI result to alarm structure
-      if (result.facteurs) {
-        const mapped = {};
-        const mapping = {
-          'patient': 'patient_facteurs', 'tache': 'taches_facteurs', 'individu': 'individus_facteurs',
-          'equipe': 'equipe_facteurs', 'environnement': 'environnement_facteurs',
-          'organisation': 'organisation_facteurs', 'contexte': 'contexte_facteurs'
-        };
-        result.facteurs.forEach(f => {
-          const cat = f.categorie?.toLowerCase() || '';
-          const key = Object.entries(mapping).find(([k]) => cat.includes(k))?.[1] || 'contexte_facteurs';
-          mapped[key] = (f.facteurs_identifies || []).map(fi => fi.facteur || fi);
-        });
-        setAlarm(prev => ({ ...prev, ...mapped }));
-      }
-    } catch {
-      toast({ title: 'Erreur IA', variant: 'destructive' });
-    } finally {
-      setAiLoading(false);
-    }
-  };
-
-  const save = () => onSave({ alarm });
-
-  const addFactor = (catKey) => {
-    setAlarm(prev => ({ ...prev, [catKey]: [...(prev[catKey] || []), ''] }));
-  };
-
-  const updateFactor = (catKey, idx, value) => {
-    const updated = [...(alarm[catKey] || [])];
-    updated[idx] = value;
-    setAlarm(prev => ({ ...prev, [catKey]: updated }));
-  };
-
-  const removeFactor = (catKey, idx) => {
-    const updated = [...(alarm[catKey] || [])];
-    updated.splice(idx, 1);
-    setAlarm(prev => ({ ...prev, [catKey]: updated }));
-  };
-
-  return (
-    <Card data-testid="alarm-phase">
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Shield className="h-5 w-5 text-red-600" /> Grille ALARM - Association of Litigation And Risk Management
-          </CardTitle>
-          <div className="flex gap-2">
-            <Button size="sm" variant="outline" onClick={askAI} disabled={aiLoading} data-testid="ai-alarm-btn">
-              {aiLoading ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Brain className="h-4 w-4 mr-1" />}
-              Analyse IA
-            </Button>
-            <Button size="sm" onClick={save} data-testid="save-alarm-btn">Sauvegarder</Button>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <div className="flex gap-2 mb-4">
-          <Input
-            data-testid="alarm-input"
-            placeholder="Informations supplementaires pour l'IA..."
-            value={userInput}
-            onChange={e => setUserInput(e.target.value)}
-          />
-        </div>
-
-        <div className="space-y-3">
-          {ALARM_CATS.map(cat => {
-            const factors = alarm[cat.key] || [];
-            return (
-              <div key={cat.key} className="border rounded-lg p-3">
-                <div className="flex items-center justify-between mb-2">
-                  <h4 className="text-sm font-medium text-gray-700">{cat.label}</h4>
-                  <Badge variant="outline">{factors.length}</Badge>
-                </div>
-                <div className="space-y-1">
-                  {factors.map((f, i) => (
-                    <div key={i} className="flex gap-2 items-center">
-                      <Input
-                        value={typeof f === 'string' ? f : f.facteur || ''}
-                        onChange={e => updateFactor(cat.key, i, e.target.value)}
-                        className="text-sm flex-1"
-                        placeholder="Facteur identifie..."
-                      />
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500" onClick={() => removeFactor(cat.key, i)}>x</Button>
-                    </div>
-                  ))}
-                  <Button size="sm" variant="ghost" onClick={() => addFactor(cat.key)} className="text-xs">
-                    <Plus className="h-3 w-3 mr-1" /> Ajouter
-                  </Button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {aiResult?.synthese && (
-          <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg" data-testid="ai-alarm-result">
-            <p className="text-sm text-red-700 italic">{aiResult.synthese}</p>
-            {aiResult.facteurs_critiques?.length > 0 && (
-              <div className="mt-2">
-                <p className="text-xs font-medium text-red-800">Facteurs critiques :</p>
-                <ul className="list-disc list-inside text-sm text-red-700">
-                  {aiResult.facteurs_critiques.map((f, i) => <li key={i}>{f}</li>)}
-                </ul>
-              </div>
-            )}
-          </div>
-        )}
-      </CardContent>
-    </Card>
   );
 }
 
