@@ -1,51 +1,41 @@
-# FSAO Iris - GMAO
+# FSAO Iris - PRD (Product Requirements Document)
 
-## Problem Statement
-Application GMAO (Gestion de Maintenance Assistee par Ordinateur) pour la gestion de maintenance industrielle.
+## Problème Original
+Application GMAO (Gestion de Maintenance Assistée par Ordinateur) / FSAO (Fonctionnement des Services Assistée par Ordinateur) avec module "Arbre des Causes" pour l'analyse d'accidents.
 
-## Tech Stack
-- **Frontend**: React 18, Tailwind CSS, Shadcn/UI, Lucide icons
-- **Backend**: FastAPI, Python 3.11
-- **Database**: MongoDB (motor async)
-- **Auth**: JWT tokens
+## Fonctionnalités Principales
+1. **Méthodologies d'analyse** : QQOQCP, 5 Pourquoi, Diagramme d'Ishikawa (5M), grille ALARM
+2. **IA** : Analyse guidée par une IA (OpenAI, Gemini, Claude via Emergent LLM)
+3. **Admin** : Page de configuration pour activer/désactiver les méthodes
+4. **Grille ALARM** : Grille de cases à cocher détaillée
+5. **Sauvegarde/Restauration** : Système robuste avec upload par morceaux, réparation de données
+6. **Rapports PDF** : Génération de rapports PDF
+7. **Actions manuelles** : Ajout d'actions correctives
+8. **PWA** : Notifications push, installation, mode hors-ligne
+9. **Personnalisation** : Couleurs, menu, thème par utilisateur
+10. **Google Drive** : Intégration pour stockage de sauvegardes
 
-## Session 16 Mars 2026
+## Architecture
+- **Frontend** : React + Shadcn UI
+- **Backend** : FastAPI (Python)
+- **Base de données** : MongoDB
+- **Authentification** : JWT
+- **IA** : Emergent LLM Key (OpenAI, Gemini, Claude)
 
-### Bug Fix P0 DEFINITIF - Donnees invisibles apres restauration de backup
-- **Probleme** : Les DI restaurees apparaissaient dans le dashboard (count) mais pas dans les listes
-- **4 causes racines identifiees et corrigees** :
-  1. `process_import_item()` supprimait le champ `id` -> CORRIGE: preserve comme string
-  2. Champs obligatoires (description, titre) filtres comme NaN -> CORRIGE: defaults + endpoint resilient
-  3. `created_by` et autres champs convertis en ObjectId par `process_import_item` -> CORRIGE: suppression de la conversion ObjectId + conversion string dans endpoints et serialize_doc
-  4. **50+ collections NON sauvegardees** (accident_analyses, app_settings, checklists...) -> CORRIGE: 101+ collections dans EXPORT_MODULES + backup dynamique
-- **Corrections implementees** :
-  - `server.py` : serialize_doc et endpoints DI/OT convertissent ObjectId en string
-  - `import_export_routes.py` : process_import_item ne convertit plus les champs en ObjectId, EXPORT_MODULES etendu a 101+ collections, fix-missing-ids convertit ObjectId en string
-  - `backup_service.py` : backup dynamique des collections non listees dans EXPORT_MODULES
-  - Endpoint diagnostic GET /api/restore/diagnostic pour investiguer les problemes
-  - Bouton "Lancer le diagnostic" dans le frontend
-- **Testing** : 100% (iterations 131, 132, 133, 134)
+## Tâches Accomplies (15 Mars 2026)
+- [x] Système de sauvegarde/restauration robuste (chunked upload, 50+ collections)
+- [x] Réparation et diagnostic des données post-restauration
+- [x] Correction de la corruption de données lors de l'import (ObjectId, JSON, NaN)
+- [x] Correction du bouton "Exporter" désactivé
+- [x] Correction du lien SSH non cliquable
+- [x] Sauvegarde des préférences de personnalisation
+- [x] **P0 FIX** : Race condition des doublons user_preferences après restauration
 
-### Bug Fix P0 - Upload chunke (contourne Nginx 413)
-- Upload chunke 5Mo/morceau (3 endpoints)
-- **Testing** : 100% (iteration 131)
+## Tâches En Attente
+- [ ] **(P1)** Validation utilisateur finale du flux sauvegarde/restauration
+- [ ] **(P2)** Fiabilisation du script update_service.py
+- [ ] **(P3)** Refactoring de process_import_item (trop complexe)
 
-## Prioritized Backlog
-### P0 - DONE
-- Upload chunke + donnees invisibles + ObjectId conversion + backup complet
-
-### P1
-- (PENDING USER VERIFICATION) Telechargement de sauvegarde (window.open + JWT)
-- Validation utilisateur sur Proxmox
-
-### P2
-- Script de mise a jour serveur (update_service.py) - EN PAUSE
-
-## Credentials
-- Admin: buenogy@gmail.com / Admin2024!
-
-## Key Files Modified
-- `/app/backend/server.py` - serialize_doc, endpoints DI/OT resilients
-- `/app/backend/import_export_routes.py` - EXPORT_MODULES 101+, fix-missing-ids, process_import_item, diagnostic
-- `/app/backend/backup_service.py` - backup dynamique
-- `/app/frontend/src/pages/RestoreTab.jsx` - diagnostic + reparation
+## Credentials de Test
+- Admin: `buenogy@gmail.com` / `Admin2024!`
+- GitHub: `Kinder0083/GMAO`
