@@ -1295,6 +1295,12 @@ export const accidentAnalysisAPI = {
   // Config IA
   getAIConfig: () => api.get('/accident-analysis/settings/ai-config').then(r => r.data),
   updateAIConfig: (data) => api.put('/accident-analysis/settings/ai-config', data).then(r => r.data),
+  // Config methodes & ALARM admin
+  getMethodsConfig: () => api.get('/accident-analysis/settings/methods-config').then(r => r.data),
+  updateMethodsConfig: (data) => api.put('/accident-analysis/settings/methods-config', data).then(r => r.data),
+  getAlarmItems: () => api.get('/accident-analysis/settings/alarm-items').then(r => r.data),
+  updateAlarmItems: (data) => api.put('/accident-analysis/settings/alarm-items', data).then(r => r.data),
+  importAlarmDocument: (formData) => api.post('/accident-analysis/settings/alarm-import-document', formData, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 120000 }).then(r => r.data),
   // PDF & Archive
   archivePdf: (id, data) => api.post(`/accident-analysis/${id}/archive-pdf`, data).then(r => r.data),
 };

@@ -14,9 +14,32 @@ const SERVICE_COLORS = {
 };
 
 export default function AlarmPhaseCheckbox({ analysis, onSave, phaseDataRef, aiLoading, setAiLoading, toast }) {
-  // Alarm data: { [phase_id]: { [service_id]: { checked: Set<item_id>, observations: string } } }
   const [alarmData, setAlarmData] = useState(() => initFromAnalysis(analysis));
   const [expandedPhases, setExpandedPhases] = useState(() => new Set([ALARM_PHASES[0].id]));
+  const [customPhases, setCustomPhases] = useState(null); // null = use defaults
+  const [configLoading, setConfigLoading] = useState(true);
+
+  // Charger la config personnalisee depuis le backend
+  useEffect(() => {
+    accidentAnalysisAPI.getAlarmItems()
+      .then(config => {
+        if (config?.phases) setCustomPhases(config.phases);
+      })
+      .catch(() => {})
+      .finally(() => setConfigLoading(false));
+  }, []);
+
+  // Les phases a afficher : soit custom (filtrees par active), soit defaults
+  const displayPhases = useMemo(() => {
+    const phases = customPhases || ALARM_PHASES;
+    return phases.map(phase => ({
+      ...phase,
+      services: phase.services.map(service => ({
+        ...service,
+        items: service.items.filter(item => item.active !== false)
+      }))
+    }));
+  }, [customPhases]);
 
   useEffect(() => {
     if (phaseDataRef) phaseDataRef.current = () => ({ alarm_grille: alarmData });
@@ -70,7 +93,7 @@ export default function AlarmPhaseCheckbox({ analysis, onSave, phaseDataRef, aiL
   const stats = useMemo(() => {
     let total = 0;
     let checked = 0;
-    ALARM_PHASES.forEach(phase => {
+    displayPhases.forEach(phase => {
       phase.services.forEach(service => {
         total += service.items.length;
         const sc = alarmData[phase.id]?.[service.id]?.checked || [];
@@ -78,7 +101,9 @@ export default function AlarmPhaseCheckbox({ analysis, onSave, phaseDataRef, aiL
       });
     });
     return { total, checked };
-  }, [alarmData]);
+  }, [alarmData, displayPhases]);
+
+  if (configLoading) return <div className="flex items-center justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-gray-400" /></div>;
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -106,7 +131,7 @@ export default function AlarmPhaseCheckbox({ analysis, onSave, phaseDataRef, aiL
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
-          {ALARM_PHASES.map(phase => {
+          {displayPhases.map(phase => {
             const isExpanded = expandedPhases.has(phase.id);
             const phaseChecked = phase.services.reduce((sum, s) => sum + (alarmData[phase.id]?.[s.id]?.checked?.length || 0), 0);
 

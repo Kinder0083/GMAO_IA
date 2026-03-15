@@ -97,6 +97,7 @@ import TrainingPage from "./pages/TrainingPage";
 import TrainingPublicPage from "./pages/TrainingPublicPage";
 import AccidentAnalysisPage from "./pages/AccidentAnalysisPage";
 import AccidentAnalysisDetail from "./pages/AccidentAnalysisDetail";
+import AccidentAnalysisAdmin from "./pages/AccidentAnalysis/AccidentAnalysisAdmin";
 
 // Protected Route Component with Token Validation
 const ProtectedRoute = ({ children }) => {
@@ -329,6 +330,7 @@ function App() {
             <Route path="analytics/checklists" element={<AnalyticsChecklistsPage />} />
             <Route path="training" element={<TrainingPage />} />
             <Route path="accident-analysis" element={<AccidentAnalysisPage />} />
+            <Route path="accident-analysis/admin" element={<AccidentAnalysisAdmin />} />
             <Route path="accident-analysis/:id" element={<AccidentAnalysisDetail />} />
           </Route>
         </Routes>

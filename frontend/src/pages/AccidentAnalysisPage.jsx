@@ -9,7 +9,7 @@ import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
 import { Badge } from '../components/ui/badge';
-import { GitBranch, Plus, Search, Trash2, Eye, AlertTriangle, Calendar, MapPin } from 'lucide-react';
+import { GitBranch, Plus, Search, Trash2, Eye, AlertTriangle, Calendar, MapPin, Settings2 } from 'lucide-react';
 
 const GRAVITE_COLORS = {
   FAIBLE: 'bg-green-100 text-green-800',
@@ -36,6 +36,7 @@ export default function AccidentAnalysisPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ titre: '', date_accident: '', lieu: '', description_initiale: '', gravite: 'MOYENNE' });
+  const isAdmin = JSON.parse(localStorage.getItem('user') || '{}').role === 'ADMIN';
 
   const load = useCallback(async () => {
     try {
@@ -97,9 +98,16 @@ export default function AccidentAnalysisPage() {
               <p className="text-sm text-gray-500">Analyse des accidents de maintenance</p>
             </div>
           </div>
-          <Button data-testid="create-analysis-btn" onClick={() => setShowCreate(true)}>
-            <Plus className="h-4 w-4 mr-2" /> Nouvelle analyse
-          </Button>
+          <div className="flex gap-2">
+            {isAdmin && (
+              <Button variant="outline" data-testid="admin-config-btn" onClick={() => navigate('/accident-analysis/admin')}>
+                <Settings2 className="h-4 w-4 mr-2" /> Modifier
+              </Button>
+            )}
+            <Button data-testid="create-analysis-btn" onClick={() => setShowCreate(true)}>
+              <Plus className="h-4 w-4 mr-2" /> Nouvelle analyse
+            </Button>
+          </div>
         </div>
 
         {/* Search */}

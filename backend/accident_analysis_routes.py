@@ -125,6 +125,156 @@ async def update_ai_config(data: dict, current_user: dict = Depends(get_current_
 
 
 # =============================================
+# Config Admin - Methodes & ALARM
+# =============================================
+
+@router.get("/settings/methods-config")
+async def get_methods_config(current_user: dict = Depends(get_current_user)):
+    """Recuperer la config des methodes actives et de la grille ALARM"""
+    config = await db.global_settings.find_one({"key": "accident_methods_config"}, {"_id": 0})
+    if config and config.get("value"):
+        return config["value"]
+    # Defaults: toutes les methodes actives
+    return {
+        "methods": {
+            "QQOQCP": True,
+            "5POURQUOI": True,
+            "ISHIKAWA": True,
+            "ALARM": True
+        },
+        "alarm_custom_items": None  # null = utiliser les items par defaut du frontend
+    }
+
+
+@router.put("/settings/methods-config")
+async def update_methods_config(data: dict, current_user: dict = Depends(get_current_user)):
+    """Mettre a jour la config (admin uniquement)"""
+    if current_user.get("role") != "ADMIN":
+        raise HTTPException(status_code=403, detail="Acces reserve aux administrateurs")
+    
+    await db.global_settings.update_one(
+        {"key": "accident_methods_config"},
+        {"$set": {"key": "accident_methods_config", "value": data}},
+        upsert=True
+    )
+    return {"status": "ok"}
+
+
+@router.get("/settings/alarm-items")
+async def get_alarm_items(current_user: dict = Depends(get_current_user)):
+    """Recuperer la config personnalisee des items ALARM"""
+    config = await db.global_settings.find_one({"key": "accident_alarm_items"}, {"_id": 0})
+    if config and config.get("value"):
+        return config["value"]
+    return None  # null = utiliser les items par defaut
+
+
+@router.put("/settings/alarm-items")
+async def update_alarm_items(data: dict, current_user: dict = Depends(get_current_user)):
+    """Sauvegarder la config personnalisee des items ALARM (admin uniquement)"""
+    if current_user.get("role") != "ADMIN":
+        raise HTTPException(status_code=403, detail="Acces reserve aux administrateurs")
+    
+    await db.global_settings.update_one(
+        {"key": "accident_alarm_items"},
+        {"$set": {"key": "accident_alarm_items", "value": data}},
+        upsert=True
+    )
+    return {"status": "ok"}
+
+
+@router.post("/settings/alarm-extract-document")
+async def extract_alarm_from_document(current_user: dict = Depends(get_current_user)):
+    """Extraire des items ALARM depuis un document uploade via IA"""
+    from fastapi import Request
+    import base64
+    
+    if current_user.get("role") != "ADMIN":
+        raise HTTPException(status_code=403, detail="Acces reserve aux administrateurs")
+    
+    # On attend le body brut (fichier en base64 + metadata)
+    return {"status": "endpoint_ready"}
+
+
+from fastapi import UploadFile, File, Form
+
+@router.post("/settings/alarm-import-document")
+async def import_alarm_document(
+    file: UploadFile = File(...),
+    phase_id: str = Form(""),
+    service_id: str = Form(""),
+    current_user: dict = Depends(get_current_user)
+):
+    """Importer un document, l'analyser par IA et proposer des items ALARM"""
+    if current_user.get("role") != "ADMIN":
+        raise HTTPException(status_code=403, detail="Acces reserve aux administrateurs")
+    
+    content = await file.read()
+    
+    # Decode text from common formats
+    text_content = ""
+    filename = file.filename.lower()
+    
+    if filename.endswith('.txt') or filename.endswith('.csv') or filename.endswith('.md'):
+        text_content = content.decode('utf-8', errors='replace')
+    elif filename.endswith('.pdf'):
+        try:
+            import PyPDF2
+            import io
+            reader = PyPDF2.PdfReader(io.BytesIO(content))
+            for page in reader.pages:
+                text_content += page.extract_text() + "\n"
+        except Exception as e:
+            logger.error(f"Erreur lecture PDF: {e}")
+            text_content = f"[Erreur lecture PDF: {e}]"
+    elif filename.endswith('.docx'):
+        try:
+            import docx
+            import io
+            doc = docx.Document(io.BytesIO(content))
+            for para in doc.paragraphs:
+                text_content += para.text + "\n"
+        except Exception as e:
+            logger.error(f"Erreur lecture DOCX: {e}")
+            text_content = f"[Erreur lecture DOCX: {e}]"
+    else:
+        text_content = content.decode('utf-8', errors='replace')
+    
+    if not text_content.strip():
+        raise HTTPException(status_code=400, detail="Impossible d'extraire du texte du document")
+    
+    # Truncate if too long
+    if len(text_content) > 15000:
+        text_content = text_content[:15000] + "\n...[tronque]"
+    
+    phase_context = f" pour la phase '{phase_id}'" if phase_id else ""
+    service_context = f" et le service '{service_id}'" if service_id else ""
+    
+    system = """Tu es un expert en analyse ALARM (Association of Litigation And Risk Management) pour l'industrie.
+A partir du document fourni, tu dois extraire des items pertinents pour la grille ALARM.
+Chaque item doit avoir:
+- id: identifiant unique (snake_case, sans accents)
+- label: texte court affiché (max 30 caractères)
+- tooltip: description explicative (1-2 phrases)
+- active: true
+
+Reponds UNIQUEMENT en JSON valide, format:
+{"items": [{"id": "xxx", "label": "Xxx", "tooltip": "Description", "active": true}, ...]}"""
+    
+    user_msg = f"Extrais les items ALARM{phase_context}{service_context} depuis ce document:\n\n{text_content}"
+    
+    try:
+        response = await _call_llm(f"alarm_import_{uuid.uuid4().hex[:8]}", system, user_msg)
+        parsed = json.loads(clean_json(response))
+        items = parsed.get("items", [])
+        return {"items": items, "source_file": file.filename}
+    except json.JSONDecodeError:
+        return {"items": [], "raw_response": response, "source_file": file.filename}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erreur IA: {str(e)}")
+
+
+# =============================================
 # CRUD Analyses
 # =============================================
 

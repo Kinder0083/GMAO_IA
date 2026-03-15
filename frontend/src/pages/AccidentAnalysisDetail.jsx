@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 
 // ========== PHASES ==========
-const PHASES = [
+const ALL_PHASES = [
   { key: 'QQOQCP', label: 'QQOQCP', icon: ClipboardList, color: 'text-blue-600 bg-blue-50' },
   { key: '5POURQUOI', label: '5 Pourquoi', icon: GitBranch, color: 'text-purple-600 bg-purple-50' },
   { key: 'ISHIKAWA', label: 'Ishikawa (5M)', icon: GitBranch, color: 'text-orange-600 bg-orange-50' },
@@ -60,13 +60,27 @@ export default function AccidentAnalysisDetail() {
   const [activePhase, setActivePhase] = useState(0);
   const [aiLoading, setAiLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const phaseDataRef = React.useRef(null); // Ref to get current phase data for auto-save
+  const [methodsConfig, setMethodsConfig] = useState(null);
+  const phaseDataRef = React.useRef(null);
+
+  // Phases filtrees selon la config admin
+  const PHASES = React.useMemo(() => {
+    if (!methodsConfig) return ALL_PHASES;
+    return ALL_PHASES.filter(p => {
+      if (p.key === 'ACTIONS') return true; // Toujours afficher les actions
+      return methodsConfig[p.key] !== false;
+    });
+  }, [methodsConfig]);
 
   const load = useCallback(async () => {
     try {
-      const data = await accidentAnalysisAPI.get(id);
+      const [data, cfg] = await Promise.all([
+        accidentAnalysisAPI.get(id),
+        accidentAnalysisAPI.getMethodsConfig().catch(() => null)
+      ]);
       setAnalysis(data);
-      const idx = PHASES.findIndex(p => p.key === data.phase_actuelle);
+      if (cfg?.methods) setMethodsConfig(cfg.methods);
+      const idx = (cfg?.methods ? ALL_PHASES.filter(p => p.key === 'ACTIONS' || cfg.methods[p.key] !== false) : ALL_PHASES).findIndex(p => p.key === data.phase_actuelle);
       if (idx >= 0) setActivePhase(idx);
     } catch {
       toast({ title: 'Erreur', description: 'Analyse introuvable', variant: 'destructive' });
@@ -164,11 +178,11 @@ export default function AccidentAnalysisDetail() {
 
         {/* Phase Content */}
         <div className="mb-6">
-          {activePhase === 0 && <QQOQCPPhase analysis={analysis} onSave={saveAnalysis} phaseDataRef={phaseDataRef} aiLoading={aiLoading} setAiLoading={setAiLoading} toast={toast} />}
-          {activePhase === 1 && <CinqPourquoiPhase analysis={analysis} onSave={saveAnalysis} phaseDataRef={phaseDataRef} aiLoading={aiLoading} setAiLoading={setAiLoading} toast={toast} />}
-          {activePhase === 2 && <IshikawaPhase analysis={analysis} onSave={saveAnalysis} phaseDataRef={phaseDataRef} aiLoading={aiLoading} setAiLoading={setAiLoading} toast={toast} />}
-          {activePhase === 3 && <AlarmPhaseCheckbox analysis={analysis} onSave={saveAnalysis} phaseDataRef={phaseDataRef} aiLoading={aiLoading} setAiLoading={setAiLoading} toast={toast} />}
-          {activePhase === 4 && <ActionsPhase analysis={analysis} onSave={saveAnalysis} phaseDataRef={phaseDataRef} onReload={load} aiLoading={aiLoading} setAiLoading={setAiLoading} toast={toast} />}
+          {PHASES[activePhase]?.key === 'QQOQCP' && <QQOQCPPhase analysis={analysis} onSave={saveAnalysis} phaseDataRef={phaseDataRef} aiLoading={aiLoading} setAiLoading={setAiLoading} toast={toast} />}
+          {PHASES[activePhase]?.key === '5POURQUOI' && <CinqPourquoiPhase analysis={analysis} onSave={saveAnalysis} phaseDataRef={phaseDataRef} aiLoading={aiLoading} setAiLoading={setAiLoading} toast={toast} />}
+          {PHASES[activePhase]?.key === 'ISHIKAWA' && <IshikawaPhase analysis={analysis} onSave={saveAnalysis} phaseDataRef={phaseDataRef} aiLoading={aiLoading} setAiLoading={setAiLoading} toast={toast} />}
+          {PHASES[activePhase]?.key === 'ALARM' && <AlarmPhaseCheckbox analysis={analysis} onSave={saveAnalysis} phaseDataRef={phaseDataRef} aiLoading={aiLoading} setAiLoading={setAiLoading} toast={toast} />}
+          {PHASES[activePhase]?.key === 'ACTIONS' && <ActionsPhase analysis={analysis} onSave={saveAnalysis} phaseDataRef={phaseDataRef} onReload={load} aiLoading={aiLoading} setAiLoading={setAiLoading} toast={toast} />}
         </div>
 
         {/* Navigation */}
