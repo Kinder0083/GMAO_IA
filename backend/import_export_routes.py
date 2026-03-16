@@ -599,75 +599,78 @@ def convert_date_field(value, field_name: str):
     return None
 
 
-async def process_import_item(item: dict, module: str, collection_name: str, current_user: dict, mode: str) -> dict:
-    """Traiter un item pour l'import"""
-    import json
-    
-    # Nettoyer les NaN
-    cleaned = {k: v for k, v in item.items() if pd.notna(v) and v != "" and v is not None}
-    
-    # --- Restaurer l'_id original (ObjectId) pour préserver les références ---
+# =====================================================================
+# Fonctions utilitaires pour l'import de documents
+# =====================================================================
+
+def clean_nan_values(item: dict) -> dict:
+    """Supprime les valeurs NaN, vides et None d'un document."""
+    return {k: v for k, v in item.items() if pd.notna(v) and v != "" and v is not None}
+
+
+def restore_document_id(cleaned: dict) -> dict:
+    """Restaure l'_id ObjectId et préserve le champ id string pour Pydantic."""
     item_id = cleaned.pop("id", None)
-    original_id_str = cleaned.pop("_oid", None)  # noqa: F841  # ID ObjectId original si exporté séparément
-    
+    cleaned.pop("_oid", None)
+
     if item_id:
         item_id_str = str(item_id)
         try:
             cleaned["_id"] = ObjectId(item_id_str)
         except Exception:
             cleaned["_id"] = ObjectId()
-        # Toujours préserver id comme string pour les modèles Pydantic
         cleaned["id"] = item_id_str
     else:
         cleaned["_id"] = ObjectId()
         cleaned["id"] = str(cleaned["_id"])
-    
-    # --- NOTE: NE PAS convertir les champs *_id en ObjectId ---
-    # Les modèles Pydantic attendent des strings pour ces champs.
-    # Seul le champ _id (MongoDB) doit être un ObjectId.
-    
-    # --- Parser les champs JSON (listes/dicts stockés comme strings par l'export Excel) ---
-    # Approche générique : tout string qui ressemble à du JSON est parsé
+    return cleaned
+
+
+def parse_json_fields(cleaned: dict) -> dict:
+    """Parse les champs JSON (listes/dicts stockés comme strings par l'export Excel)."""
+    import json
+
+    # Parsing générique des strings qui ressemblent à du JSON
     for field in list(cleaned.keys()):
         val = cleaned[field]
-        if isinstance(val, str) and len(val) >= 2:
-            first = val[0]
-            if first in ('[', '{'):
-                try:
-                    parsed = json.loads(val)
-                    cleaned[field] = parsed
-                except (json.JSONDecodeError, ValueError):
-                    if val in ("[]", ""):
-                        cleaned[field] = []
-                    elif val in ("{}", ""):
-                        cleaned[field] = {}
-    
-    # Aussi forcer les champs connus comme listes/dicts si vides ou mal typés
-    known_list_fields = [
+        if isinstance(val, str) and len(val) >= 2 and val[0] in ('[', '{'):
+            try:
+                cleaned[field] = json.loads(val)
+            except (json.JSONDecodeError, ValueError):
+                if val == "[]":
+                    cleaned[field] = []
+                elif val == "{}":
+                    cleaned[field] = {}
+
+    # Forcer le bon type pour les champs connus comme listes
+    KNOWN_LIST_FIELDS = [
         "comments", "attachments", "historique", "permissions", "parts_used",
         "time_entries", "history", "recipient_ids", "recipient_names",
         "reactions", "attached_files", "equipment_ids",
         "menu_items", "menu_categories", "dashboard_widgets", "header_icon_order",
         "actions", "alerts", "recipients", "tags", "steps",
     ]
-    for field in known_list_fields:
-        if field in cleaned:
-            val = cleaned[field]
-            if not isinstance(val, (list, dict)):
-                if isinstance(val, str):
-                    try:
-                        cleaned[field] = json.loads(val)
-                    except Exception:
-                        cleaned[field] = []
-                else:
+    for field in KNOWN_LIST_FIELDS:
+        if field in cleaned and not isinstance(cleaned[field], (list, dict)):
+            if isinstance(cleaned[field], str):
+                try:
+                    cleaned[field] = json.loads(cleaned[field])
+                except Exception:
                     cleaned[field] = []
-    
-    # --- Convertir les champs numériques ---
-    num_fields = ["quantite", "seuil_alerte", "prix_unitaire", "prixUnitaire",
-                  "quantiteMin", "montantLigneHT", "quantiteRetournee",
-                  "tempsEstime", "tempsReel", "refresh_interval",
-                  "min_threshold", "max_threshold", "numero"]
-    for field in num_fields:
+            else:
+                cleaned[field] = []
+    return cleaned
+
+
+def convert_numeric_fields(cleaned: dict) -> dict:
+    """Convertit les champs numériques de string vers int/float."""
+    NUMERIC_FIELDS = [
+        "quantite", "seuil_alerte", "prix_unitaire", "prixUnitaire",
+        "quantiteMin", "montantLigneHT", "quantiteRetournee",
+        "tempsEstime", "tempsReel", "refresh_interval",
+        "min_threshold", "max_threshold", "numero",
+    ]
+    for field in NUMERIC_FIELDS:
         if field in cleaned:
             try:
                 val = cleaned[field]
@@ -676,9 +679,12 @@ async def process_import_item(item: dict, module: str, collection_name: str, cur
                 cleaned[field] = float(val) if '.' in str(val) else int(val)
             except Exception:
                 pass
-    
-    # --- Convertir les champs date ---
-    date_fields = [
+    return cleaned
+
+
+def convert_date_fields(cleaned: dict) -> dict:
+    """Convertit les champs date de string vers datetime."""
+    DATE_FIELDS = [
         "dateCreation", "dateDebut", "dateFin", "dateLimite", "dateTermine",
         "dateAchat", "date_creation", "date_ajout", "derniere_modification",
         "derniereModification", "derniereConnexion", "date_derniere_modification",
@@ -686,26 +692,27 @@ async def process_import_item(item: dict, module: str, collection_name: str, cur
         "date_reception", "date_distribution", "date_limite_desiree",
         "converted_at", "statut_changed_at", "last_update",
         "inventory_added_at", "archived_at", "deletable_until", "deleted_at",
-        "timestamp"
+        "timestamp",
     ]
-    for field in date_fields:
+    for field in DATE_FIELDS:
         if field in cleaned:
             cleaned[field] = convert_date_field(cleaned[field], field)
-    
-    # --- Traitement spécifique users ---
+    return cleaned
+
+
+def apply_module_defaults(cleaned: dict, module: str) -> dict:
+    """Applique les valeurs par défaut spécifiques à chaque module."""
+    import json
+
     if module == "users":
-        if "statut" not in cleaned:
-            cleaned["statut"] = "actif"
-        # Assurer que actif est un bool
+        cleaned.setdefault("statut", "actif")
         if "actif" in cleaned:
             cleaned["actif"] = cleaned["actif"] in (True, "true", "True", 1, "actif")
         else:
             cleaned["actif"] = cleaned.get("statut", "actif") == "actif"
-        # S'assurer que hashed_password existe
         if "hashed_password" not in cleaned:
             import bcrypt
             cleaned["hashed_password"] = bcrypt.hashpw("Changez-moi!".encode(), bcrypt.gensalt()).decode()
-        # Parser permissions si c'est un string JSON
         if "permissions" in cleaned and isinstance(cleaned["permissions"], str):
             try:
                 cleaned["permissions"] = json.loads(cleaned["permissions"])
@@ -719,53 +726,73 @@ async def process_import_item(item: dict, module: str, collection_name: str, cur
                     del cleaned["firstLogin"]
             except Exception:
                 pass
-    
-    # --- Traitement spécifique work-orders ---
-    if module in ["work-orders", "intervention-requests"]:
-        if "statut" not in cleaned:
-            cleaned["statut"] = "OUVERT"
-        if "priorite" not in cleaned:
-            cleaned["priorite"] = "AUCUNE"
-        if "categorie" not in cleaned:
-            cleaned["categorie"] = "TRAVAUX_DIVERS"
-    
-    # --- Traitement spécifique equipments ---
-    if module == "equipments":
-        if "statut" not in cleaned:
-            cleaned["statut"] = "OPERATIONNEL"
-    
-    # --- Traitement spécial pour user_preferences: dédupliquer par user_id ---
-    if collection_name == "user_preferences" and "user_id" in cleaned:
-        uid = cleaned["user_id"]
-        existing_by_uid = await db[collection_name].find_one({"user_id": uid})
-        if existing_by_uid:
-            # Remplacer le document existant par les données restaurées
-            update_data = {k: v for k, v in cleaned.items() if k != "_id"}
-            await db[collection_name].update_one(
-                {"_id": existing_by_uid["_id"]},
-                {"$set": update_data}
-            )
-            # Supprimer les doublons éventuels
-            await db[collection_name].delete_many({"user_id": uid, "_id": {"$ne": existing_by_uid["_id"]}})
-            return {"action": "updated", "id": str(existing_by_uid["_id"])}
-        else:
-            await db[collection_name].insert_one(cleaned)
-            return {"action": "inserted", "id": str(cleaned["_id"])}
-    
-    # --- Mode replace: vérifier si existe ---
+
+    elif module in ("work-orders", "intervention-requests"):
+        cleaned.setdefault("statut", "OUVERT")
+        cleaned.setdefault("priorite", "AUCUNE")
+        cleaned.setdefault("categorie", "TRAVAUX_DIVERS")
+
+    elif module == "equipments":
+        cleaned.setdefault("statut", "OPERATIONNEL")
+
+    return cleaned
+
+
+async def upsert_user_preferences(collection_name: str, cleaned: dict) -> dict | None:
+    """Déduplique les user_preferences par user_id. Retourne le résultat ou None si non applicable."""
+    if collection_name != "user_preferences" or "user_id" not in cleaned:
+        return None
+
+    uid = cleaned["user_id"]
+    existing = await db[collection_name].find_one({"user_id": uid})
+    if existing:
+        update_data = {k: v for k, v in cleaned.items() if k != "_id"}
+        await db[collection_name].update_one({"_id": existing["_id"]}, {"$set": update_data})
+        await db[collection_name].delete_many({"user_id": uid, "_id": {"$ne": existing["_id"]}})
+        return {"action": "updated", "id": str(existing["_id"])}
+
+    await db[collection_name].insert_one(cleaned)
+    return {"action": "inserted", "id": str(cleaned["_id"])}
+
+
+async def persist_document(collection_name: str, cleaned: dict, mode: str) -> dict:
+    """Insère ou met à jour le document selon le mode (add/replace)."""
     if mode == "replace":
         existing = await db[collection_name].find_one({"_id": cleaned["_id"]})
         if existing:
-            await db[collection_name].update_one({"_id": cleaned["_id"]}, {"$set": {k: v for k, v in cleaned.items() if k != "_id"}})
+            await db[collection_name].update_one(
+                {"_id": cleaned["_id"]},
+                {"$set": {k: v for k, v in cleaned.items() if k != "_id"}}
+            )
             return {"action": "updated", "id": str(cleaned["_id"])}
-    
-    # --- Mode add: vérifier si _id existe déjà ---
+
     existing = await db[collection_name].find_one({"_id": cleaned["_id"]})
     if existing:
         return {"action": "skipped", "id": str(cleaned["_id"])}
-    
+
     await db[collection_name].insert_one(cleaned)
     return {"action": "inserted", "id": str(cleaned["_id"])}
+
+
+# =====================================================================
+# Orchestrateur principal d'import
+# =====================================================================
+
+async def process_import_item(item: dict, module: str, collection_name: str, current_user: dict, mode: str) -> dict:
+    """Pipeline d'import : nettoyage -> transformation -> persistance."""
+    cleaned = clean_nan_values(item)
+    cleaned = restore_document_id(cleaned)
+    cleaned = parse_json_fields(cleaned)
+    cleaned = convert_numeric_fields(cleaned)
+    cleaned = convert_date_fields(cleaned)
+    cleaned = apply_module_defaults(cleaned, module)
+
+    # Cas spécial : user_preferences (déduplication par user_id)
+    prefs_result = await upsert_user_preferences(collection_name, cleaned)
+    if prefs_result:
+        return prefs_result
+
+    return await persist_document(collection_name, cleaned, mode)
 
 
 @router.get("/export/{module}")

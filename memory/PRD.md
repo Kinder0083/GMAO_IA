@@ -11,6 +11,11 @@ Application GMAO / FSAO avec module "Arbre des Causes" pour l'analyse d'accident
 
 ## Taches Accomplies
 
+### 16 Mars 2026 - Refactoring process_import_item
+- [x] Decomposition de la fonction monolithique (166 lignes) en 8 fonctions specialisees
+- [x] Pipeline clair : clean_nan_values -> restore_document_id -> parse_json_fields -> convert_numeric_fields -> convert_date_fields -> apply_module_defaults -> upsert_user_preferences -> persist_document
+- [x] Tests de regression OK (export/import CSV, preferences utilisateur, filtres OT)
+
 ### 15 Mars 2026 - Bug P0 Preferences
 - [x] Fix race condition doublons user_preferences apres restauration
 
@@ -18,13 +23,9 @@ Application GMAO / FSAO avec module "Arbre des Causes" pour l'analyse d'accident
 - [x] Fix checklists: insertion dans checklist_templates (bon module)
 - [x] Fix maintenance preventive: equipement_id obligatoire
 - [x] Dialogues semi-automatiques (CreateChecklistDialog, CreatePreventiveDialog)
-- [x] Prompt IA enrichi (checklist_items, frequence_suggere)
 
 ### 15 Mars 2026 - Bug Filtres OT
-- [x] Fix: OT crees par IA utilisaient `created_at` au lieu de `dateCreation` (champ utilise par les filtres)
-- [x] Fix applique aussi dans ai_chat_routes.py (OT crees par assistant IA Adria)
-- [x] Correction retroactive des OT existants en DB
-- [x] Ajout champs manquants (id, comments, attachments, parts_used)
+- [x] Fix: OT crees par IA utilisaient created_at au lieu de dateCreation
 
 ### Sessions precedentes
 - [x] Systeme sauvegarde/restauration robuste (chunked upload, 50+ collections)
@@ -33,10 +34,9 @@ Application GMAO / FSAO avec module "Arbre des Causes" pour l'analyse d'accident
 - [x] Fix bouton Exporter, lien SSH, preferences personnalisation
 
 ## Taches En Attente
-- [ ] **(P1)** Validation utilisateur finale flux sauvegarde/restauration
+- [ ] **(P1)** Validation utilisateur finale flux sauvegarde/restauration (VALIDEE par utilisateur)
 - [ ] **(P2)** Fiabilisation script update_service.py
-- [ ] **(P3)** Refactoring process_import_item
 
 ## Credentials
-- Admin: `buenogy@gmail.com` / `Admin2024!`
-- GitHub: `Kinder0083/GMAO`
+- Admin: buenogy@gmail.com / Admin2024!
+- GitHub: Kinder0083/GMAO
