@@ -11,31 +11,33 @@ Application GMAO / FSAO avec module "Arbre des Causes" pour l'analyse d'accident
 
 ## Taches Accomplies
 
-### 16 Mars 2026 - Refactoring process_import_item
-- [x] Decomposition de la fonction monolithique (166 lignes) en 8 fonctions specialisees
-- [x] Pipeline clair : clean_nan_values -> restore_document_id -> parse_json_fields -> convert_numeric_fields -> convert_date_fields -> apply_module_defaults -> upsert_user_preferences -> persist_document
-- [x] Tests de regression OK (export/import CSV, preferences utilisateur, filtres OT)
+### 17 Mars 2026 - Assignation aux Services
+- [x] Nouveau composant AssigneeSelector réutilisable (services en haut, utilisateurs alphabétiques)
+- [x] Endpoint GET /api/assignment-targets (pôles + utilisateurs triés)
+- [x] Notification service: tous les membres du service notifiés lors d'une assignation
+- [x] Harmonisation orthographe "Assigner à" dans toute l'application
+- [x] Intégration dans 4 formulaires: WorkOrderFormDialog, PreventiveMaintenanceFormDialog, ImprovementFormDialog, ConvertToWorkOrderDialog
+- [x] Nouveaux champs modèle: assigne_type, assigne_service
 
-### 15 Mars 2026 - Bug P0 Preferences
-- [x] Fix race condition doublons user_preferences apres restauration
+### 17 Mars 2026 - Bug Permissions UUID
+- [x] Fix helper find_user_flexible pour gérer ObjectId ET UUID
+- [x] 8 endpoints utilisateur corrigés
 
-### 15 Mars 2026 - Actions Correctives Semi-Automatiques
-- [x] Fix checklists: insertion dans checklist_templates (bon module)
-- [x] Fix maintenance preventive: equipement_id obligatoire
-- [x] Dialogues semi-automatiques (CreateChecklistDialog, CreatePreventiveDialog)
+### 17 Mars 2026 - Système MAJ externalisé
+- [x] MAJ_FSAO.sh créé (fusion update_manual.sh + MAJ_SSH.sh)
+- [x] update_service.py: apply_update lance le script externe
 
-### 15 Mars 2026 - Bug Filtres OT
-- [x] Fix: OT crees par IA utilisaient created_at au lieu de dateCreation
+### 16 Mars 2026 - Refactoring Import
+- [x] process_import_item décomposé en 8 fonctions spécialisées
 
-### Sessions precedentes
-- [x] Systeme sauvegarde/restauration robuste (chunked upload, 50+ collections)
-- [x] Reparation/diagnostic donnees post-restauration
-- [x] Corrections import (corruption donnees, ObjectId, JSON, NaN)
-- [x] Fix bouton Exporter, lien SSH, preferences personnalisation
+### 15 Mars 2026
+- [x] Fix P0 race condition user_preferences
+- [x] Actions correctives semi-automatiques (checklists + maintenance préventive)
+- [x] Fix filtres OT (created_at -> dateCreation)
 
 ## Taches En Attente
-- [ ] **(P1)** Validation utilisateur finale flux sauvegarde/restauration (VALIDEE par utilisateur)
-- [ ] **(P2)** Fiabilisation script update_service.py
+- [ ] **(P2)** Tester MAJ_FSAO.sh sur serveur Proxmox
+- [ ] **(P3)** Dédupliquer services MAINTENANCE/Maintenance dans service_responsables
 
 ## Credentials
 - Admin: buenogy@gmail.com / Admin2024!
