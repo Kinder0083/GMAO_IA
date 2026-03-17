@@ -70,7 +70,9 @@ const WorkOrderFormDialog = ({ open, onOpenChange, workOrder, prefillData, onSuc
           priorite: workOrder.priorite || 'AUCUNE',
           categorie: workOrder.categorie || '',
           equipement_id: workOrder.equipement?.id || '',
-          assigne_a_id: workOrder.assigneA?.id || '',
+          assigne_a_id: workOrder.assigneA?.id || workOrder.assigne_a_id || '',
+          assigne_type: workOrder.assigne_type || null,
+          assigne_service: workOrder.assigne_service || null,
           emplacement_id: workOrder.emplacement?.id || '',
           dateLimite: workOrder.dateLimite?.split('T')[0] || '',
           tempsEstime: workOrder.tempsEstime || ''

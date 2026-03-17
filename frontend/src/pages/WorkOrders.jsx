@@ -592,6 +592,12 @@ const WorkOrders = () => {
                               nom={wo.assigneA.nom}
                             />
                           </div>
+                        ) : wo.assigne_type === 'service' && wo.assigne_service ? (
+                          <div className="flex items-center justify-center">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+                              {wo.assigne_service}
+                            </span>
+                          </div>
                         ) : (
                           <span className="text-gray-400 text-xs">-</span>
                         )}

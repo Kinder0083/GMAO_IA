@@ -57,7 +57,9 @@ const ConvertToWorkOrderDialog = ({ open, onOpenChange, request, onSuccess }) =>
       await interventionRequestsAPI.convertToWorkOrder(
         request.id, 
         assigneeId || null,
-        dateLimite || null
+        dateLimite || null,
+        assigneeType || null,
+        assigneeService || null
       );
       toast({
         title: 'Succès',

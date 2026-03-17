@@ -45,7 +45,9 @@ const PreventiveMaintenanceFormDialog = ({ open, onOpenChange, maintenance, onSu
           equipement_id: maintenance.equipement?.id || '',
           frequence: maintenance.frequence || 'MENSUEL',
           prochaineMaintenance: maintenance.prochaineMaintenance?.split('T')[0] || '',
-          assigne_a_id: maintenance.assigneA?.id || '',
+          assigne_a_id: maintenance.assigneA?.id || maintenance.assigne_a_id || '',
+          assigne_type: maintenance.assigne_type || null,
+          assigne_service: maintenance.assigne_service || null,
           duree: maintenance.duree || '',
           statut: maintenance.statut || 'ACTIF',
           checklist_template_id: maintenance.checklist_template_id || ''

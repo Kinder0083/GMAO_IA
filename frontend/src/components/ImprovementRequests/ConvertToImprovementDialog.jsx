@@ -21,12 +21,16 @@ const ConvertToImprovementDialog = ({ open, onOpenChange, request, onSuccess }) 
   const [loading, setLoading] = useState(false);
   const [users, setUsers] = useState([]);
   const [assigneeId, setAssigneeId] = useState('');
+  const [assigneeType, setAssigneeType] = useState(null);
+  const [assigneeService, setAssigneeService] = useState(null);
   const [dateLimite, setDateLimite] = useState('');
 
   useEffect(() => {
     if (open) {
       loadUsers();
       setAssigneeId('');
+      setAssigneeType(null);
+      setAssigneeService(null);
       // Pré-remplir avec la date limite désirée si disponible
       if (request?.date_limite_desiree) {
         setDateLimite(request.date_limite_desiree.split('T')[0]);
@@ -93,9 +97,13 @@ const ConvertToImprovementDialog = ({ open, onOpenChange, request, onSuccess }) 
 
           <div className="space-y-2">
             <AssigneeSelector
-              value={assigneeId || ''}
+              value={assigneeType === 'service' && assigneeService 
+                ? `service:${assigneeService}` 
+                : (assigneeId || '')}
               onChange={(val, type, serviceName) => {
                 setAssigneeId(type === 'service' ? '' : val);
+                setAssigneeType(type);
+                setAssigneeService(serviceName);
               }}
               dataTestId="convert-improvement-assignee-selector"
             />

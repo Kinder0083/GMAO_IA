@@ -8144,6 +8144,8 @@ async def convert_to_work_order(
     request_id: str,
     assignee_id: Optional[str] = None,
     date_limite: Optional[str] = None,
+    assignee_type: Optional[str] = None,
+    assignee_service: Optional[str] = None,
     current_user: dict = Depends(require_permission("interventionRequests", "edit"))
 ):
     """Convertir une demande d'intervention en ordre de travail (Admin/Technicien uniquement)"""
@@ -8187,6 +8189,8 @@ async def convert_to_work_order(
             "emplacement_id": req.get("emplacement_id"),
             "emplacement": req.get("emplacement"),
             "assigne_a_id": assignee_id,
+            "assigne_type": assignee_type,
+            "assigne_service": assignee_service,
             "assigneA": None,
             "dateLimite": date_limite_ordre,
             "tempsEstime": None,

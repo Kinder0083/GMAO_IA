@@ -125,7 +125,22 @@ function BonDeTravailForm() {
 
       if (bonId && bonId !== 'new') {
         const bonData = await documentationsAPI.getBonTravail(bonId);
-        setFormData(bonData);
+        setFormData(prev => ({
+          ...prev,
+          ...bonData,
+          risques_materiel: bonData.risques_materiel || [],
+          risques_materiel_autre: bonData.risques_materiel_autre || '',
+          risques_autorisation: bonData.risques_autorisation || [],
+          risques_produits: bonData.risques_produits || [],
+          risques_environnement: bonData.risques_environnement || [],
+          risques_environnement_autre: bonData.risques_environnement_autre || '',
+          precautions_materiel: bonData.precautions_materiel || [],
+          precautions_materiel_autre: bonData.precautions_materiel_autre || '',
+          precautions_epi: bonData.precautions_epi || [],
+          precautions_epi_autre: bonData.precautions_epi_autre || '',
+          precautions_environnement: bonData.precautions_environnement || [],
+          precautions_environnement_autre: bonData.precautions_environnement_autre || '',
+        }));
       }
     } catch (error) {
       console.error('Erreur chargement:', error);
@@ -140,7 +155,7 @@ function BonDeTravailForm() {
   };
 
   const handleCheckboxChange = (category, value) => {
-    const current = formData[category];
+    const current = formData[category] || [];
     if (current.includes(value)) {
       setFormData({
         ...formData,
