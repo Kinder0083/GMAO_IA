@@ -1266,8 +1266,11 @@ async def get_assignment_targets(current_user: dict = Depends(get_current_user))
     ).sort([("nom", 1), ("prenom", 1)])
     users = []
     async for u in users_cursor:
+        user_id = u.get("id", "")
+        if not user_id:
+            continue
         users.append({
-            "id": u.get("id", ""),
+            "id": user_id,
             "nom": u.get("nom", ""),
             "prenom": u.get("prenom", ""),
             "role": u.get("role", ""),

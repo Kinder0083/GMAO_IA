@@ -12,11 +12,13 @@ Application GMAO / FSAO avec module "Arbre des Causes" pour l'analyse d'accident
 ## Taches Accomplies
 
 ### 17 Mars 2026 - Fix P0 Ecran Blanc (Assignation Services)
-- [x] Fix perte assignation service lors de l'édition d'un OT (WorkOrderFormDialog, PreventiveMaintenanceFormDialog, ImprovementFormDialog chargent assigne_type/assigne_service)
-- [x] Fix affichage service dans la liste des OT (badge bleu avec nom du service)
-- [x] Fix conversion DI→OT transmet maintenant assigne_type et assigne_service au backend
-- [x] Fix ConvertToImprovementDialog: ajout états assigneeType/assigneeService manquants
-- [x] Fix BonDeTravailForm: fallback défensif pour éviter crash sur tableaux undefined
+- [x] **ROOT CAUSE**: `<SelectItem value="">` dans AssigneeSelector crashait React quand un utilisateur en base avait un `id` vide
+- [x] Fix frontend: filtre `.filter(item => item.id)` avant rendu des SelectItem
+- [x] Fix backend: skip les utilisateurs sans `id` dans `/api/assignment-targets`
+- [x] Fix perte assignation service lors de l'édition d'un OT (chargement assigne_type/assigne_service)
+- [x] Fix affichage service dans la liste des OT (badge bleu)
+- [x] Fix conversion DI→OT transmet maintenant assigne_type et assigne_service
+- [x] Fix BonDeTravailForm: fallback défensif pour tableaux undefined
 - [x] Nettoyage doublons OT en base de données
 - [x] Index uniques sur champ `id` pour 25 collections (protection anti-doublons permanente)
 - [x] Tests automatisés: 100% backend + frontend

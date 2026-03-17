@@ -79,7 +79,7 @@ export default function AssigneeSelector({
               <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 bg-gray-50 uppercase tracking-wider">
                 Services
               </div>
-              {targets.poles.map(pole => (
+              {targets.poles.filter(pole => pole.id).map(pole => (
                 <SelectItem key={pole.id} value={pole.id}>
                   <span className="flex items-center gap-2">
                     <span className="inline-block w-2 h-2 rounded-full bg-blue-500" />
@@ -96,7 +96,7 @@ export default function AssigneeSelector({
               <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 bg-gray-50 uppercase tracking-wider">
                 Utilisateurs
               </div>
-              {targets.users.map(user => (
+              {targets.users.filter(user => user.id).map(user => (
                 <SelectItem key={user.id} value={user.id}>
                   <span className="flex items-center gap-2">
                     <span className="inline-block w-2 h-2 rounded-full bg-green-500" />
