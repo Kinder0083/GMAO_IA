@@ -16,6 +16,7 @@ import { Paperclip, Camera } from 'lucide-react';
 import { useToast } from '../../hooks/use-toast';
 import { improvementsAPI, equipmentsAPI, locationsAPI, usersAPI } from '../../services/api';
 import StatusChangeDialog from './StatusChangeDialog';
+import AssigneeSelector from '../AssigneeSelector';
 import { formatErrorMessage } from '../../utils/errorFormatter';
 
 const ImprovementFormDialog = ({ open, onOpenChange, workOrder, onSuccess }) => {
@@ -319,22 +320,18 @@ const ImprovementFormDialog = ({ open, onOpenChange, workOrder, onSuccess }) => 
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="assigne_a_id">Assigné à</Label>
-            <Select value={formData.assigne_a_id || '_none_'} onValueChange={(value) => setFormData({ ...formData, assigne_a_id: value === '_none_' ? '' : value })}>
-              <SelectTrigger>
-                <SelectValue placeholder="Sélectionner un technicien" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="_none_" className="text-gray-400 italic">
-                  Aucun
-                </SelectItem>
-                {users.map(user => (
-                  <SelectItem key={user.id} value={user.id}>
-                    {user.prenom} {user.nom}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <AssigneeSelector
+              value={formData.assigne_type === 'service' && formData.assigne_service 
+                ? `service:${formData.assigne_service}` 
+                : (formData.assigne_a_id || '')}
+              onChange={(val, type, serviceName) => setFormData({
+                ...formData,
+                assigne_a_id: type === 'service' ? '' : val,
+                assigne_type: type,
+                assigne_service: serviceName
+              })}
+              dataTestId="improvement-assignee-selector"
+            />
           </div>
 
           <div className="space-y-2">

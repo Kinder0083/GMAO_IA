@@ -461,7 +461,7 @@ const PreventiveMaintenance = () => {
                   {/* Assigned To */}
                   {item.assigneA && (
                     <div>
-                      <p className="text-xs text-gray-600 mb-2">Assigné à</p>
+                      <p className="text-xs text-gray-600 mb-2">Assigner à</p>
                       <div className="flex items-center gap-2">
                         <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
                           <span className="text-white text-xs font-medium">

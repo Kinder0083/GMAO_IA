@@ -13,6 +13,7 @@ import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { useToast } from '../../hooks/use-toast';
 import { improvementRequestsAPI, usersAPI } from '../../services/api';
+import AssigneeSelector from '../AssigneeSelector';
 import { formatErrorMessage } from '../../utils/errorFormatter';
 
 const ConvertToImprovementDialog = ({ open, onOpenChange, request, onSuccess }) => {
@@ -91,20 +92,13 @@ const ConvertToImprovementDialog = ({ open, onOpenChange, request, onSuccess }) 
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="assignee">Assigner à (optionnel)</Label>
-            <Select value={assigneeId || "none"} onValueChange={(value) => setAssigneeId(value === "none" ? "" : value)}>
-              <SelectTrigger id="assignee">
-                <SelectValue placeholder="Sélectionner un utilisateur" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">Non assigné</SelectItem>
-                {users.map(user => (
-                  <SelectItem key={user.id} value={user.id}>
-                    {user.prenom} {user.nom} ({user.role})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <AssigneeSelector
+              value={assigneeId || ''}
+              onChange={(val, type, serviceName) => {
+                setAssigneeId(type === 'service' ? '' : val);
+              }}
+              dataTestId="convert-improvement-assignee-selector"
+            />
           </div>
 
           <div className="space-y-2">

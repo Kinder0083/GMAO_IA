@@ -860,6 +860,8 @@ class WorkOrderBase(BaseModel):
     categorie: Optional[WorkOrderCategory] = None
     equipement_id: Optional[str] = None
     assigne_a_id: Optional[str] = None
+    assigne_type: Optional[str] = None  # "user" ou "service"
+    assigne_service: Optional[str] = None  # Nom du service si assigne_type == "service"
     emplacement_id: Optional[str] = None
     dateLimite: Optional[datetime] = None
     tempsEstime: Optional[float] = None
@@ -879,6 +881,8 @@ class WorkOrderUpdate(BaseModel):
     categorie: Optional[WorkOrderCategory] = None
     equipement_id: Optional[str] = None
     assigne_a_id: Optional[str] = None
+    assigne_type: Optional[str] = None
+    assigne_service: Optional[str] = None
     emplacement_id: Optional[str] = None
     dateLimite: Optional[datetime] = None
     tempsEstime: Optional[float] = None

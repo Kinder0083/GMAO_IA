@@ -13,6 +13,7 @@ import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { useToast } from '../../hooks/use-toast';
 import { interventionRequestsAPI, usersAPI } from '../../services/api';
+import AssigneeSelector from '../AssigneeSelector';
 import { formatErrorMessage } from '../../utils/errorFormatter';
 
 const ConvertToWorkOrderDialog = ({ open, onOpenChange, request, onSuccess }) => {
@@ -20,12 +21,16 @@ const ConvertToWorkOrderDialog = ({ open, onOpenChange, request, onSuccess }) =>
   const [loading, setLoading] = useState(false);
   const [users, setUsers] = useState([]);
   const [assigneeId, setAssigneeId] = useState('');
+  const [assigneeType, setAssigneeType] = useState(null);
+  const [assigneeService, setAssigneeService] = useState(null);
   const [dateLimite, setDateLimite] = useState('');
 
   useEffect(() => {
     if (open) {
       loadUsers();
       setAssigneeId('');
+      setAssigneeType(null);
+      setAssigneeService(null);
       // Pré-remplir avec la date limite désirée si disponible
       if (request?.date_limite_desiree) {
         setDateLimite(request.date_limite_desiree.split('T')[0]);
@@ -91,20 +96,17 @@ const ConvertToWorkOrderDialog = ({ open, onOpenChange, request, onSuccess }) =>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="assignee">Assigner à (optionnel)</Label>
-            <Select value={assigneeId || "none"} onValueChange={(value) => setAssigneeId(value === "none" ? "" : value)}>
-              <SelectTrigger id="assignee">
-                <SelectValue placeholder="Sélectionner un utilisateur" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">Non assigné</SelectItem>
-                {users.map(user => (
-                  <SelectItem key={user.id} value={user.id}>
-                    {user.prenom} {user.nom} ({user.role})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <AssigneeSelector
+              value={assigneeType === 'service' && assigneeService 
+                ? `service:${assigneeService}` 
+                : (assigneeId || '')}
+              onChange={(val, type, serviceName) => {
+                setAssigneeId(type === 'service' ? '' : val);
+                setAssigneeType(type);
+                setAssigneeService(serviceName);
+              }}
+              dataTestId="convert-wo-assignee-selector"
+            />
           </div>
 
           <div className="space-y-2">

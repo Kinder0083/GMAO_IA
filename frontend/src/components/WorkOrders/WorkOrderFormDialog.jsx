@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Paperclip, Camera, X, Eye, Upload } from 'lucide-react';
 import { useToast } from '../../hooks/use-toast';
 import { workOrdersAPI, equipmentsAPI, locationsAPI, usersAPI, workOrderTemplatesAPI } from '../../services/api';
+import AssigneeSelector from '../AssigneeSelector';
 import StatusChangeDialog from './StatusChangeDialog';
 import { validateDateNotPast } from '../../utils/dateValidation';
 import { formatErrorMessage } from '../../utils/errorFormatter';
@@ -534,22 +535,18 @@ const WorkOrderFormDialog = ({ open, onOpenChange, workOrder, prefillData, onSuc
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="assigne_a_id">Assigné à</Label>
-            <Select value={formData.assigne_a_id || '_none_'} onValueChange={(value) => setFormData({ ...formData, assigne_a_id: value === '_none_' ? '' : value })}>
-              <SelectTrigger>
-                <SelectValue placeholder="Sélectionner un technicien" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="_none_" className="text-gray-400 italic">
-                  Aucun
-                </SelectItem>
-                {users.map(user => (
-                  <SelectItem key={user.id} value={user.id}>
-                    {user.prenom} {user.nom}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <AssigneeSelector
+              value={formData.assigne_type === 'service' && formData.assigne_service 
+                ? `service:${formData.assigne_service}` 
+                : (formData.assigne_a_id || '')}
+              onChange={(val, type, serviceName) => setFormData({
+                ...formData,
+                assigne_a_id: val === '' ? '' : (type === 'service' ? '' : val),
+                assigne_type: type,
+                assigne_service: serviceName
+              })}
+              dataTestId="wo-assignee-selector"
+            />
           </div>
 
           <div className="space-y-2">

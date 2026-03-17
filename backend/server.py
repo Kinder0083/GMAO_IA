@@ -1239,6 +1239,69 @@ async def get_service_manager_stats(current_user: dict = Depends(get_current_use
     }
 
 
+
+
+@api_router.get("/assignment-targets", tags=["Utilisateurs"])
+async def get_assignment_targets(current_user: dict = Depends(get_current_user)):
+    """Retourne les cibles d'assignation : services (pôles) en premier, puis utilisateurs triés par ordre alphabétique."""
+    # Récupérer les services uniques depuis service_responsables
+    service_entries = await db.service_responsables.find({}, {"_id": 0}).to_list(length=200)
+    service_names = sorted(set(e.get("service", "") for e in service_entries if e.get("service")))
+
+    poles = []
+    for svc in service_names:
+        # Compter les membres du service
+        members = [e for e in service_entries if e.get("service") == svc]
+        poles.append({
+            "id": f"service:{svc}",
+            "nom": svc,
+            "type": "service",
+            "membres": len(members)
+        })
+
+    # Récupérer les utilisateurs actifs triés par nom
+    users_cursor = db.users.find(
+        {"$or": [{"actif": True}, {"statut": "actif"}], "deleted_at": {"$exists": False}},
+        {"_id": 0, "id": 1, "nom": 1, "prenom": 1, "role": 1, "email": 1}
+    ).sort([("nom", 1), ("prenom", 1)])
+    users = []
+    async for u in users_cursor:
+        users.append({
+            "id": u.get("id", ""),
+            "nom": u.get("nom", ""),
+            "prenom": u.get("prenom", ""),
+            "role": u.get("role", ""),
+            "type": "user"
+        })
+
+    return {"poles": poles, "users": users}
+
+
+async def notify_service_assignment(wo_dict: dict, service_name: str, current_user_id: str):
+    """Notifie tous les utilisateurs d'un service lorsqu'un OT leur est assigné."""
+    try:
+        from notifications import notify_work_order_assigned
+        entries = await db.service_responsables.find({"service": service_name}).to_list(length=100)
+        for entry in entries:
+            uid = entry.get("user_id")
+            if uid and uid != current_user_id:
+                asyncio.create_task(
+                    notify_work_order_assigned(
+                        db=db,
+                        work_order_id=wo_dict.get("id", ""),
+                        work_order_title=wo_dict.get("titre", ""),
+                        work_order_numero=wo_dict.get("numero", ""),
+                        assigned_user_id=uid
+                    )
+                )
+                asyncio.create_task(
+                    notify_work_order_assigned_web(db, wo_dict, uid, current_user_id)
+                )
+        logger.info(f"[PUSH] Notification service {service_name}: {len(entries)} membre(s) notifié(s)")
+    except Exception as e:
+        logger.error(f"[PUSH] Erreur notification service: {e}")
+
+
 # ==================== WORK ORDERS ROUTES ====================
 @api_router.get("/work-orders", response_model=List[WorkOrder], tags=["Ordres de Travail"],
     summary="Lister les ordres de travail",
@@ -1447,9 +1510,13 @@ async def create_work_order(wo_create: WorkOrderCreate, current_user: dict = Dep
     if wo.get("equipement_id"):
         wo["equipement"] = await get_equipment_by_id(wo["equipement_id"])
     
-    # Notification push si un utilisateur est assigne
-    logger.info(f"[PUSH TRIGGER CREATE] assigne_a_id={wo_create.assigne_a_id}, current_user_id={current_user.get('id')}")
-    if wo_create.assigne_a_id and wo_create.assigne_a_id != current_user.get("id"):
+    # Notification push si un utilisateur ou service est assigné
+    logger.info(f"[PUSH TRIGGER CREATE] assigne_a_id={wo_create.assigne_a_id}, assigne_type={wo_create.assigne_type}, assigne_service={wo_create.assigne_service}")
+    if wo_create.assigne_type == "service" and wo_create.assigne_service:
+        asyncio.create_task(
+            notify_service_assignment(wo, wo_create.assigne_service, current_user.get("id"))
+        )
+    elif wo_create.assigne_a_id and wo_create.assigne_a_id != current_user.get("id"):
         from notifications import notify_work_order_assigned
         logger.info(f"[PUSH TRIGGER CREATE] Envoi notification a {wo_create.assigne_a_id}")
         asyncio.create_task(
@@ -1545,13 +1612,15 @@ async def update_work_order(wo_id: str, wo_update: WorkOrderUpdate, current_user
             # 2. Il a été explicitement envoyé (même si None) pour les champs qui peuvent être "vidés"
             if v is not None:
                 update_data[k] = v
-            elif k in sent_data and k in ['assigne_a_id', 'equipement_id', 'emplacement_id', 'dateLimite']:
+            elif k in sent_data and k in ['assigne_a_id', 'assigne_type', 'assigne_service', 'equipement_id', 'emplacement_id', 'dateLimite']:
                 # Ces champs peuvent être explicitement mis à null pour les "vider"
                 update_data[k] = None
         
-        # Si on vide assigne_a_id, il faut aussi vider assigneA
+        # Si on vide assigne_a_id, il faut aussi vider assigneA et assigne_service
         if 'assigne_a_id' in update_data and update_data['assigne_a_id'] is None:
             update_data['assigneA'] = None
+        if 'assigne_type' in update_data and update_data['assigne_type'] is None:
+            update_data['assigne_service'] = None
         
         # Si on vide equipement_id, il faut aussi vider equipement
         if 'equipement_id' in update_data and update_data['equipement_id'] is None:
@@ -1608,9 +1677,13 @@ async def update_work_order(wo_id: str, wo_update: WorkOrderUpdate, current_user
         # Notifications push
         from notifications import notify_work_order_assigned, notify_work_order_status_changed
         
-        # Notification si changement d'assignation
-        logger.info(f"[PUSH TRIGGER UPDATE] update_data keys={list(update_data.keys())}, assigne_a_id in update={update_data.get('assigne_a_id')}")
-        if "assigne_a_id" in update_data and update_data.get("assigne_a_id"):
+        # Notification si changement d'assignation (service ou utilisateur)
+        logger.info(f"[PUSH TRIGGER UPDATE] update_data keys={list(update_data.keys())}")
+        if "assigne_type" in update_data and update_data.get("assigne_type") == "service" and update_data.get("assigne_service"):
+            asyncio.create_task(
+                notify_service_assignment(wo, update_data["assigne_service"], current_user.get("id"))
+            )
+        elif "assigne_a_id" in update_data and update_data.get("assigne_a_id"):
             new_assigne = update_data["assigne_a_id"]
             old_assigne = existing_wo.get("assigne_a_id")
             logger.info(f"[PUSH TRIGGER UPDATE] Assignation: old={old_assigne} -> new={new_assigne}, current={current_user.get('id')}")

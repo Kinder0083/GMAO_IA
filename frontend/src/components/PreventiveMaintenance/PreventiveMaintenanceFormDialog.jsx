@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { useToast } from '../../hooks/use-toast';
 import { preventiveMaintenanceAPI, equipmentsAPI, usersAPI } from '../../services/api';
 import { formatErrorMessage } from '../../utils/errorFormatter';
+import AssigneeSelector from '../AssigneeSelector';
 import { ClipboardCheck, CheckCircle, Paperclip } from 'lucide-react';
 import AttachmentUploader from '../shared/AttachmentUploader';
 import AttachmentsList from '../shared/AttachmentsList';
@@ -193,19 +194,19 @@ const PreventiveMaintenanceFormDialog = ({ open, onOpenChange, maintenance, onSu
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="assigne_a_id">Assigné à *</Label>
-            <Select value={formData.assigne_a_id} onValueChange={(value) => setFormData({ ...formData, assigne_a_id: value })}>
-              <SelectTrigger>
-                <SelectValue placeholder="Sélectionner un technicien" />
-              </SelectTrigger>
-              <SelectContent>
-                {users.map(user => (
-                  <SelectItem key={user.id} value={user.id}>
-                    {user.prenom} {user.nom}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <AssigneeSelector
+              value={formData.assigne_type === 'service' && formData.assigne_service 
+                ? `service:${formData.assigne_service}` 
+                : (formData.assigne_a_id || '')}
+              onChange={(val, type, serviceName) => setFormData({
+                ...formData,
+                assigne_a_id: type === 'service' ? '' : val,
+                assigne_type: type,
+                assigne_service: serviceName
+              })}
+              required
+              dataTestId="pm-assignee-selector"
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-4">

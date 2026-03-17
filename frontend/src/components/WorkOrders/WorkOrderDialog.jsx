@@ -598,12 +598,12 @@ const WorkOrderDialog = ({ open, onOpenChange, workOrder, onSuccess }) => {
               </div>
             </div>
 
-            {/* Assigné à */}
+            {/* Assigner à */}
             {workOrder.assigneA && (
               <div className="flex items-start gap-3">
                 <User size={18} className="text-purple-600 mt-1" />
                 <div>
-                  <p className="text-sm text-gray-600">Assigné à</p>
+                  <p className="text-sm text-gray-600">Assigner à</p>
                   <p className="font-medium text-gray-900">
                     {workOrder.assigneA.prenom} {workOrder.assigneA.nom}
                   </p>
