@@ -366,13 +366,26 @@ def serialize_doc(doc, _is_root=True):
     
     return doc
 
-async def get_user_by_id(user_id: str):
-    """Get user details by ID"""
+async def find_user_flexible(user_id: str):
+    """Trouve un utilisateur par _id (ObjectId) ou par champ id (UUID/string)."""
     try:
         user = await db.users.find_one({"_id": ObjectId(user_id)})
         if user:
+            return user
+    except Exception:
+        pass
+    # Fallback: chercher par le champ id (UUID ou string)
+    user = await db.users.find_one({"id": user_id})
+    return user
+
+
+async def get_user_by_id(user_id: str):
+    """Get user details by ID"""
+    try:
+        user = await find_user_flexible(user_id)
+        if user:
             return {
-                "id": str(user["_id"]),
+                "id": user.get("id", str(user["_id"])),
                 "nom": user.get("nom"),
                 "prenom": user.get("prenom"),
                 "email": user.get("email"),
@@ -4100,6 +4113,10 @@ async def get_users(current_user: dict = Depends(get_current_user)):
 async def update_user(user_id: str, user_update: UserUpdate, current_user: dict = Depends(get_current_admin_user)):
     """Modifier un utilisateur (admin uniquement)"""
     try:
+        user = await find_user_flexible(user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+        
         update_data = {k: v for k, v in user_update.model_dump().items() if v is not None}
         
         # Si le rôle change, mettre à jour automatiquement les permissions par défaut
@@ -4109,12 +4126,12 @@ async def update_user(user_id: str, user_update: UserUpdate, current_user: dict 
             update_data["permissions"] = default_permissions
         
         await db.users.update_one(
-            {"_id": ObjectId(user_id)},
+            {"_id": user["_id"]},
             {"$set": update_data}
         )
         
-        user = await db.users.find_one({"_id": ObjectId(user_id)})
-        user_response = User(**serialize_doc(user))
+        updated = await db.users.find_one({"_id": user["_id"]})
+        user_response = User(**serialize_doc(updated))
         
         # Émettre l'événement WebSocket à TOUS les utilisateurs (y compris celui qui fait la modification)
         # Important pour la synchronisation du Planning quand on modifie un service
@@ -4138,7 +4155,7 @@ async def update_user(user_id: str, user_update: UserUpdate, current_user: dict 
     summary="Obtenir la visibilité des icônes header d'un utilisateur", tags=["Utilisateurs"])
 async def get_user_header_visibility(user_id: str, current_user: dict = Depends(get_current_user)):
     """Obtenir les paramètres de visibilité des icônes header pour un utilisateur"""
-    user = await db.users.find_one({"_id": ObjectId(user_id)}, {"header_icons_visibility": 1})
+    user = await find_user_flexible(user_id)
     if not user:
         raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
     return user.get("header_icons_visibility", {})
@@ -4151,12 +4168,12 @@ async def update_user_header_visibility(
     current_user: dict = Depends(get_current_admin_user)
 ):
     """Modifier les paramètres de visibilité des icônes header (admin uniquement)"""
-    user = await db.users.find_one({"_id": ObjectId(user_id)})
+    user = await find_user_flexible(user_id)
     if not user:
         raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
     
     await db.users.update_one(
-        {"_id": ObjectId(user_id)},
+        {"_id": user["_id"]},
         {"$set": {"header_icons_visibility": visibility}}
     )
     
@@ -4172,16 +4189,18 @@ async def delete_user(user_id: str, current_user: dict = Depends(get_current_adm
         if str(user_id) == str(current_user.get('id')):
             raise HTTPException(status_code=400, detail="Vous ne pouvez pas vous supprimer vous-même")
         
+        user = await find_user_flexible(user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+        
         result = await db.users.update_one(
-            {"_id": ObjectId(user_id)},
+            {"_id": user["_id"]},
             {"$set": {
                 "deleted_at": datetime.now(timezone.utc),
                 "deleted_by": current_user["id"],
                 "deleted_by_name": f"{current_user.get('prenom', '')} {current_user.get('nom', '')}"
             }}
         )
-        if result.matched_count == 0:
-            raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
         
         # Émettre l'événement WebSocket
         try:
@@ -4252,7 +4271,7 @@ async def invite_user(user_invite: UserInvite, current_user: dict = Depends(get_
 async def get_user_permissions(user_id: str, current_user: dict = Depends(get_current_admin_user)):
     """Obtenir les permissions d'un utilisateur"""
     try:
-        user = await db.users.find_one({"_id": ObjectId(user_id)})
+        user = await find_user_flexible(user_id)
         if not user:
             raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
         
@@ -4330,18 +4349,18 @@ async def update_user_permissions(
 ):
     """Mettre à jour les permissions d'un utilisateur (admin uniquement)"""
     try:
-        user = await db.users.find_one({"_id": ObjectId(user_id)})
+        user = await find_user_flexible(user_id)
         if not user:
             raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
         
         permissions_dict = permissions_update.permissions.model_dump()
         
         await db.users.update_one(
-            {"_id": ObjectId(user_id)},
+            {"_id": user["_id"]},
             {"$set": {"permissions": permissions_dict}}
         )
         
-        updated_user = await db.users.find_one({"_id": ObjectId(user_id)})
+        updated_user = await db.users.find_one({"_id": user["_id"]})
         return User(**serialize_doc(updated_user))
     except HTTPException:
         raise
@@ -4451,7 +4470,7 @@ async def set_password_permanent(
     """
     try:
         # Vérifier que l'utilisateur existe
-        user = await db.users.find_one({"_id": ObjectId(user_id)})
+        user = await find_user_flexible(user_id)
         if not user:
             raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
         
@@ -4467,7 +4486,7 @@ async def set_password_permanent(
         
         # Mettre à jour le champ firstLogin à False
         await db.users.update_one(
-            {"_id": ObjectId(user_id)},
+            {"_id": user["_id"]},
             {"$set": {"firstLogin": False}}
         )
         
@@ -4507,7 +4526,7 @@ async def reset_password_admin(
     """
     try:
         # Vérifier que l'utilisateur existe
-        user = await db.users.find_one({"_id": ObjectId(user_id)})
+        user = await find_user_flexible(user_id)
         if not user:
             raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
         
@@ -4519,7 +4538,7 @@ async def reset_password_admin(
         
         # Mettre à jour le mot de passe et forcer le changement au prochain login
         await db.users.update_one(
-            {"_id": ObjectId(user_id)},
+            {"_id": user["_id"]},
             {
                 "$set": {
                     "hashed_password": hashed_password,
