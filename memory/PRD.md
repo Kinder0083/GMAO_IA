@@ -18,6 +18,7 @@ Application GMAO / FSAO avec module "Arbre des Causes" pour l'analyse d'accident
 - [x] Fix ConvertToImprovementDialog: ajout états assigneeType/assigneeService manquants
 - [x] Fix BonDeTravailForm: fallback défensif pour éviter crash sur tableaux undefined
 - [x] Nettoyage doublons OT en base de données
+- [x] Index uniques sur champ `id` pour 25 collections (protection anti-doublons permanente)
 - [x] Tests automatisés: 100% backend + frontend
 
 ### 17 Mars 2026 - Assignation aux Services

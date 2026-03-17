@@ -11813,6 +11813,49 @@ async def create_notification_indexes():
 
 
 @app.on_event("startup")
+async def create_unique_id_indexes():
+    """Crée des index uniques sur le champ 'id' pour toutes les collections métier afin d'éviter les doublons."""
+    collections = [
+        "work_orders",
+        "intervention_requests",
+        "improvements",
+        "improvement_requests",
+        "preventive_maintenance",
+        "preventive_maintenances",
+        "equipments",
+        "locations",
+        "users",
+        "checklist_templates",
+        "checklist_executions",
+        "checklists",
+        "inventory",
+        "inventory_services",
+        "purchase_requests",
+        "contracts",
+        "sensors",
+        "vendors",
+        "accident_analyses",
+        "bons_travail",
+        "loto_consignations",
+        "consignes",
+        "roles",
+        "notifications",
+        "demandes_arret",
+    ]
+    created = 0
+    for coll_name in collections:
+        try:
+            coll = db[coll_name]
+            await coll.create_index("id", unique=True, sparse=True)
+            created += 1
+        except Exception as e:
+            logger.warning(f"Index unique 'id' pour {coll_name}: {e}")
+    logger.info(f"✅ Index uniques 'id' créés/vérifiés pour {created}/{len(collections)} collections")
+
+
+
+
+@app.on_event("startup")
 async def start_trash_purge_scheduler():
     """Demarre le cron job de purge de la corbeille toutes les 12h"""
     try:
