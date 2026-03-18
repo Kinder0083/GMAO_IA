@@ -41,6 +41,13 @@ Application web PWA de gestion de maintenance industrielle. Frontend React + Bac
   - `sw.js`: tag + requireInteraction dans les options push
 - **P4 Déduplication services** — Corrigé (18/03/2026)
   - `service_responsables`: 'Maintenance' → 'MAINTENANCE'
+- **Monitoring Santé Notifications** — Implémenté (18/03/2026)
+  - Backend: 3 endpoints `/api/health/notifications`, `/history`, `/force-check`
+  - Cron job toutes les 30 min avec alerte admin en cas d'erreur
+  - Frontend: Carte de santé + section détaillée dans "Santé Système"
+  - 5 indicateurs: Clés VAPID, Abo. Web, Tokens Mobile, Envois 24h, Cron Reçus
+  - Historique des vérifications + bouton "Vérifier maintenant"
+  - Journalisation des envois/échecs dans `notification_health_logs`
 
 ### Tâches à venir
 - **(P2)** Corriger la logique de détection des membres d'un service (notifier tous les membres, pas seulement les responsables)
@@ -48,6 +55,10 @@ Application web PWA de gestion de maintenance industrielle. Frontend React + Bac
 
 ### Backlog
 - Dédupliquer d'autres inconsistances de casse dans les collections si nécessaire
+
+## Collections MongoDB ajoutées
+- `notification_health_checks`: Résultats des vérifications de santé (type, timestamp, overall, details)
+- `notification_health_logs`: Logs d'envoi/échec pour le suivi (type, user_id, timestamp, tag/error)
 
 ## Clés d'API
 - VAPID keys dans backend/.env
