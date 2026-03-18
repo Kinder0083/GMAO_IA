@@ -11,7 +11,11 @@ Application GMAO / FSAO avec module "Arbre des Causes" pour l'analyse d'accident
 
 ## Taches Accomplies
 
-### 17 Mars 2026 - Fix P0 Ecran Blanc (Assignation Services)
+### 17 Mars 2026 - Fix Validation OT (Erreur lors de la validation)
+- [x] **ROOT CAUSE**: Les endpoints `/comments` et `/add-time` utilisaient `ObjectId(wo_id)` qui crashait sur les UUID
+- [x] Créé helper `find_work_order_flexible()` (cherche par `id` UUID puis fallback `_id` ObjectId)
+- [x] Corrigé 6 endpoints OT: add-comment, add-time, delete, upload-attachment, add-parts, get-comments
+- [x] Test validé: commentaire + temps enregistrés avec succès via le frontend
 - [x] **ROOT CAUSE**: `<SelectItem value="">` dans AssigneeSelector crashait React quand un utilisateur en base avait un `id` vide
 - [x] Fix frontend: filtre `.filter(item => item.id)` avant rendu des SelectItem
 - [x] Fix backend: skip les utilisateurs sans `id` dans `/api/assignment-targets`

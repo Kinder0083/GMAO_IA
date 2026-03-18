@@ -379,6 +379,18 @@ async def find_user_flexible(user_id: str):
     return user
 
 
+async def find_work_order_flexible(wo_id: str):
+    """Trouve un OT par champ id (UUID) ou par _id (ObjectId)."""
+    wo = await db.work_orders.find_one({"id": wo_id})
+    if wo:
+        return wo
+    try:
+        wo = await db.work_orders.find_one({"_id": ObjectId(wo_id)})
+    except Exception:
+        pass
+    return wo
+
+
 async def get_user_by_id(user_id: str):
     """Get user details by ID"""
     try:
@@ -1771,9 +1783,11 @@ async def add_time_to_work_order(wo_id: str, time_data: AddTimeSpent, current_us
     """Ajouter du temps passé à un ordre de travail"""
     try:
         # Récupérer l'ordre de travail existant
-        existing_wo = await db.work_orders.find_one({"_id": ObjectId(wo_id)})
+        existing_wo = await find_work_order_flexible(wo_id)
         if not existing_wo:
             raise HTTPException(status_code=404, detail="Ordre de travail non trouvé")
+        
+        wo_oid = existing_wo["_id"]
         
         # Convertir le temps en heures décimales
         time_to_add = time_data.hours + (time_data.minutes / 60.0)
@@ -1795,7 +1809,7 @@ async def add_time_to_work_order(wo_id: str, time_data: AddTimeSpent, current_us
         
         # Mettre à jour l'ordre de travail avec le temps total ET l'entrée d'historique
         await db.work_orders.update_one(
-            {"_id": ObjectId(wo_id)},
+            {"_id": wo_oid},
             {
                 "$set": {"tempsReel": new_time},
                 "$push": {"time_entries": time_entry}
@@ -1809,14 +1823,14 @@ async def add_time_to_work_order(wo_id: str, time_data: AddTimeSpent, current_us
             user_email=current_user["email"],
             action=ActionType.UPDATE,
             entity_type=EntityType_Audit.WORK_ORDER,
-            entity_id=str(existing_wo["_id"]),
+            entity_id=str(wo_oid),
             entity_name=existing_wo["titre"],
             details=f"Ajout de temps passé: {time_data.hours}h{time_data.minutes:02d}min",
             changes={"tempsReel_old": current_time, "tempsReel_new": new_time, "time_added": time_to_add}
         )
         
         # Récupérer l'ordre de travail mis à jour
-        wo = await db.work_orders.find_one({"_id": ObjectId(wo_id)})
+        wo = await db.work_orders.find_one({"_id": wo_oid})
         wo = serialize_doc(wo)
         
         if wo.get("assigne_a_id"):
@@ -1839,12 +1853,14 @@ async def delete_work_order(wo_id: str, current_user: dict = Depends(require_per
     """Supprimer un ordre de travail"""
     try:
         # Récupérer l'ordre de travail avant suppression pour le log
-        wo = await db.work_orders.find_one({"_id": ObjectId(wo_id)})
+        wo = await find_work_order_flexible(wo_id)
         if not wo:
             raise HTTPException(status_code=404, detail="Ordre de travail non trouvé")
         
+        wo_oid = wo["_id"]
+        
         result = await db.work_orders.update_one(
-            {"_id": ObjectId(wo_id)},
+            {"_id": wo_oid},
             {"$set": {
                 "deleted_at": datetime.now(timezone.utc),
                 "deleted_by": current_user["id"],
@@ -1895,9 +1911,11 @@ async def upload_attachment(
     """Uploader une pièce jointe (max 25MB)"""
     try:
         # Vérifier que l'ordre de travail existe
-        wo = await db.work_orders.find_one({"_id": ObjectId(wo_id)})
+        wo = await find_work_order_flexible(wo_id)
         if not wo:
             raise HTTPException(status_code=404, detail="Ordre de travail non trouvé")
+        
+        wo_oid = wo["_id"]
         
         # Vérifier la taille du fichier
         content = await file.read()
@@ -1925,7 +1943,7 @@ async def upload_attachment(
         
         # Ajouter à la base de données
         await db.work_orders.update_one(
-            {"_id": ObjectId(wo_id)},
+            {"_id": wo_oid},
             {"$push": {"attachments": attachment}}
         )
         
@@ -7007,10 +7025,12 @@ async def add_work_order_comment(
 ):
     """Ajoute un commentaire et des pièces utilisées à un ordre de travail"""
     try:
-        # Vérifier que l'ordre de travail existe (chercher par _id ObjectId)
-        work_order = await db.work_orders.find_one({"_id": ObjectId(work_order_id)})
+        # Vérifier que l'ordre de travail existe (flexible: id UUID ou _id ObjectId)
+        work_order = await find_work_order_flexible(work_order_id)
         if not work_order:
             raise HTTPException(status_code=404, detail="Ordre de travail non trouvé")
+        
+        wo_oid = work_order["_id"]
         
         # Créer le commentaire
         new_comment = {
@@ -7060,7 +7080,7 @@ async def add_work_order_comment(
         if parts_used_list:
             # Push commentaire ET pièces utilisées en une seule opération
             await db.work_orders.update_one(
-                {"_id": ObjectId(work_order_id)},
+                {"_id": wo_oid},
                 {
                     "$push": {
                         "comments": new_comment,
@@ -7071,7 +7091,7 @@ async def add_work_order_comment(
         else:
             # Push seulement le commentaire
             await db.work_orders.update_one(
-                {"_id": ObjectId(work_order_id)},
+                {"_id": wo_oid},
                 {"$push": {"comments": new_comment}}
             )
         
@@ -7111,9 +7131,11 @@ async def add_work_order_parts(
     """Ajoute des pièces utilisées à un ordre de travail SANS créer de commentaire"""
     try:
         # Vérifier que l'ordre de travail existe
-        work_order = await db.work_orders.find_one({"_id": ObjectId(work_order_id)})
+        work_order = await find_work_order_flexible(work_order_id)
         if not work_order:
             raise HTTPException(status_code=404, detail="Ordre de travail non trouvé")
+        
+        wo_oid = work_order["_id"]
         
         # Traiter les pièces utilisées
         parts_used_list = []
@@ -7152,7 +7174,7 @@ async def add_work_order_parts(
         
         # Ajouter les pièces à l'ordre de travail (SANS commentaire)
         await db.work_orders.update_one(
-            {"_id": ObjectId(work_order_id)},
+            {"_id": wo_oid},
             {"$push": {"parts_used": {"$each": parts_used_list}}}
         )
         
@@ -7186,7 +7208,7 @@ async def get_work_order_comments(
 ):
     """Récupère tous les commentaires d'un ordre de travail"""
     try:
-        work_order = await db.work_orders.find_one({"_id": ObjectId(work_order_id)})
+        work_order = await find_work_order_flexible(work_order_id)
         if not work_order:
             raise HTTPException(status_code=404, detail="Ordre de travail non trouvé")
         
