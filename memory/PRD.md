@@ -1,50 +1,51 @@
-# FSAO Iris - GMAO (Gestion de Maintenance Assistée par Ordinateur)
+# FSAO Iris - GMAO (Gestion de Maintenance Assistee par Ordinateur)
 
 ## Description
-Application GMAO complète pour la gestion de maintenance industrielle, incluant ordres de travail, équipements, maintenance préventive, notifications push, chat en temps réel, et bien plus.
+Application GMAO complete pour la gestion de maintenance industrielle, incluant ordres de travail, equipements, maintenance preventive, notifications push, chat en temps reel, et bien plus.
 
 ## Architecture
 - **Frontend**: React (CRA) + Shadcn/UI + TailwindCSS
 - **Backend**: FastAPI + Motor (MongoDB async)
-- **Base de données**: MongoDB
+- **Base de donnees**: MongoDB
 - **Notifications**: Web Push (VAPID) + Expo Push (mobile)
-- **Temps réel**: WebSocket
+- **Temps reel**: WebSocket
 
-## Fonctionnalités principales
+## Fonctionnalites principales
 - Gestion des ordres de travail (OT) et demandes d'intervention (DI)
-- Maintenance préventive planifiée
-- Gestion des équipements et inventaire
+- Maintenance preventive planifiee
+- Gestion des equipements et inventaire
 - Notifications push (Web + Mobile)
-- Chat en temps réel
-- Système de rôles et permissions
+- Chat en temps reel
+- Systeme de roles et permissions
 - Dashboard IoT/MQTT
-- Système M.E.S.
+- Systeme M.E.S.
 - Rapports et analytics
 
-## Tâches accomplies
+## Taches accomplies
 
-### Session précédente
-- Monitoring santé des notifications
+### Sessions precedentes
+- Monitoring sante des notifications
 - Logique de notification de service (P2) - tous les membres
 - Normalisation casse des services (P4)
-- Champ temps estimé DI→OT
+- Champ temps estime DI->OT
 
 ### Session actuelle (18 mars 2026)
 - **[P0 CRITIQUE] Fix notifications Web Push** :
-  - Analyse comparative complète avec le dépôt GitHub fonctionnel
-  - Identification de la cause racine : boucle de désactivation/réabonnement
-  - Simplification de `usePWA.js` (suppression syncWithBackend, VAPID version tracking, force resubscribe)
-  - Correction de `web_push.py` : suppression de HTTP 400 de la liste de désactivation (seuls 404 et 410 désactivent)
-  - Simplification de `sw.js` pour correspondre à la version GitHub fonctionnelle
-  - Migration au démarrage pour réactiver les abonnements injustement désactivés par HTTP 400
+  - Analyse comparative complete avec le depot GitHub fonctionnel (https://github.com/Kinder0083/GMAO-PWA/)
+  - Cause racine identifiee : boucle de desactivation/reabonnement
+  - `usePWA.js` simplifie avec auto-sync au mount (comme version GitHub) + detection changement VAPID
+  - `web_push.py` : suppression HTTP 400 de la liste de desactivation (seuls 404 et 410)
+  - `sw.js` simplifie pour correspondre a la version GitHub fonctionnelle
+  - Migration au demarrage pour reactiver les abonnements desactives par HTTP 400
+  - Tous les endpoints API valides (VAPID key, subscribe, test, unsubscribe, dual-channel)
 
 ## Backlog
-- **(P3)** Tester le script de mise à jour `MAJ_FSAO.sh`
+- **(P3)** Tester le script de mise a jour `MAJ_FSAO.sh`
 
-## Fichiers clés notification
+## Fichiers cles notification
 - `backend/web_push.py` - Logique d'envoi Web Push
 - `backend/notifications.py` - Endpoints notification (Expo + Web Push)
-- `backend/server.py` - Endpoints web-push (lignes ~9295-9410)
-- `frontend/src/hooks/usePWA.js` - Hook de gestion Push côté client
-- `frontend/src/components/shared/PWABanner.jsx` - Auto-subscribe et bannière
+- `backend/server.py` - Endpoints web-push (~lignes 9307-9410), migration reactivation (~lignes 12083-12108)
+- `frontend/src/hooks/usePWA.js` - Hook de gestion Push cote client (auto-sync + subscribe + VAPID check)
+- `frontend/src/components/shared/PWABanner.jsx` - Auto-subscribe et banniere
 - `frontend/public/sw.js` - Service Worker

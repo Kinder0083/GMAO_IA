@@ -22,8 +22,72 @@ export function usePushNotifications() {
   useEffect(() => {
     const supported = 'serviceWorker' in navigator && 'PushManager' in window;
     setIsSupported(supported);
-    if (supported && 'Notification' in window) {
-      setPermission(Notification.permission);
+    if (!supported || !('Notification' in window)) return;
+
+    setPermission(Notification.permission);
+
+    // Auto-sync: if permission already granted, register existing subscription with backend
+    if (Notification.permission === 'granted' && !subscribedRef.current) {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
+      (async () => {
+        try {
+          const resp = await fetch(`${API_URL}/api/web-push/vapid-key`);
+          if (!resp.ok) return;
+          const { publicKey } = await resp.json();
+          if (!publicKey) return;
+
+          const registration = await navigator.serviceWorker.register('/sw.js');
+          await navigator.serviceWorker.ready;
+
+          let subscription = await registration.pushManager.getSubscription();
+
+          // If existing subscription uses a different VAPID key, re-subscribe
+          if (subscription) {
+            try {
+              const currentKey = subscription.options && subscription.options.applicationServerKey;
+              const newKey = urlBase64ToUint8Array(publicKey);
+              if (currentKey) {
+                const currentArr = new Uint8Array(currentKey);
+                if (currentArr.length !== newKey.length || !currentArr.every((v, i) => v === newKey[i])) {
+                  await subscription.unsubscribe();
+                  subscription = null;
+                }
+              }
+            } catch {
+              // If key comparison fails, keep existing subscription
+            }
+          }
+
+          if (!subscription) {
+            subscription = await registration.pushManager.subscribe({
+              userVisibleOnly: true,
+              applicationServerKey: urlBase64ToUint8Array(publicKey)
+            });
+          }
+
+          const browser = navigator.userAgent.includes('Firefox') ? 'firefox' :
+            navigator.userAgent.includes('Edg') ? 'edge' :
+            navigator.userAgent.includes('Chrome') ? 'chrome' : 'other';
+
+          const syncResp = await fetch(`${API_URL}/api/web-push/subscribe`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ subscription: subscription.toJSON(), browser })
+          });
+
+          if (syncResp.ok) {
+            subscribedRef.current = true;
+            setIsSubscribed(true);
+          }
+        } catch (e) {
+          console.warn('[PWA] Auto-sync failed:', e.message);
+        }
+      })();
     }
   }, []);
 
