@@ -339,46 +339,60 @@ const TourTooltip = ({ step, currentIndex, totalSteps, onNext, onPrev, onSkip, o
 
   useEffect(() => {
     const calculatePosition = () => {
+      const isMobile = window.innerWidth < 640;
+      const tooltipWidth = isMobile ? Math.min(400, window.innerWidth - 32) : 400;
+      const tooltipHeight = 200;
+      const margin = 16;
+
       if (!targetRect || step.placement === 'center') {
-        // Centrer au milieu de l'écran
         setPosition({
           top: window.innerHeight / 2 - 150,
-          left: window.innerWidth / 2 - 200
+          left: (window.innerWidth - tooltipWidth) / 2
         });
         return;
       }
 
-      const tooltipWidth = 400;
-      const tooltipHeight = 200;
-      const margin = 16;
-
       let top = 0;
       let left = 0;
 
-      switch (step.placement) {
-        case 'right':
-          top = targetRect.top + targetRect.height / 2 - tooltipHeight / 2;
-          left = targetRect.right + margin;
-          break;
-        case 'left':
-          top = targetRect.top + targetRect.height / 2 - tooltipHeight / 2;
-          left = targetRect.left - tooltipWidth - margin;
-          break;
-        case 'bottom':
-          top = targetRect.bottom + margin;
-          left = targetRect.left + targetRect.width / 2 - tooltipWidth / 2;
-          break;
-        case 'bottom-end':
-          top = targetRect.bottom + margin;
-          left = targetRect.right - tooltipWidth;
-          break;
-        case 'top':
+      if (isMobile) {
+        // Sur mobile, toujours centrer horizontalement et positionner en bas de la cible
+        top = targetRect.bottom + margin;
+        left = (window.innerWidth - tooltipWidth) / 2;
+        // Si pas assez de place en bas, mettre au-dessus
+        if (top + tooltipHeight > window.innerHeight - margin) {
           top = targetRect.top - tooltipHeight - margin;
-          left = targetRect.left + targetRect.width / 2 - tooltipWidth / 2;
-          break;
-        default:
-          top = targetRect.bottom + margin;
-          left = targetRect.left;
+        }
+        // Fallback: centrer verticalement
+        if (top < margin) {
+          top = window.innerHeight / 2 - tooltipHeight / 2;
+        }
+      } else {
+        switch (step.placement) {
+          case 'right':
+            top = targetRect.top + targetRect.height / 2 - tooltipHeight / 2;
+            left = targetRect.right + margin;
+            break;
+          case 'left':
+            top = targetRect.top + targetRect.height / 2 - tooltipHeight / 2;
+            left = targetRect.left - tooltipWidth - margin;
+            break;
+          case 'bottom':
+            top = targetRect.bottom + margin;
+            left = targetRect.left + targetRect.width / 2 - tooltipWidth / 2;
+            break;
+          case 'bottom-end':
+            top = targetRect.bottom + margin;
+            left = targetRect.right - tooltipWidth;
+            break;
+          case 'top':
+            top = targetRect.top - tooltipHeight - margin;
+            left = targetRect.left + targetRect.width / 2 - tooltipWidth / 2;
+            break;
+          default:
+            top = targetRect.bottom + margin;
+            left = targetRect.left;
+        }
       }
 
       // Ajuster si le tooltip sort de l'écran
@@ -404,14 +418,15 @@ const TourTooltip = ({ step, currentIndex, totalSteps, onNext, onPrev, onSkip, o
 
   return (
     <div
-      className="fixed z-[10001] bg-white rounded-xl shadow-2xl border border-gray-200 w-[400px] animate-fadeIn"
+      className="fixed z-[10001] bg-white rounded-xl shadow-2xl border border-gray-200 max-w-[400px] w-[calc(100vw-2rem)] animate-fadeIn"
       style={{ top: position.top, left: position.left }}
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-        <h3 className="text-lg font-semibold text-gray-800">{step.title}</h3>
+      <div className="flex items-center justify-between px-4 sm:px-5 py-3 sm:py-4 border-b border-gray-100">
+        <h3 className="text-base sm:text-lg font-semibold text-gray-800">{step.title}</h3>
         <button
           onClick={onClose}
+          onTouchEnd={(e) => { e.preventDefault(); onClose(); }}
           className="p-1 hover:bg-gray-100 rounded-full transition-colors"
         >
           <X size={18} className="text-gray-500" />
@@ -419,7 +434,7 @@ const TourTooltip = ({ step, currentIndex, totalSteps, onNext, onPrev, onSkip, o
       </div>
 
       {/* Content */}
-      <div className="px-5 py-4">
+      <div className="px-4 sm:px-5 py-3 sm:py-4">
         <p className="text-gray-600 text-sm leading-relaxed">{step.content}</p>
         {step.subContent && (
           <p className="text-gray-500 text-xs mt-3 italic">{step.subContent}</p>
@@ -427,13 +442,13 @@ const TourTooltip = ({ step, currentIndex, totalSteps, onNext, onPrev, onSkip, o
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-between px-5 py-4 bg-gray-50 rounded-b-xl border-t border-gray-100">
+      <div className="flex items-center justify-between px-4 sm:px-5 py-3 sm:py-4 bg-gray-50 rounded-b-xl border-t border-gray-100">
         {/* Progress */}
         <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-500">
+          <span className="text-xs sm:text-sm text-gray-500">
             {currentIndex + 1} / {totalSteps}
           </span>
-          <div className="flex gap-1">
+          <div className="hidden sm:flex gap-1">
             {Array.from({ length: totalSteps }).map((_, i) => (
               <div
                 key={i}
@@ -446,21 +461,23 @@ const TourTooltip = ({ step, currentIndex, totalSteps, onNext, onPrev, onSkip, o
         </div>
 
         {/* Buttons */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 sm:gap-2">
           {!isFirst && !step.isIntro && (
             <button
               onClick={onPrev}
-              className="flex items-center gap-1 px-3 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors text-sm"
+              onTouchEnd={(e) => { e.preventDefault(); onPrev(); }}
+              className="flex items-center gap-1 px-2 sm:px-3 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors text-sm"
             >
               <ChevronLeft size={16} />
-              Précédent
+              <span className="hidden sm:inline">Précédent</span>
             </button>
           )}
 
           {!isLast && (
             <button
               onClick={onSkip}
-              className="px-3 py-2 text-gray-500 hover:text-gray-700 text-sm"
+              onTouchEnd={(e) => { e.preventDefault(); onSkip(); }}
+              className="px-2 sm:px-3 py-2 text-gray-500 hover:text-gray-700 text-sm"
             >
               Passer
             </button>
@@ -468,7 +485,8 @@ const TourTooltip = ({ step, currentIndex, totalSteps, onNext, onPrev, onSkip, o
 
           <button
             onClick={isLast ? onClose : onNext}
-            className="flex items-center gap-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+            onTouchEnd={(e) => { e.preventDefault(); (isLast ? onClose : onNext)(); }}
+            className="flex items-center gap-1 px-3 sm:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
           >
             {isLast ? 'Terminer' : 'Suivant'}
             {!isLast && <ChevronRight size={16} />}
@@ -484,8 +502,9 @@ const TourOverlay = ({ targetRect, onClick }) => {
   if (!targetRect) {
     return (
       <div 
-        className="fixed inset-0 bg-black/50 z-[10000] transition-opacity"
+        className="fixed inset-0 bg-black/50 z-[10000] transition-opacity pointer-events-auto"
         onClick={onClick}
+        onTouchEnd={(e) => { e.preventDefault(); onClick(); }}
       />
     );
   }
@@ -499,20 +518,20 @@ const TourOverlay = ({ targetRect, onClick }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-[10000]" onClick={onClick}>
+    <div className="fixed inset-0 z-[10000] pointer-events-none">
       {/* Top */}
       <div 
-        className="absolute bg-black/50 left-0 right-0 top-0"
+        className="absolute bg-black/50 left-0 right-0 top-0 pointer-events-auto"
         style={{ height: Math.max(0, spotlightRect.top) }}
       />
       {/* Bottom */}
       <div 
-        className="absolute bg-black/50 left-0 right-0 bottom-0"
+        className="absolute bg-black/50 left-0 right-0 bottom-0 pointer-events-auto"
         style={{ top: spotlightRect.top + spotlightRect.height }}
       />
       {/* Left */}
       <div 
-        className="absolute bg-black/50"
+        className="absolute bg-black/50 pointer-events-auto"
         style={{ 
           top: spotlightRect.top, 
           left: 0, 
@@ -522,7 +541,7 @@ const TourOverlay = ({ targetRect, onClick }) => {
       />
       {/* Right */}
       <div 
-        className="absolute bg-black/50"
+        className="absolute bg-black/50 pointer-events-auto"
         style={{ 
           top: spotlightRect.top, 
           left: spotlightRect.left + spotlightRect.width,

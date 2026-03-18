@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { X, ChevronLeft, ChevronRight, FileText, Film, File, Loader2 } from 'lucide-react';
 
 const AttachmentGallery = ({ attachments, downloadFunction, itemId }) => {
@@ -92,6 +93,24 @@ const AttachmentGallery = ({ attachments, downloadFunction, itemId }) => {
     return () => window.removeEventListener('keydown', onKey);
   }, [lightbox.open, navigate]);
 
+  // Create a dedicated portal container for the lightbox
+  const portalRef = useRef(null);
+  useEffect(() => {
+    if (!portalRef.current) {
+      const el = document.createElement('div');
+      el.id = 'lightbox-portal';
+      el.style.cssText = 'position:relative;z-index:99999;pointer-events:auto;';
+      document.body.appendChild(el);
+      portalRef.current = el;
+    }
+    return () => {
+      if (portalRef.current && portalRef.current.parentNode) {
+        portalRef.current.parentNode.removeChild(portalRef.current);
+        portalRef.current = null;
+      }
+    };
+  }, []);
+
   if (!attachments?.length) return null;
 
   const renderThumb = (att) => {
@@ -184,17 +203,19 @@ const AttachmentGallery = ({ attachments, downloadFunction, itemId }) => {
         ))}
       </div>
 
-      {lightbox.open && (
+      {lightbox.open && portalRef.current && createPortal(
         <div
-          className="fixed inset-0 z-[9999] bg-black/90 flex items-center justify-center"
+          className="fixed inset-0 bg-black/90 flex items-center justify-center"
+          style={{ zIndex: 99999, pointerEvents: 'auto', touchAction: 'auto' }}
           onClick={(e) => { if (e.target === e.currentTarget) closeLightbox(); }}
-          onPointerDown={(e) => { if (e.target === e.currentTarget) { e.preventDefault(); closeLightbox(); } }}
+          onTouchEnd={(e) => { if (e.target === e.currentTarget) { e.preventDefault(); closeLightbox(); } }}
           data-testid="lightbox-overlay"
         >
           <button
             onClick={(e) => { e.stopPropagation(); closeLightbox(); }}
-            onPointerDown={(e) => e.stopPropagation()}
-            className="absolute top-4 right-4 text-white/80 hover:text-white z-[10001] p-2 rounded-full hover:bg-white/10 transition-colors"
+            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); closeLightbox(); }}
+            className="absolute top-4 right-4 text-white/80 hover:text-white p-3 rounded-full hover:bg-white/10 transition-colors"
+            style={{ zIndex: 100000, pointerEvents: 'auto', touchAction: 'manipulation' }}
             data-testid="lightbox-close"
           >
             <X size={28} />
@@ -212,16 +233,18 @@ const AttachmentGallery = ({ attachments, downloadFunction, itemId }) => {
             <>
               <button
                 onClick={(e) => { e.stopPropagation(); navigate(-1); }}
-                onPointerDown={(e) => e.stopPropagation()}
+                onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); navigate(-1); }}
                 className="absolute left-3 top-1/2 -translate-y-1/2 text-white/70 hover:text-white p-2 rounded-full hover:bg-white/10 transition-colors"
+                style={{ pointerEvents: 'auto', touchAction: 'manipulation' }}
                 data-testid="lightbox-prev"
               >
                 <ChevronLeft size={36} />
               </button>
               <button
                 onClick={(e) => { e.stopPropagation(); navigate(1); }}
-                onPointerDown={(e) => e.stopPropagation()}
+                onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); navigate(1); }}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-white/70 hover:text-white p-2 rounded-full hover:bg-white/10 transition-colors"
+                style={{ pointerEvents: 'auto', touchAction: 'manipulation' }}
                 data-testid="lightbox-next"
               >
                 <ChevronRight size={36} />
@@ -232,7 +255,8 @@ const AttachmentGallery = ({ attachments, downloadFunction, itemId }) => {
           <div className="flex items-center justify-center">
             {renderLightboxContent()}
           </div>
-        </div>
+        </div>,
+        portalRef.current
       )}
     </>
   );

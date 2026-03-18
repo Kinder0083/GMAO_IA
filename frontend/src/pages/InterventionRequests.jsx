@@ -290,7 +290,15 @@ const InterventionRequests = () => {
                 </thead>
                 <tbody>
                   {filteredRequests.map((req) => (
-                    <tr key={req.id} className="border-b hover:bg-gray-50">
+                    <tr 
+                      key={req.id} 
+                      className="border-b hover:bg-gray-50 cursor-pointer"
+                      onClick={(e) => {
+                        if (e.target.closest('button')) return;
+                        setSelectedRequest(req);
+                        setDialogOpen(true);
+                      }}
+                    >
                       <td className="py-3 px-4 text-sm text-gray-600">{req.created_by_name || 'N/A'}</td>
                       <td className="py-3 px-4 text-sm text-gray-900 font-medium">{req.titre}</td>
                       <td className="py-3 px-4">{getPriorityBadge(req.priorite)}</td>

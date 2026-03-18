@@ -11,6 +11,13 @@ Application GMAO / FSAO avec module "Arbre des Causes" pour l'analyse d'accident
 
 ## Taches Accomplies
 
+### 18 Mars 2026 - Fix Mobile PWA (GuidedTour + Photos + Navigation)
+- [x] **GuidedTour**: Tooltip responsive `max-w-[400px] w-[calc(100vw-2rem)]`, overlay `pointer-events-none`, `onTouchEnd` handlers
+- [x] **Photos Lightbox**: Portal dédié avec `pointer-events:auto` + `touchAction:auto` + `onTouchEnd` pour fermeture
+- [x] Corrigé dans 3 fichiers: AttachmentGallery.jsx, WorkOrderFormDialog.jsx, InterventionRequestFormDialog.jsx
+- [x] **Navigation mobile**: Lignes tableau cliquables (OT + DI) pour ouvrir le dialogue vue sans bouton oeil
+- [x] Test validé en viewport 375x812: tour, photos, fermeture lightbox OK
+
 ### 18 Mars 2026 - Fix Lightbox photos bloquée (ne se ferme pas)
 - [x] **ROOT CAUSE**: `createPortal(element, document.body)` rendait la lightbox hors de l'arbre Radix Dialog → les clics étaient interceptés
 - [x] Fix: Supprimé `createPortal`, rendu en `fixed` dans l'arbre composant + `onPointerDown` + `stopPropagation`

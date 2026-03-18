@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Dialog,
   DialogContent,
@@ -739,16 +740,18 @@ const WorkOrderFormDialog = ({ open, onOpenChange, workOrder, prefillData, onSuc
     />
 
     {/* Lightbox preview plein écran */}
-    {previewImage && (
+    {previewImage && createPortal(
       <div
-        className="fixed inset-0 z-[9999] bg-black/90 flex items-center justify-center p-4 cursor-pointer"
+        className="fixed inset-0 bg-black/90 flex items-center justify-center p-4 cursor-pointer"
+        style={{ zIndex: 99999, pointerEvents: 'auto', touchAction: 'auto' }}
         onClick={(e) => { if (e.target === e.currentTarget) setPreviewImage(null); }}
-        onPointerDown={(e) => { if (e.target === e.currentTarget) { e.preventDefault(); setPreviewImage(null); } }}
+        onTouchEnd={(e) => { if (e.target === e.currentTarget) { e.preventDefault(); setPreviewImage(null); } }}
       >
         <button
-          className="absolute top-4 right-4 p-2 bg-white/20 rounded-full hover:bg-white/40 transition-colors z-[10001]"
+          className="absolute top-4 right-4 p-3 bg-white/20 rounded-full hover:bg-white/40 transition-colors"
+          style={{ zIndex: 100000, pointerEvents: 'auto', touchAction: 'manipulation' }}
           onClick={(e) => { e.stopPropagation(); setPreviewImage(null); }}
-          onPointerDown={(e) => e.stopPropagation()}
+          onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); setPreviewImage(null); }}
         >
           <X size={24} className="text-white" />
         </button>
@@ -758,7 +761,8 @@ const WorkOrderFormDialog = ({ open, onOpenChange, workOrder, prefillData, onSuc
           className="max-w-full max-h-full object-contain rounded-lg"
           onClick={e => e.stopPropagation()}
         />
-      </div>
+      </div>,
+      document.body
     )}
     </>
   );

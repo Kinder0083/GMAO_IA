@@ -556,7 +556,13 @@ const WorkOrders = () => {
                   {filteredWorkOrders.map((wo) => (
                     <tr 
                       key={wo.id} 
-                      className="border-b hover:bg-gray-50 transition-colors"
+                      className="border-b hover:bg-gray-50 transition-colors cursor-pointer"
+                      onClick={(e) => {
+                        // Ne pas ouvrir si on a cliqué sur un bouton d'action
+                        if (e.target.closest('button')) return;
+                        setSelectedWorkOrder(wo);
+                        setDialogOpen(true);
+                      }}
                       data-ai-type="WORK_ORDER"
                       data-ai-id={wo.id}
                       data-ai-name={wo.titre}
