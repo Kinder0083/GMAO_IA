@@ -24,6 +24,7 @@ const ConvertToWorkOrderDialog = ({ open, onOpenChange, request, onSuccess }) =>
   const [assigneeType, setAssigneeType] = useState(null);
   const [assigneeService, setAssigneeService] = useState(null);
   const [dateLimite, setDateLimite] = useState('');
+  const [tempsEstime, setTempsEstime] = useState('');
 
   useEffect(() => {
     if (open) {
@@ -31,6 +32,7 @@ const ConvertToWorkOrderDialog = ({ open, onOpenChange, request, onSuccess }) =>
       setAssigneeId('');
       setAssigneeType(null);
       setAssigneeService(null);
+      setTempsEstime('');
       // Pré-remplir avec la date limite désirée si disponible
       if (request?.date_limite_desiree) {
         setDateLimite(request.date_limite_desiree.split('T')[0]);
@@ -59,7 +61,8 @@ const ConvertToWorkOrderDialog = ({ open, onOpenChange, request, onSuccess }) =>
         assigneeId || null,
         dateLimite || null,
         assigneeType || null,
-        assigneeService || null
+        assigneeService || null,
+        tempsEstime ? parseFloat(tempsEstime) : null
       );
       toast({
         title: 'Succès',
@@ -118,6 +121,21 @@ const ConvertToWorkOrderDialog = ({ open, onOpenChange, request, onSuccess }) =>
               type="date"
               value={dateLimite}
               onChange={(e) => setDateLimite(e.target.value)}
+              data-testid="convert-wo-date-limite"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="tempsEstime">Duree de realisation estimee (heures)</Label>
+            <Input
+              id="tempsEstime"
+              type="number"
+              min="0"
+              step="0.5"
+              placeholder="Ex: 2.5"
+              value={tempsEstime}
+              onChange={(e) => setTempsEstime(e.target.value)}
+              data-testid="convert-wo-temps-estime"
             />
           </div>
         </div>

@@ -497,12 +497,13 @@ export const interventionRequestsAPI = {
   create: (data) => api.post('/intervention-requests', data),
   update: (id, data) => api.put(`/intervention-requests/${id}`, data),
   delete: (id) => api.delete(`/intervention-requests/${id}`),
-  convertToWorkOrder: (id, assigneeId, dateLimite, assigneeType, assigneeService) => api.post(`/intervention-requests/${id}/convert-to-work-order`, null, { 
+  convertToWorkOrder: (id, assigneeId, dateLimite, assigneeType, assigneeService, tempsEstime) => api.post(`/intervention-requests/${id}/convert-to-work-order`, null, { 
     params: { 
       assignee_id: assigneeId,
       date_limite: dateLimite,
       assignee_type: assigneeType,
-      assignee_service: assigneeService
+      assignee_service: assigneeService,
+      temps_estime: tempsEstime
     } 
   }),
   downloadAttachment: (requestId, attachmentId) => api.get(`/intervention-requests/${requestId}/attachments/${attachmentId}`, {
