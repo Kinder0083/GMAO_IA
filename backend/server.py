@@ -12093,6 +12093,14 @@ async def create_notification_indexes():
         await db.push_receipts.create_index([("checked", 1), ("created_at", 1)])
         await db.push_receipts.create_index([("ticket_id", 1)])
         logger.info("Indexes device_tokens et push_receipts crees avec succes")
+
+        # Reactiver les abonnements web push desactives a tort par HTTP 400
+        reactivated = await db.web_push_subscriptions.update_many(
+            {"is_active": False, "deactivation_reason": "HTTP 400"},
+            {"$set": {"is_active": True}, "$unset": {"deactivated_at": "", "deactivation_reason": ""}}
+        )
+        if reactivated.modified_count > 0:
+            logger.info(f"[WEB PUSH] {reactivated.modified_count} abonnement(s) reactives (etaient desactives par HTTP 400)")
     except Exception as e:
         logger.warning(f"Erreur creation indexes: {e}")
 

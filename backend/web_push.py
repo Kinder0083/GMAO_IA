@@ -80,10 +80,10 @@ async def send_web_push_to_user(db, user_id: str, title: str, body: str, data: d
                 logger.error(f"[WEB PUSH] Response body: {resp_body}")
 
             # Desactiver les subscriptions invalides:
-            # 400 = VAPID key mismatch ou subscription corrompue
             # 404 = subscription introuvable
-            # 410 = subscription expiree
-            if resp_status in (400, 404, 410):
+            # 410 = subscription expiree (Gone)
+            # NOTE: On ne desactive PAS sur 400 car cela peut etre transitoire
+            if resp_status in (404, 410):
                 await db.web_push_subscriptions.update_one(
                     {"_id": sub["_id"]},
                     {"$set": {
