@@ -143,7 +143,9 @@ self.addEventListener('push', (event) => {
     icon: '/logo-iris.png',
     badge: '/logo-iris.png',
     vibrate: [100, 50, 100],
-    data: { type: data.type, url: data.url },
+    tag: data.tag || 'fsao-notification',
+    requireInteraction: data.requireInteraction || false,
+    data: { type: data.type || (data.data && data.data.type) || 'general', url: data.url },
     actions: [{ action: 'open', title: 'Ouvrir' }]
   };
 

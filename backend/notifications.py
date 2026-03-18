@@ -144,7 +144,7 @@ async def send_expo_push_notification(
 async def check_push_receipts():
     """Verify Expo push receipts and remove invalid tokens.
     Called by scheduler every 20 minutes."""
-    if not _db:
+    if _db is None:
         logger.warning("[PUSH RECEIPTS] No database reference")
         return
 

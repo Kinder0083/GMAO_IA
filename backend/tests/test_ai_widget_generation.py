@@ -8,7 +8,7 @@ import os
 import time
 
 # Get BASE_URL from environment
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://ot-assignment-debug.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://notification-restore-1.preview.emergentagent.com').rstrip('/')
 
 # Test credentials
 TEST_EMAIL = "admin@test.com"

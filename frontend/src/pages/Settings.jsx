@@ -24,7 +24,7 @@ const Settings = () => {
   const [supportDialogOpen, setSupportDialogOpen] = useState(false);
   const [responsableInfo, setResponsableInfo] = useState(null);
   const [notifLoading, setNotifLoading] = useState(false);
-  const { permission, isSubscribed, isSupported, subscribe } = usePushNotifications();
+  const { permission, isSubscribed, isSupported, subscribe, testNotification, unsubscribe } = usePushNotifications();
   const { canInstall, isInstalled, install } = useInstallPrompt();
   const [settings, setSettings] = useState({
     nom: '',
@@ -342,15 +342,33 @@ const Settings = () => {
                 <Button
                   variant="outline"
                   className="w-full justify-start"
-                  disabled={!isSupported || permission === 'granted' || notifLoading}
+                  disabled={!isSupported || notifLoading}
                   onClick={async () => {
                     setNotifLoading(true);
                     try {
-                      const result = await subscribe();
-                      if (result.permissionGranted) {
-                        toast({ title: 'Notifications activees', description: result.subscribed ? 'Vous recevrez les notifications push.' : 'Permission accordee.' });
+                      if (permission === 'granted' && isSubscribed) {
+                        // Test existing subscription
+                        const testResult = await testNotification();
+                        if (testResult?.sent > 0) {
+                          toast({ title: 'Notification envoyee', description: 'Vous devriez la recevoir dans quelques secondes.' });
+                        } else {
+                          // Subscription expired - force re-subscribe
+                          toast({ title: 'Renouvellement en cours...', description: 'L\'abonnement a expire, renouvellement automatique.' });
+                          await unsubscribe();
+                          const result = await subscribe();
+                          if (result?.subscribed) {
+                            toast({ title: 'Notifications renouvelees', description: 'Votre abonnement a ete renouvele avec succes.' });
+                          } else {
+                            toast({ title: 'Erreur de renouvellement', description: result?.error || 'Reessayez plus tard.', variant: 'destructive' });
+                          }
+                        }
                       } else {
-                        toast({ title: 'Permission refusee', description: 'Activez les notifications dans les parametres de votre navigateur.', variant: 'destructive' });
+                        const result = await subscribe();
+                        if (result.permissionGranted) {
+                          toast({ title: 'Notifications activees', description: result.subscribed ? 'Vous recevrez les notifications push.' : 'Permission accordee.' });
+                        } else {
+                          toast({ title: 'Permission refusee', description: 'Activez les notifications dans les parametres de votre navigateur.', variant: 'destructive' });
+                        }
                       }
                     } catch {
                       toast({ title: 'Erreur', variant: 'destructive' });
@@ -361,13 +379,15 @@ const Settings = () => {
                   data-testid="enable-notifications-btn"
                 >
                   <BellRing className="h-4 w-4 mr-2 flex-shrink-0" />
-                  {notifLoading ? 'Activation...' : permission === 'granted' ? 'Notifications activees' : 'Activer les notifications'}
+                  {notifLoading ? 'En cours...' : permission === 'granted' ? (isSubscribed ? 'Tester les notifications' : 'Reactiver les notifications') : 'Activer les notifications'}
                 </Button>
                 <p className="text-xs text-gray-500 mt-1">
                   {!isSupported
                     ? 'Notifications non supportees par ce navigateur'
                     : permission === 'granted'
-                      ? 'Les notifications push sont actives sur cet appareil'
+                      ? isSubscribed
+                        ? 'Cliquez pour tester ou forcer le renouvellement si besoin'
+                        : 'L\'abonnement push necessite une reactivation'
                       : permission === 'denied'
                         ? 'Bloquees - reactivez-les dans les parametres du navigateur'
                         : 'Recevez des alertes en temps reel'}
