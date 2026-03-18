@@ -742,11 +742,13 @@ const WorkOrderFormDialog = ({ open, onOpenChange, workOrder, prefillData, onSuc
     {previewImage && (
       <div
         className="fixed inset-0 z-[9999] bg-black/90 flex items-center justify-center p-4 cursor-pointer"
-        onClick={() => setPreviewImage(null)}
+        onClick={(e) => { if (e.target === e.currentTarget) setPreviewImage(null); }}
+        onPointerDown={(e) => { if (e.target === e.currentTarget) { e.preventDefault(); setPreviewImage(null); } }}
       >
         <button
-          className="absolute top-4 right-4 p-2 bg-white/20 rounded-full hover:bg-white/40 transition-colors"
-          onClick={() => setPreviewImage(null)}
+          className="absolute top-4 right-4 p-2 bg-white/20 rounded-full hover:bg-white/40 transition-colors z-[10001]"
+          onClick={(e) => { e.stopPropagation(); setPreviewImage(null); }}
+          onPointerDown={(e) => e.stopPropagation()}
         >
           <X size={24} className="text-white" />
         </button>

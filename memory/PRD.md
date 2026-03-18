@@ -11,7 +11,13 @@ Application GMAO / FSAO avec module "Arbre des Causes" pour l'analyse d'accident
 
 ## Taches Accomplies
 
-### 17 Mars 2026 - Fix Validation OT (Erreur lors de la validation)
+### 18 Mars 2026 - Fix Lightbox photos bloquée (ne se ferme pas)
+- [x] **ROOT CAUSE**: `createPortal(element, document.body)` rendait la lightbox hors de l'arbre Radix Dialog → les clics étaient interceptés
+- [x] Fix: Supprimé `createPortal`, rendu en `fixed` dans l'arbre composant + `onPointerDown` + `stopPropagation`
+- [x] Corrigé dans 3 fichiers: AttachmentGallery.jsx, WorkOrderFormDialog.jsx, InterventionRequestFormDialog.jsx
+- [x] Test validé: ouverture lightbox + fermeture via bouton X fonctionnelle
+
+### 18 Mars 2026 - Fix Validation OT (Erreur lors de la validation)
 - [x] **ROOT CAUSE**: Les endpoints `/comments` et `/add-time` utilisaient `ObjectId(wo_id)` qui crashait sur les UUID
 - [x] Créé helper `find_work_order_flexible()` (cherche par `id` UUID puis fallback `_id` ObjectId)
 - [x] Corrigé 6 endpoints OT: add-comment, add-time, delete, upload-attachment, add-parts, get-comments

@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { createPortal } from 'react-dom';
 import { X, ChevronLeft, ChevronRight, FileText, Film, File, Loader2 } from 'lucide-react';
 
 const AttachmentGallery = ({ attachments, downloadFunction, itemId }) => {
@@ -185,15 +184,17 @@ const AttachmentGallery = ({ attachments, downloadFunction, itemId }) => {
         ))}
       </div>
 
-      {lightbox.open && createPortal(
+      {lightbox.open && (
         <div
           className="fixed inset-0 z-[9999] bg-black/90 flex items-center justify-center"
           onClick={(e) => { if (e.target === e.currentTarget) closeLightbox(); }}
+          onPointerDown={(e) => { if (e.target === e.currentTarget) { e.preventDefault(); closeLightbox(); } }}
           data-testid="lightbox-overlay"
         >
           <button
-            onClick={closeLightbox}
-            className="absolute top-4 right-4 text-white/80 hover:text-white z-10 p-2 rounded-full hover:bg-white/10 transition-colors"
+            onClick={(e) => { e.stopPropagation(); closeLightbox(); }}
+            onPointerDown={(e) => e.stopPropagation()}
+            className="absolute top-4 right-4 text-white/80 hover:text-white z-[10001] p-2 rounded-full hover:bg-white/10 transition-colors"
             data-testid="lightbox-close"
           >
             <X size={28} />
@@ -211,6 +212,7 @@ const AttachmentGallery = ({ attachments, downloadFunction, itemId }) => {
             <>
               <button
                 onClick={(e) => { e.stopPropagation(); navigate(-1); }}
+                onPointerDown={(e) => e.stopPropagation()}
                 className="absolute left-3 top-1/2 -translate-y-1/2 text-white/70 hover:text-white p-2 rounded-full hover:bg-white/10 transition-colors"
                 data-testid="lightbox-prev"
               >
@@ -218,6 +220,7 @@ const AttachmentGallery = ({ attachments, downloadFunction, itemId }) => {
               </button>
               <button
                 onClick={(e) => { e.stopPropagation(); navigate(1); }}
+                onPointerDown={(e) => e.stopPropagation()}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-white/70 hover:text-white p-2 rounded-full hover:bg-white/10 transition-colors"
                 data-testid="lightbox-next"
               >
@@ -229,8 +232,7 @@ const AttachmentGallery = ({ attachments, downloadFunction, itemId }) => {
           <div className="flex items-center justify-center">
             {renderLightboxContent()}
           </div>
-        </div>,
-        document.body
+        </div>
       )}
     </>
   );
