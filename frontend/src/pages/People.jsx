@@ -39,9 +39,16 @@ const People = () => {
     setPushTestLoading(user.id);
     try {
       const response = await api.post(`/push-notifications/test/${user.id}`);
+      const data = response.data;
+      const parts = [];
+      if (data.expo?.sent) parts.push(`Expo: ${data.expo.tokens} appareil(s)`);
+      if (data.web_push?.sent && data.web_push?.delivered > 0) parts.push(`Web Push: ${data.web_push.delivered} envoyee(s)`);
+      if (data.web_push?.failed > 0) parts.push(`Web Push: ${data.web_push.failed} echouee(s)`);
+      if (!data.expo?.sent && !data.web_push?.sent) parts.push('Aucun canal actif');
       toast({
-        title: 'Notification envoyee',
-        description: `Notification push envoyee a ${user.prenom} ${user.nom}`,
+        title: parts.length > 0 && (data.expo?.sent || data.web_push?.delivered > 0) ? 'Notification envoyee' : 'Attention',
+        description: `${user.prenom} ${user.nom}: ${parts.join(' | ')}`,
+        variant: (data.expo?.sent || data.web_push?.delivered > 0) ? 'default' : 'destructive',
       });
     } catch (error) {
       const msg = error.response?.data?.detail || 'Erreur lors de l\'envoi';

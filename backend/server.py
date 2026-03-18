@@ -10884,15 +10884,30 @@ async def _check_notification_health_internal():
         recent_failed = await db.notification_health_logs.count_documents({
             "type": "failed", "timestamp": {"$gte": cutoff_24h}
         })
+        # Get recent error details
+        recent_errors = []
+        async for err_doc in db.notification_health_logs.find(
+            {"type": "failed", "timestamp": {"$gte": cutoff_24h}},
+            {"_id": 0, "error": 1, "user_id": 1, "timestamp": 1}
+        ).sort("timestamp", -1).limit(5):
+            recent_errors.append({
+                "error": str(err_doc.get("error", ""))[:100],
+                "user_id": err_doc.get("user_id", ""),
+                "timestamp": err_doc["timestamp"].isoformat() if hasattr(err_doc.get("timestamp"), "isoformat") else str(err_doc.get("timestamp", ""))
+            })
+
         notif_status = "ok"
+        if recent_failed > 0:
+            notif_status = "warning"
         if recent_sent == 0 and active_subs > 0:
             notif_status = "warning"
         if recent_failed > recent_sent and recent_failed > 0:
-            notif_status = "warning"
+            notif_status = "error"
         result["last_notifications"] = {
             "status": notif_status,
             "recent_sent": recent_sent,
             "recent_failed": recent_failed,
+            "recent_errors": recent_errors,
             "message": f"{recent_sent} envoyee(s), {recent_failed} echouee(s) (24h)"
         }
 
@@ -11025,6 +11040,23 @@ async def force_notification_health_check(current_user: dict = Depends(get_curre
         "triggered_by": str(current_user.get("id", ""))
     })
     return result
+
+
+
+@api_router.post("/health/notifications/purge-inactive", tags=["Health"])
+async def purge_inactive_subscriptions(current_user: dict = Depends(get_current_admin_user)):
+    """Supprime les abonnements web push inactifs et les tokens Expo inactifs."""
+    now = datetime.now(timezone.utc)
+    # Purge inactive web push subscriptions
+    web_result = await db.web_push_subscriptions.delete_many({"is_active": False})
+    # Purge inactive device tokens
+    expo_result = await db.device_tokens.delete_many({"is_active": False})
+    logger.info(f"[NOTIF PURGE] {web_result.deleted_count} web push + {expo_result.deleted_count} expo tokens supprimes")
+    return {
+        "web_push_deleted": web_result.deleted_count,
+        "expo_deleted": expo_result.deleted_count,
+        "message": f"{web_result.deleted_count} abonnement(s) web + {expo_result.deleted_count} token(s) mobile supprimes"
+    }
 
 
 @api_router.post("/health/reset-failures")

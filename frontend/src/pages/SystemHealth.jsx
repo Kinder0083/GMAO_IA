@@ -152,6 +152,16 @@ export default function SystemHealth() {
     }
   };
 
+  const purgeInactive = async () => {
+    try {
+      const res = await api.post('/health/notifications/purge-inactive', {});
+      toast({ title: 'Purge terminee', description: res.data.message });
+      fetchNotifHealth();
+    } catch (e) {
+      toast({ title: 'Erreur', description: 'Impossible de purger', variant: 'destructive' });
+    }
+  };
+
   const runHealthCheck = async () => {
     setChecking(true);
     try {
@@ -545,6 +555,7 @@ export default function SystemHealth() {
         setNotifExpanded={setNotifExpanded}
         notifChecking={notifChecking}
         forceNotifCheck={forceNotifCheck}
+        purgeInactive={purgeInactive}
       />
 
       {/* ──── Stockage Hors Ligne Section ──── */}
@@ -682,7 +693,7 @@ export default function SystemHealth() {
   );
 }
 
-function NotificationHealthSection({ notifHealth, notifHistory, notifExpanded, setNotifExpanded, notifChecking, forceNotifCheck }) {
+function NotificationHealthSection({ notifHealth, notifHistory, notifExpanded, setNotifExpanded, notifChecking, forceNotifCheck, purgeInactive }) {
   const statusColor = (s) => s === 'ok' ? 'text-green-600' : s === 'warning' ? 'text-amber-600' : s === 'error' ? 'text-red-600' : 'text-gray-400';
   const statusBg = (s) => s === 'ok' ? 'bg-green-50' : s === 'warning' ? 'bg-amber-50' : s === 'error' ? 'bg-red-50' : 'bg-gray-50';
   const statusIcon = (s) => s === 'ok' ? <CheckCircle2 size={14} className="text-green-500" /> : s === 'warning' ? <AlertTriangle size={14} className="text-amber-500" /> : s === 'error' ? <XCircle size={14} className="text-red-500" /> : <Clock size={14} className="text-gray-400" />;
@@ -762,6 +773,16 @@ function NotificationHealthSection({ notifHealth, notifHistory, notifExpanded, s
                   <XCircle className="h-4 w-4 text-red-600" />
                   <AlertDescription className="text-red-800 text-sm">
                     <strong>Le systeme de notification est en erreur.</strong> Les administrateurs sont alertes automatiquement toutes les 30 minutes tant que le probleme persiste.
+                    {nh.last_notifications?.recent_errors?.length > 0 && (
+                      <div className="mt-2 space-y-1">
+                        <p className="font-medium text-xs">Dernieres erreurs :</p>
+                        {nh.last_notifications.recent_errors.map((err, i) => (
+                          <div key={i} className="text-xs text-red-700 font-mono bg-red-100 px-2 py-1 rounded truncate" title={err.error}>
+                            {err.error}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </AlertDescription>
                 </Alert>
               )}
@@ -801,8 +822,8 @@ function NotificationHealthSection({ notifHealth, notifHistory, notifExpanded, s
                 </div>
               )}
 
-              {/* Action button */}
-              <div className="flex items-center gap-2 pt-2 border-t">
+              {/* Action buttons */}
+              <div className="flex items-center gap-2 pt-2 border-t flex-wrap">
                 <Button
                   size="sm" variant="outline" className="gap-1.5"
                   onClick={forceNotifCheck}
@@ -812,6 +833,16 @@ function NotificationHealthSection({ notifHealth, notifHistory, notifExpanded, s
                   <RefreshCw size={13} className={notifChecking ? 'animate-spin' : ''} />
                   {notifChecking ? 'Verification...' : 'Verifier maintenant'}
                 </Button>
+                {nh.web_push_subscriptions?.inactive > 0 && (
+                  <Button
+                    size="sm" variant="outline" className="gap-1.5 text-red-600 hover:text-red-700 hover:bg-red-50"
+                    onClick={purgeInactive}
+                    data-testid="purge-inactive-btn"
+                  >
+                    <Trash2 size={13} />
+                    Purger {nh.web_push_subscriptions.inactive} inactif(s)
+                  </Button>
+                )}
                 {nh.timestamp && (
                   <span className="text-[11px] text-gray-400">
                     Derniere verification : <TimeAgo dateStr={nh.timestamp} />

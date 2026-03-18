@@ -520,31 +520,71 @@ async def test_notification_for_user(
     current_user: dict = Depends(get_current_user),
     db=Depends(get_database)
 ):
-    """Send a test notification to a specific user (admin only)."""
+    """Send a test notification to a specific user via ALL channels (Expo + Web Push)."""
     if current_user.get("role") != "ADMIN":
         raise HTTPException(status_code=403, detail="Admin only")
 
+    results = {"expo": None, "web_push": None, "channels_tested": 0}
+
+    # 1. Expo push (mobile app)
     tokens_cursor = db.device_tokens.find({
         "user_id": user_id,
         "is_active": True
     })
     tokens = [doc["push_token"] async for doc in tokens_cursor]
 
-    if not tokens:
-        raise HTTPException(
-            status_code=404,
-            detail="Aucun appareil mobile enregistre pour cet utilisateur. L'utilisateur doit d'abord installer l'application mobile et s'y connecter."
+    if tokens:
+        expo_result = await send_expo_push_notification(
+            push_tokens=tokens,
+            title="Test de notification",
+            body="Les notifications fonctionnent correctement !",
+            data={"type": "test"},
+            db=db
         )
+        results["expo"] = {
+            "sent": True,
+            "tokens": len(tokens),
+            "result": expo_result
+        }
+        results["channels_tested"] += 1
+    else:
+        results["expo"] = {"sent": False, "tokens": 0, "message": "Aucun token Expo actif"}
 
-    result = await send_expo_push_notification(
-        push_tokens=tokens,
+    # 2. Web push (PWA)
+    from web_push import send_web_push_to_user
+    web_result = await send_web_push_to_user(
+        db, user_id,
         title="Test de notification",
         body="Les notifications fonctionnent correctement !",
         data={"type": "test"},
-        db=db
+        tag="test-notification"
     )
+    if web_result.get("sent", 0) > 0:
+        results["web_push"] = {
+            "sent": True,
+            "delivered": web_result["sent"],
+            "failed": web_result.get("failed", 0),
+            "errors": web_result.get("errors", [])
+        }
+        results["channels_tested"] += 1
+    else:
+        results["web_push"] = {
+            "sent": False,
+            "delivered": 0,
+            "failed": web_result.get("failed", 0),
+            "errors": web_result.get("errors", []),
+            "message": "Aucun abonnement web push actif" if web_result.get("failed", 0) == 0 else "Tous les envois ont echoue"
+        }
+        if web_result.get("failed", 0) > 0:
+            results["channels_tested"] += 1
 
-    return result
+    if results["channels_tested"] == 0:
+        raise HTTPException(
+            status_code=404,
+            detail="Aucun canal de notification disponible. L'utilisateur doit activer les notifications dans son navigateur (PWA) ou installer l'application mobile."
+        )
+
+    return results
 
 
 @router.delete("/tokens/{user_id}")
