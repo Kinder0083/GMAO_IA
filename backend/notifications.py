@@ -578,11 +578,28 @@ async def test_notification_for_user(
         if web_result.get("failed", 0) > 0:
             results["channels_tested"] += 1
 
+    # Résumé détaillé
+    results["summary"] = []
+    if results["expo"]["sent"]:
+        results["summary"].append(f"Expo: {results['expo']['tokens']} appareil(s)")
+    else:
+        results["summary"].append(f"Expo: {results['expo'].get('message', 'aucun token')}")
+
+    if results["web_push"]["sent"] and results["web_push"].get("delivered", 0) > 0:
+        results["summary"].append(f"Web Push: {results['web_push']['delivered']} envoyee(s)")
+    elif results["web_push"].get("failed", 0) > 0:
+        results["summary"].append(f"Web Push: {results['web_push']['failed']} echouee(s) (abonnements invalides)")
+    else:
+        results["summary"].append(f"Web Push: {results['web_push'].get('message', 'aucun abonnement')}")
+
     if results["channels_tested"] == 0:
-        raise HTTPException(
-            status_code=404,
-            detail="Aucun canal de notification disponible. L'utilisateur doit activer les notifications dans son navigateur (PWA) ou installer l'application mobile."
-        )
+        results["status"] = "no_channel"
+        results["detail"] = "Aucun canal de notification disponible. L'utilisateur doit ouvrir l'application dans son navigateur pour activer les notifications push automatiquement."
+    elif not results["expo"]["sent"] and not (results["web_push"]["sent"] and results["web_push"].get("delivered", 0) > 0):
+        results["status"] = "all_failed"
+        results["detail"] = "Tous les envois ont echoue. Les abonnements sont probablement expires ou invalides. L'utilisateur doit rouvrir l'application pour renouveler automatiquement son abonnement."
+    else:
+        results["status"] = "ok"
 
     return results
 

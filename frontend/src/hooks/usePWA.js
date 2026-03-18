@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL || '';
-const VERIFY_INTERVAL_MS = 12 * 60 * 60 * 1000; // 12 hours
+const VERIFY_INTERVAL_MS = 4 * 60 * 60 * 1000; // 4 hours
 const VERIFY_KEY = 'pwa_push_verified_at';
+const VAPID_VERSION_KEY = 'pwa_vapid_version';
 
 function urlBase64ToUint8Array(base64String) {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
@@ -67,6 +68,8 @@ async function forceResubscribe(registration, token) {
   });
   // Register with backend
   await registerWithBackend(newSub, token);
+  // Store VAPID key version
+  localStorage.setItem(VAPID_VERSION_KEY, publicKey);
   return newSub;
 }
 
@@ -91,6 +94,26 @@ export function usePushNotifications() {
         const registration = await navigator.serviceWorker.ready;
         let subscription = await registration.pushManager.getSubscription();
 
+        // Step 0: Check if VAPID key changed (forces re-subscribe)
+        const vapidResp = await fetch(`${API_URL}/api/web-push/vapid-key`);
+        if (vapidResp.ok) {
+          const { publicKey } = await vapidResp.json();
+          const storedVapid = localStorage.getItem(VAPID_VERSION_KEY);
+          if (publicKey && storedVapid && storedVapid !== publicKey && subscription) {
+            // VAPID key changed - old subscription is useless, force re-subscribe
+            console.warn('[PWA] VAPID key changed, forcing re-subscribe');
+            try { await subscription.unsubscribe(); } catch (e) { /* ignore */ }
+            subscription = await registration.pushManager.subscribe({
+              userVisibleOnly: true,
+              applicationServerKey: urlBase64ToUint8Array(publicKey)
+            });
+            localStorage.setItem(VAPID_VERSION_KEY, publicKey);
+          } else if (publicKey && !storedVapid) {
+            // First time - store the VAPID key for future comparison
+            localStorage.setItem(VAPID_VERSION_KEY, publicKey);
+          }
+        }
+
         if (!subscription) return; // No browser subscription, nothing to sync
 
         // Step 1: Always register existing subscription with backend
@@ -114,8 +137,8 @@ export function usePushNotifications() {
               localStorage.setItem(VERIFY_KEY, Date.now().toString());
               console.log('[PWA] Subscription verified OK');
             } else if (testResult.failed > 0) {
-              // Subscription expired - force re-subscribe
-              console.warn('[PWA] Subscription expired, re-subscribing...');
+              // Subscription expired or VAPID mismatch - force re-subscribe
+              console.warn('[PWA] Subscription failed, re-subscribing...');
               const newSub = await forceResubscribe(registration, token);
               if (newSub) {
                 localStorage.setItem(VERIFY_KEY, Date.now().toString());
@@ -189,6 +212,7 @@ export function usePushNotifications() {
       syncedRef.current = true;
       setIsSubscribed(true);
       localStorage.setItem(VERIFY_KEY, Date.now().toString());
+      if (publicKey) localStorage.setItem(VAPID_VERSION_KEY, publicKey);
       return { permissionGranted: true, subscribed: true };
     } catch (e) {
       console.error('[PWA] Push subscription failed:', e.message);

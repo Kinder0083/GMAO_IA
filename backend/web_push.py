@@ -66,17 +66,33 @@ async def send_web_push_to_user(db, user_id: str, title: str, body: str, data: d
         except WebPushException as e:
             failed += 1
             error_msg = str(e)
-            logger.error(f"[WEB PUSH] ERREUR -> user {user_id}: {error_msg}")
-
-            # Si 410 Gone ou 404 = subscription invalide, la desactiver
+            # Extract response body for better diagnostics
+            resp_body = ""
+            resp_status = 0
             if hasattr(e, 'response') and e.response is not None:
-                status = e.response.status_code
-                if status in (404, 410):
-                    await db.web_push_subscriptions.update_one(
-                        {"_id": sub["_id"]},
-                        {"$set": {"is_active": False, "deactivated_at": datetime.now(timezone.utc)}}
-                    )
-                    logger.info(f"[WEB PUSH] Subscription desactivee (HTTP {status})")
+                resp_status = e.response.status_code
+                try:
+                    resp_body = e.response.text[:200] if hasattr(e.response, 'text') else str(e.response.content[:200])
+                except Exception:
+                    pass
+            logger.error(f"[WEB PUSH] ERREUR -> user {user_id} (HTTP {resp_status}): {error_msg[:200]}")
+            if resp_body:
+                logger.error(f"[WEB PUSH] Response body: {resp_body}")
+
+            # Desactiver les subscriptions invalides:
+            # 400 = VAPID key mismatch ou subscription corrompue
+            # 404 = subscription introuvable
+            # 410 = subscription expiree
+            if resp_status in (400, 404, 410):
+                await db.web_push_subscriptions.update_one(
+                    {"_id": sub["_id"]},
+                    {"$set": {
+                        "is_active": False,
+                        "deactivated_at": datetime.now(timezone.utc),
+                        "deactivation_reason": f"HTTP {resp_status}"
+                    }}
+                )
+                logger.info(f"[WEB PUSH] Subscription desactivee (HTTP {resp_status})")
 
             errors.append(error_msg[:200])
             # Log failure for health monitoring
