@@ -3,17 +3,6 @@
 ## Description
 Application web PWA de gestion de maintenance industrielle. Frontend React + Backend FastAPI + MongoDB.
 
-## Utilisateurs
-- **ADMIN** : Gestion complète
-- **TECHNICIEN** : Ordres de travail, interventions
-- **DEMANDEUR** : Demandes d'intervention
-
-## Architecture
-- Frontend: React (CRA) + Shadcn/UI + TailwindCSS
-- Backend: FastAPI + Motor (async MongoDB)
-- DB: MongoDB (gmao_iris)
-- Push: Web Push VAPID (PWA) + Expo Push (mobile)
-
 ## Authentification
 - JWT Bearer token (champ `access_token` dans la réponse login)
 - Compte admin: buenogy@gmail.com / Admin2024!
@@ -27,22 +16,27 @@ Application web PWA de gestion de maintenance industrielle. Frontend React + Bac
 - Bugs PWA mobile (visite guidée, safe area) — Corrigés
 - Index uniques MongoDB (25 collections) — Mis en place
 - **Bug P0 Notifications (web + PWA)** — Corrigé (18/03/2026)
-  - `notifications.py`: `if not _db` → `if _db is None:`
-  - `usePWA.js`: syncWithBackend + forceResubscribe
+  - `notifications.py`: `if not _db` → `if _db is None:` (crash PyMongo)
+  - `usePWA.js`: syncWithBackend + forceResubscribe au chargement (renouvellement auto des abonnements expirés)
   - `Settings.jsx`: Bouton test/renouvellement
+  - `sw.js`: tag + requireInteraction dans les options push
+  - **Bell icon test double canal**: envoie MAINTENANT Expo + Web Push (avant: Expo seulement)
+  - **Diagnostic détaillé**: erreurs récentes visibles dans Santé Système
 - **P4 Déduplication services** — Corrigé (18/03/2026)
   - `service_responsables`: 'Maintenance' → 'MAINTENANCE'
+  - Normalisation complète des 5 collections (32 documents) vers les majuscules
 - **Monitoring Santé Notifications** — Implémenté (18/03/2026)
-  - Backend: 3 endpoints + cron 30 min + alerte admin
-  - Frontend: Carte + section détaillée dans Santé Système
+  - Backend: 4 endpoints + cron 30 min + alerte admin
+  - Endpoint purge des abonnements inactifs
+  - Frontend: Section détaillée avec 5 indicateurs, erreurs récentes, historique, bouton purge
 - **P2 Logique membres service** — Corrigé (18/03/2026)
-  - `notify_service_assignment()`: utilise `users.service` (regex insensible casse) au lieu de `service_responsables`
-  - `/assignment-targets`: compte les vrais membres actifs depuis `users.service`
-  - MAINTENANCE : 4 membres notifiés au lieu de 2 responsables
-  - `service_responsables` reste utilisé pour trouver les *responsables* (manager lookup, email escalation)
+  - `notify_service_assignment()`: utilise `users.service` (regex insensible casse)
+  - `/assignment-targets`: compte les vrais membres actifs
 
 ### Tâches à venir
 - **(P3)** Tester le script de mise à jour `MAJ_FSAO.sh` (à la demande de l'utilisateur)
 
-### Backlog
-- Dédupliquer d'autres inconsistances de casse dans les collections si nécessaire
+## Points importants pour le déploiement
+- **Le code doit être déployé** pour que les corrections prennent effet sur la production
+- **Après déploiement**: les utilisateurs qui chargent l'app verront leurs abonnements push automatiquement renouvelés par `usePWA.js`
+- **La cloche dans People** teste maintenant les DEUX canaux (Expo + Web Push)
