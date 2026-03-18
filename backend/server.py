@@ -618,7 +618,7 @@ async def login(login_request: LoginRequest):
         )
     
     # Verify password
-    logger.info(f"🔍 Attempting password verification...")
+    logger.info("🔍 Attempting password verification...")
     logger.info(f"   Password length: {len(login_request.password)}")
     
     # Support both 'password' and 'hashed_password' field names
@@ -953,7 +953,7 @@ async def validate_invitation(token: str):
             "email": email,
             "role": payload.get("role")
         }
-    except Exception as e:
+    except Exception:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Token d'invitation invalide ou expiré"
@@ -1256,19 +1256,25 @@ async def get_service_manager_stats(current_user: dict = Depends(get_current_use
 @api_router.get("/assignment-targets", tags=["Utilisateurs"])
 async def get_assignment_targets(current_user: dict = Depends(get_current_user)):
     """Retourne les cibles d'assignation : services (pôles) en premier, puis utilisateurs triés par ordre alphabétique."""
-    # Récupérer les services uniques depuis service_responsables
+    import re
+    # Récupérer la liste canonique des services depuis service_responsables
     service_entries = await db.service_responsables.find({}, {"_id": 0}).to_list(length=200)
     service_names = sorted(set(e.get("service", "") for e in service_entries if e.get("service")))
 
     poles = []
     for svc in service_names:
-        # Compter les membres du service
-        members = [e for e in service_entries if e.get("service") == svc]
+        # Compter les vrais membres du service depuis users.service (insensible a la casse)
+        svc_regex = re.compile(f"^{re.escape(svc)}$", re.IGNORECASE)
+        member_count = await db.users.count_documents({
+            "service": svc_regex,
+            "$or": [{"actif": True}, {"statut": "actif"}],
+            "deleted_at": {"$exists": False}
+        })
         poles.append({
             "id": f"service:{svc}",
             "nom": svc,
             "type": "service",
-            "membres": len(members)
+            "membres": member_count
         })
 
     # Récupérer les utilisateurs actifs triés par nom
@@ -1296,9 +1302,18 @@ async def notify_service_assignment(wo_dict: dict, service_name: str, current_us
     """Notifie tous les utilisateurs d'un service lorsqu'un OT leur est assigné."""
     try:
         from notifications import notify_work_order_assigned
-        entries = await db.service_responsables.find({"service": service_name}).to_list(length=100)
-        for entry in entries:
-            uid = entry.get("user_id")
+        # Chercher TOUS les membres actifs du service (insensible a la casse)
+        import re
+        service_regex = re.compile(f"^{re.escape(service_name)}$", re.IGNORECASE)
+        members = await db.users.find({
+            "service": service_regex,
+            "$or": [{"actif": True}, {"statut": "actif"}],
+            "deleted_at": {"$exists": False}
+        }, {"_id": 0, "id": 1}).to_list(length=200)
+
+        notified = 0
+        for member in members:
+            uid = member.get("id")
             if uid and uid != current_user_id:
                 asyncio.create_task(
                     notify_work_order_assigned(
@@ -1312,7 +1327,8 @@ async def notify_service_assignment(wo_dict: dict, service_name: str, current_us
                 asyncio.create_task(
                     notify_work_order_assigned_web(db, wo_dict, uid, current_user_id)
                 )
-        logger.info(f"[PUSH] Notification service {service_name}: {len(entries)} membre(s) notifié(s)")
+                notified += 1
+        logger.info(f"[PUSH] Notification service {service_name}: {notified} membre(s) notifié(s) (sur {len(members)} trouvé(s))")
     except Exception as e:
         logger.error(f"[PUSH] Erreur notification service: {e}")
 
@@ -1548,7 +1564,7 @@ async def create_work_order(wo_create: WorkOrderCreate, current_user: dict = Dep
             notify_work_order_assigned_web(db, wo, wo_create.assigne_a_id, current_user.get("id"))
         )
     elif wo_create.assigne_a_id == current_user.get("id"):
-        logger.info(f"[PUSH TRIGGER CREATE] Auto-assignation, pas de notification")
+        logger.info("[PUSH TRIGGER CREATE] Auto-assignation, pas de notification")
     
     # Émettre événement temps réel
     from realtime_manager import realtime_manager
@@ -3466,7 +3482,7 @@ async def delete_inventory_service(
     await db.inventory_services.delete_one({"id": service_id})
     
     article_count = await db.inventory.count_documents({"service_id": nc_id}) if nc_id else 0
-    return {"success": True, "message": f"Service supprimé. Articles déplacés vers 'Non classé'.", "moved_count": article_count}
+    return {"success": True, "message": "Service supprimé. Articles déplacés vers 'Non classé'.", "moved_count": article_count}
 
 
 @api_router.post("/inventory/{inv_id}/share", tags=["Inventaire - Partage"])
@@ -3883,7 +3899,7 @@ async def check_and_execute_due_maintenances_old(current_user: dict = Depends(ge
                     "id": wo_id,
                     "numero": f"PM-{datetime.utcnow().strftime('%Y%m%d')}-{secrets.token_hex(3).upper()}",
                     "titre": f"Maintenance préventive: {pm['titre']}",
-                    "description": f"Maintenance automatique générée depuis la planification préventive",
+                    "description": "Maintenance automatique générée depuis la planification préventive",
                     "type": "PREVENTIF",
                     "priorite": "NORMALE",
                     "statut": "OUVERT",
@@ -4593,7 +4609,7 @@ async def set_password_permanent(
             entity_type=EntityType_Audit.USER,
             entity_id=user_id,
             entity_name=f"{user.get('prenom', '')} {user.get('nom', '')}".strip(),
-            details=f"Mot de passe temporaire conservé comme permanent",
+            details="Mot de passe temporaire conservé comme permanent",
             changes={"firstLogin": False}
         )
         
@@ -4650,7 +4666,7 @@ async def reset_password_admin(
             entity_type=EntityType_Audit.USER,
             entity_id=user_id,
             entity_name=f"{user.get('prenom', '')} {user.get('nom', '')}".strip(),
-            details=f"Réinitialisation du mot de passe par l'administrateur",
+            details="Réinitialisation du mot de passe par l'administrateur",
             changes={"firstLogin": True, "password_reset": "admin_action"}
         )
         
@@ -4903,7 +4919,7 @@ async def update_user_preferences(
                 action=ActionType.UPDATE,
                 entity_type=EntityType.SETTINGS,
                 entity_id=user_id,
-                details=f"Préférences utilisateur créées"
+                details="Préférences utilisateur créées"
             )
             
             return preferences_obj
@@ -4925,7 +4941,7 @@ async def update_user_preferences(
                 action=ActionType.UPDATE,
                 entity_type=EntityType.SETTINGS,
                 entity_id=user_id,
-                details=f"Préférences utilisateur mises à jour"
+                details="Préférences utilisateur mises à jour"
             )
             
             return UserPreferences(**serialize_doc(updated_prefs))
@@ -4989,7 +5005,7 @@ async def reset_user_preferences(current_user: dict = Depends(get_current_user))
             action=ActionType.UPDATE,
             entity_type=EntityType.SETTINGS,
             entity_id=user_id,
-            details=f"Préférences utilisateur réinitialisées"
+            details="Préférences utilisateur réinitialisées"
         )
         
         return {"message": "Préférences réinitialisées avec succès", "preferences": preferences_obj}
@@ -6076,7 +6092,7 @@ async def get_purchase_stats(
             # Stats par (ARTICLE, DM6) - CHAQUE COMBINAISON est unique!
             try:
                 category = get_category_from_article_dm6(article, dm6)
-            except Exception as e:
+            except Exception:
                 category = "Non catégorisé"
             
             if month_key not in monthly_article_dm6_stats:
@@ -7630,7 +7646,7 @@ async def create_intervention_request(
             entity_type=EntityType_Audit.WORK_ORDER,
             entity_id=request_id,
             entity_name=request.titre,
-            details=f"Création demande d'intervention"
+            details="Création demande d'intervention"
         )
         
         return InterventionRequest(**request_data)
@@ -7883,7 +7899,7 @@ async def update_intervention_request(
         entity_type=EntityType_Audit.WORK_ORDER,
         entity_id=request_id,
         entity_name=updated_req['titre'],
-        details=f"Modification demande d'intervention"
+        details="Modification demande d'intervention"
     )
     
     updated_req = _clean_ir_attachments(updated_req)
@@ -7923,7 +7939,7 @@ async def delete_intervention_request(request_id: str, current_user: dict = Depe
         entity_type=EntityType_Audit.WORK_ORDER,
         entity_id=request_id,
         entity_name=req_title,
-        details=f"Suppression demande d'intervention"
+        details="Suppression demande d'intervention"
     )
     
     return {"message": "Demande supprimée"}
@@ -8299,7 +8315,7 @@ async def convert_to_work_order(
         raise HTTPException(status_code=500, detail=str(e))
 
 # Configuration CORS - Autoriser toutes les origines pour accès depuis IP publique
-logger.info(f"🔒 CORS configuré pour autoriser TOUTES les origines (accès IP publique)")
+logger.info("🔒 CORS configuré pour autoriser TOUTES les origines (accès IP publique)")
 
 app.add_middleware(
     CORSMiddleware,
@@ -8434,7 +8450,7 @@ async def create_improvement_request(
             entity_type=EntityType_Audit.IMPROVEMENT_REQUEST,
             entity_id=request_id,
             entity_name=request.titre,
-            details=f"Création demande d'amélioration"
+            details="Création demande d'amélioration"
         )
         
         return ImprovementRequest(**request_data)
@@ -8583,7 +8599,7 @@ async def update_improvement_request(
         entity_type=EntityType_Audit.IMPROVEMENT_REQUEST,
         entity_id=request_id,
         entity_name=updated_req['titre'],
-        details=f"Modification demande d'amélioration"
+        details="Modification demande d'amélioration"
     )
     
     return ImprovementRequest(**updated_req)
@@ -8630,7 +8646,7 @@ async def delete_improvement_request(request_id: str, current_user: dict = Depen
         entity_type=EntityType_Audit.IMPROVEMENT_REQUEST,
         entity_id=request_id,
         entity_name=req_title,
-        details=f"Suppression demande d'amélioration"
+        details="Suppression demande d'amélioration"
     )
     
     return {"message": "Demande supprimée"}
@@ -11245,7 +11261,7 @@ async def get_menu_badges(current_user: dict = Depends(get_current_user)):
             new_menu_ids = ["mes", "mes-reports", "analytics-checklists", "service-dashboard", "cameras", "weekly-reports"]
         
         return {"new_menu_ids": new_menu_ids}
-    except Exception as e:
+    except Exception:
         return {"new_menu_ids": []}
 
 
@@ -11260,7 +11276,7 @@ async def dismiss_menu_badges(current_user: dict = Depends(get_current_user)):
             upsert=True
         )
         return {"success": True}
-    except Exception as e:
+    except Exception:
         return {"success": False}
 
 
