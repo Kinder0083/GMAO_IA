@@ -330,7 +330,7 @@ const Header = ({
   };
 
   return (
-    <div className="fixed top-0 left-0 right-0 h-16 bg-white border-b border-gray-200 z-30 flex items-center justify-between px-4">
+    <div className="fixed left-0 right-0 h-16 bg-white border-b border-gray-200 z-30 flex items-center justify-between px-4" style={{ top: 'env(safe-area-inset-top)' }}>
       {/* Zone gauche : Toggle sidebar + Logo + Icônes gauche (ordre configurable) */}
       <div className="flex items-center gap-4">
         <Tooltip>

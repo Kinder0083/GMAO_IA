@@ -5,8 +5,8 @@
   "description": "Application de gestion de maintenance industrielle",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#1e293b",
-  "theme_color": "#2563eb",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
   "orientation": "any",
   "scope": "/",
   "icons": [

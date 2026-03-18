@@ -11,6 +11,12 @@ Application GMAO / FSAO avec module "Arbre des Causes" pour l'analyse d'accident
 
 ## Taches Accomplies
 
+### 18 Mars 2026 - Fix Safe Area Mobile PWA (barre de statut)
+- [x] `apple-mobile-web-app-status-bar-style="default"` (barre opaque blanche iOS)
+- [x] `theme-color="#ffffff"` + manifest `theme_color/background_color` (Android)
+- [x] Bande blanche fixe z-[31] pour safe-area-inset-top dans MainLayout
+- [x] Header, Sidebar et contenu décalés avec `env(safe-area-inset-top)`
+
 ### 18 Mars 2026 - Fix Mobile PWA (GuidedTour + Photos + Navigation)
 - [x] **GuidedTour**: Tooltip responsive `max-w-[400px] w-[calc(100vw-2rem)]`, overlay `pointer-events-none`, `onTouchEnd` handlers
 - [x] **Photos Lightbox**: Portal dédié avec `pointer-events:auto` + `touchAction:auto` + `onTouchEnd` pour fermeture

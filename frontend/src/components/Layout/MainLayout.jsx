@@ -241,6 +241,8 @@ const MainLayout = () => {
   return (
     <TooltipProvider delayDuration={300}>
     <div className="min-h-screen bg-gray-50">
+      {/* Safe area top bar for mobile PWA */}
+      <div className="fixed top-0 left-0 right-0 bg-white z-[31]" style={{ height: 'env(safe-area-inset-top, 0px)' }} />
       {/* Header */}
       <Header
         sidebarOpen={sidebarOpen}
@@ -287,7 +289,7 @@ const MainLayout = () => {
           width: mobileView ? '100vw' : 'auto'
         }}
       >
-        <div className="p-4 pt-20 overflow-x-hidden">
+        <div className="p-4 overflow-x-hidden" style={{ paddingTop: 'calc(5rem + env(safe-area-inset-top, 0px))' }}>
           <div className="w-full max-w-full overflow-x-hidden">
             <Outlet />
           </div>
