@@ -7,7 +7,7 @@ import {
   Activity, CheckCircle2, XCircle, AlertTriangle, RefreshCw,
   Shield, ShieldOff, Clock, HardDrive, Database, Cpu, Zap,
   ChevronDown, ChevronUp, RotateCcw, Mail, Plus, X, Send, Bell, BellOff,
-  Wifi, WifiOff, Trash2, Upload, FolderSync
+  Wifi, WifiOff, Trash2, Upload, FolderSync, Smartphone
 } from 'lucide-react';
 import { useToast } from '../hooks/use-toast';
 import api from '../services/api';
@@ -78,6 +78,12 @@ export default function SystemHealth() {
   const [historyExpanded, setHistoryExpanded] = useState(true);
   const [autoRefresh, setAutoRefresh] = useState(true);
 
+  // Notification health state
+  const [notifHealth, setNotifHealth] = useState(null);
+  const [notifHistory, setNotifHistory] = useState([]);
+  const [notifExpanded, setNotifExpanded] = useState(true);
+  const [notifChecking, setNotifChecking] = useState(false);
+
   // Alerts state
   const [alertsConfig, setAlertsConfig] = useState(null);
   const [alertsExpanded, setAlertsExpanded] = useState(true);
@@ -113,6 +119,38 @@ export default function SystemHealth() {
       console.error('Erreur fetch alerts config:', e);
     }
   }, []);
+
+  const fetchNotifHealth = useCallback(async () => {
+    try {
+      const res = await api.get('/health/notifications');
+      setNotifHealth(res.data);
+    } catch (e) {
+      console.error('Erreur fetch notif health:', e);
+    }
+  }, []);
+
+  const fetchNotifHistory = useCallback(async () => {
+    try {
+      const res = await api.get('/health/notifications/history?limit=24');
+      setNotifHistory(res.data?.checks || []);
+    } catch (e) {
+      console.error('Erreur fetch notif history:', e);
+    }
+  }, []);
+
+  const forceNotifCheck = async () => {
+    setNotifChecking(true);
+    try {
+      const res = await api.post('/health/notifications/force-check', {});
+      setNotifHealth(res.data);
+      toast({ title: 'Verification terminee', description: `Statut: ${res.data.overall === 'ok' ? 'Sain' : res.data.overall === 'warning' ? 'Attention' : 'Erreur'}` });
+      fetchNotifHistory();
+    } catch (e) {
+      toast({ title: 'Erreur', description: 'Impossible de verifier les notifications', variant: 'destructive' });
+    } finally {
+      setNotifChecking(false);
+    }
+  };
 
   const runHealthCheck = async () => {
     setChecking(true);
@@ -163,8 +201,10 @@ export default function SystemHealth() {
   useEffect(() => {
     fetchStatus();
     fetchAlertsConfig();
+    fetchNotifHealth();
+    fetchNotifHistory();
     runHealthCheck();
-  }, [fetchStatus, fetchAlertsConfig]);
+  }, [fetchStatus, fetchAlertsConfig, fetchNotifHealth, fetchNotifHistory]);
 
   // Auto-refresh every 30s
   useEffect(() => {
@@ -310,11 +350,12 @@ export default function SystemHealth() {
 
       {/* Health Check Cards */}
       {healthChecks && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3" data-testid="health-checks-grid">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3" data-testid="health-checks-grid">
           <HealthCard icon={Zap} label="Backend API" status={healthChecks.checks?.backend?.status} message={healthChecks.checks?.backend?.message} />
           <HealthCard icon={Database} label="MongoDB" status={healthChecks.checks?.mongodb?.status} message={healthChecks.checks?.mongodb?.message} />
           <HealthCard icon={HardDrive} label="Disque" status={healthChecks.checks?.disk?.status} message={healthChecks.checks?.disk?.message} />
           <HealthCard icon={Cpu} label="Mémoire" status={healthChecks.checks?.memory?.status} message={healthChecks.checks?.memory?.message} />
+          <HealthCard icon={Bell} label="Notifications" status={notifHealth?.overall || 'unknown'} message={notifHealth ? `${notifHealth.web_push_subscriptions?.active || 0} abo. actifs` : 'Chargement...'} />
         </div>
       )}
 
@@ -496,6 +537,16 @@ export default function SystemHealth() {
         </div>
       </div>
 
+      {/* ──── Santé des Notifications Section ──── */}
+      <NotificationHealthSection
+        notifHealth={notifHealth}
+        notifHistory={notifHistory}
+        notifExpanded={notifExpanded}
+        setNotifExpanded={setNotifExpanded}
+        notifChecking={notifChecking}
+        forceNotifCheck={forceNotifCheck}
+      />
+
       {/* ──── Stockage Hors Ligne Section ──── */}
       <OfflineStorageSection />
 
@@ -627,6 +678,183 @@ export default function SystemHealth() {
           </CardContent>
         )}
       </Card>
+    </div>
+  );
+}
+
+function NotificationHealthSection({ notifHealth, notifHistory, notifExpanded, setNotifExpanded, notifChecking, forceNotifCheck }) {
+  const statusColor = (s) => s === 'ok' ? 'text-green-600' : s === 'warning' ? 'text-amber-600' : s === 'error' ? 'text-red-600' : 'text-gray-400';
+  const statusBg = (s) => s === 'ok' ? 'bg-green-50' : s === 'warning' ? 'bg-amber-50' : s === 'error' ? 'bg-red-50' : 'bg-gray-50';
+  const statusIcon = (s) => s === 'ok' ? <CheckCircle2 size={14} className="text-green-500" /> : s === 'warning' ? <AlertTriangle size={14} className="text-amber-500" /> : s === 'error' ? <XCircle size={14} className="text-red-500" /> : <Clock size={14} className="text-gray-400" />;
+  const statusLabel = (s) => s === 'ok' ? 'SAIN' : s === 'warning' ? 'ATTENTION' : s === 'error' ? 'ERREUR' : 'INCONNU';
+
+  const nh = notifHealth;
+
+  return (
+    <Card data-testid="notification-health-card">
+      <CardHeader className="py-3 px-4 border-b cursor-pointer select-none" onClick={() => setNotifExpanded(e => !e)}>
+        <CardTitle className="text-sm flex items-center justify-between">
+          <span className="flex items-center gap-2">
+            <Bell size={16} className="text-indigo-600" />
+            Sante des Notifications
+            {nh && (
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                nh.overall === 'ok' ? 'bg-green-50 text-green-700' :
+                nh.overall === 'warning' ? 'bg-amber-50 text-amber-700' :
+                'bg-red-50 text-red-700'
+              }`}>
+                {statusLabel(nh.overall)}
+              </span>
+            )}
+            <span className="text-[10px] text-gray-400 font-normal">Verification auto toutes les 30 min</span>
+          </span>
+          {notifExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+        </CardTitle>
+      </CardHeader>
+      {notifExpanded && (
+        <CardContent className="p-4 space-y-5">
+          {!nh ? (
+            <div className="flex items-center justify-center py-6 text-gray-400">
+              <RefreshCw size={16} className="animate-spin mr-2" /> Chargement...
+            </div>
+          ) : (
+            <>
+              {/* Status Grid */}
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                <StatusBlock
+                  icon={<Shield size={16} />}
+                  label="Cles VAPID"
+                  status={nh.vapid_keys?.status}
+                  message={nh.vapid_keys?.message}
+                />
+                <StatusBlock
+                  icon={<Bell size={16} />}
+                  label="Abonnements Web"
+                  status={nh.web_push_subscriptions?.status}
+                  value={nh.web_push_subscriptions?.active || 0}
+                  message={nh.web_push_subscriptions?.message}
+                />
+                <StatusBlock
+                  icon={<Smartphone size={16} />}
+                  label="Tokens Mobile"
+                  status={nh.expo_tokens?.status}
+                  value={nh.expo_tokens?.active || 0}
+                  message={nh.expo_tokens?.message}
+                />
+                <StatusBlock
+                  icon={<Send size={16} />}
+                  label="Envois (24h)"
+                  status={nh.last_notifications?.status}
+                  value={nh.last_notifications?.recent_sent || 0}
+                  message={nh.last_notifications?.message}
+                />
+                <StatusBlock
+                  icon={<Clock size={16} />}
+                  label="Cron Recus"
+                  status={nh.cron_push_receipts?.status}
+                  message={nh.cron_push_receipts?.message}
+                />
+              </div>
+
+              {/* Error details if any */}
+              {nh.overall === 'error' && (
+                <Alert className="border-red-200 bg-red-50" data-testid="notif-health-error-alert">
+                  <XCircle className="h-4 w-4 text-red-600" />
+                  <AlertDescription className="text-red-800 text-sm">
+                    <strong>Le systeme de notification est en erreur.</strong> Les administrateurs sont alertes automatiquement toutes les 30 minutes tant que le probleme persiste.
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {nh.overall === 'warning' && (
+                <Alert className="border-amber-200 bg-amber-50" data-testid="notif-health-warning-alert">
+                  <AlertTriangle className="h-4 w-4 text-amber-600" />
+                  <AlertDescription className="text-amber-800 text-sm">
+                    <strong>Attention :</strong> Certains elements du systeme de notification necessitent une verification.
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {/* History timeline */}
+              {notifHistory.length > 0 && (
+                <div>
+                  <p className="text-sm font-medium mb-2 flex items-center gap-2">
+                    <Clock size={14} className="text-gray-500" />
+                    Historique des verifications
+                    <span className="text-xs bg-gray-100 text-gray-600 rounded-full px-2 py-0.5">{notifHistory.length}</span>
+                  </p>
+                  <div className="max-h-48 overflow-y-auto space-y-1">
+                    {notifHistory.map((check, idx) => (
+                      <div key={idx} className="flex items-center gap-2 text-xs py-1 px-2 rounded hover:bg-gray-50" data-testid={`notif-history-${idx}`}>
+                        {statusIcon(check.overall)}
+                        <span className={`font-medium ${statusColor(check.overall)}`}>{statusLabel(check.overall)}</span>
+                        <span className="text-gray-400 flex-1">
+                          {check.details?.web_push_subscriptions?.active || 0} abo. actifs,{' '}
+                          {check.details?.last_notifications?.recent_sent || 0} envoyees
+                        </span>
+                        <span className="text-gray-400 whitespace-nowrap">
+                          {check.timestamp ? <TimeAgo dateStr={check.timestamp} /> : '—'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Action button */}
+              <div className="flex items-center gap-2 pt-2 border-t">
+                <Button
+                  size="sm" variant="outline" className="gap-1.5"
+                  onClick={forceNotifCheck}
+                  disabled={notifChecking}
+                  data-testid="force-notif-check-btn"
+                >
+                  <RefreshCw size={13} className={notifChecking ? 'animate-spin' : ''} />
+                  {notifChecking ? 'Verification...' : 'Verifier maintenant'}
+                </Button>
+                {nh.timestamp && (
+                  <span className="text-[11px] text-gray-400">
+                    Derniere verification : <TimeAgo dateStr={nh.timestamp} />
+                  </span>
+                )}
+              </div>
+            </>
+          )}
+        </CardContent>
+      )}
+    </Card>
+  );
+}
+
+function StatusBlock({ icon, label, status, value, message }) {
+  const bgColors = {
+    ok: 'bg-green-50 border-green-100',
+    warning: 'bg-amber-50 border-amber-100',
+    error: 'bg-red-50 border-red-100',
+    unknown: 'bg-gray-50 border-gray-100'
+  };
+  const textColors = {
+    ok: 'text-green-700',
+    warning: 'text-amber-700',
+    error: 'text-red-700',
+    unknown: 'text-gray-500'
+  };
+  const iconColors = {
+    ok: 'text-green-500',
+    warning: 'text-amber-500',
+    error: 'text-red-500',
+    unknown: 'text-gray-400'
+  };
+  return (
+    <div className={`rounded-lg border p-3 ${bgColors[status] || bgColors.unknown}`} data-testid={`notif-status-${label.toLowerCase().replace(/\s/g, '-')}`}>
+      <div className="flex items-center gap-1.5 mb-1">
+        <span className={iconColors[status] || iconColors.unknown}>{icon}</span>
+        <span className="text-xs font-medium text-gray-700">{label}</span>
+      </div>
+      {value !== undefined && (
+        <div className={`text-xl font-bold ${textColors[status] || textColors.unknown}`}>{value}</div>
+      )}
+      <div className="text-[11px] text-gray-500 mt-0.5 truncate" title={message}>{message}</div>
     </div>
   );
 }

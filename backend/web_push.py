@@ -5,7 +5,7 @@ Remplace les notifications Expo par des notifications Web Push standard.
 import os
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pywebpush import webpush, WebPushException
 
 logger = logging.getLogger("web_push")
@@ -55,6 +55,14 @@ async def send_web_push_to_user(db, user_id: str, title: str, body: str, data: d
             )
             sent += 1
             logger.info(f"[WEB PUSH] OK -> user {user_id} ({sub.get('browser', '?')})")
+            # Log success for health monitoring
+            try:
+                await db.notification_health_logs.insert_one({
+                    "type": "sent", "user_id": user_id,
+                    "timestamp": datetime.now(timezone.utc), "tag": tag
+                })
+            except Exception:
+                pass
         except WebPushException as e:
             failed += 1
             error_msg = str(e)
@@ -71,11 +79,28 @@ async def send_web_push_to_user(db, user_id: str, title: str, body: str, data: d
                     logger.info(f"[WEB PUSH] Subscription desactivee (HTTP {status})")
 
             errors.append(error_msg[:200])
+            # Log failure for health monitoring
+            try:
+                await db.notification_health_logs.insert_one({
+                    "type": "failed", "user_id": user_id,
+                    "timestamp": datetime.now(timezone.utc), "error": error_msg[:200]
+                })
+            except Exception:
+                pass
         except Exception as e:
             failed += 1
             errors.append(str(e)[:200])
 
     return {"sent": sent, "failed": failed, "errors": errors}
+
+
+async def cleanup_notification_health_logs(db):
+    """Nettoie les vieux logs de sante (garde 7 jours)."""
+    try:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+        await db.notification_health_logs.delete_many({"timestamp": {"$lt": cutoff}})
+    except Exception:
+        pass
 
 
 async def send_web_push_to_users(db, user_ids: list, title: str, body: str, data: dict = None, tag: str = None):

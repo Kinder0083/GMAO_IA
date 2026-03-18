@@ -157,6 +157,12 @@ async def check_push_receipts():
         pending = await cursor.to_list(1000)
 
         if not pending:
+            # Log success even with no pending receipts
+            await _db.notification_health_checks.update_one(
+                {"check_type": "push_receipts_cron"},
+                {"$set": {"timestamp": datetime.now(timezone.utc), "success": True, "message": "Aucun recu en attente"}},
+                upsert=True
+            )
             return
 
         ticket_ids = [r["ticket_id"] for r in pending]
@@ -215,8 +221,32 @@ async def check_push_receipts():
         logger.info(f"[PUSH RECEIPTS] Done: {ok_count} ok, {error_count} errors, "
                      f"{len(tokens_to_remove)} removed, {cleanup.deleted_count} old receipts cleaned")
 
+        # Log cron success for health monitoring
+        await _db.notification_health_checks.update_one(
+            {"check_type": "push_receipts_cron"},
+            {"$set": {
+                "timestamp": datetime.now(timezone.utc),
+                "success": True,
+                "message": f"{ok_count} ok, {error_count} erreurs, {len(tokens_to_remove)} supprimes"
+            }},
+            upsert=True
+        )
+
     except Exception as e:
         logger.error(f"[PUSH RECEIPTS] ERROR: {e}")
+        # Log cron failure for health monitoring
+        try:
+            await _db.notification_health_checks.update_one(
+                {"check_type": "push_receipts_cron"},
+                {"$set": {
+                    "timestamp": datetime.now(timezone.utc),
+                    "success": False,
+                    "message": str(e)[:200]
+                }},
+                upsert=True
+            )
+        except Exception:
+            pass
 
 # ============================================
 # NOTIFICATION FUNCTIONS BY TYPE

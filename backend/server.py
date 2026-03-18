@@ -10799,6 +10799,218 @@ async def force_health_check(current_user: dict = Depends(get_current_admin_user
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ============================================================
+# NOTIFICATION HEALTH MONITORING
+# ============================================================
+
+def _sanitize_datetimes(obj):
+    """Convertit recursivement tous les datetime/ObjectId en strings serialisables."""
+    if isinstance(obj, dict):
+        return {k: _sanitize_datetimes(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [_sanitize_datetimes(item) for item in obj]
+    elif hasattr(obj, 'isoformat'):
+        return obj.isoformat()
+    elif isinstance(obj, ObjectId):
+        return str(obj)
+    return obj
+
+async def _check_notification_health_internal():
+    """Verifie la sante du systeme de notification. Retourne un dict de diagnostic."""
+    now = datetime.now(timezone.utc)
+    result = {
+        "timestamp": now.isoformat(),
+        "vapid_keys": {"status": "error", "message": "Non configurees"},
+        "web_push_subscriptions": {"status": "error", "active": 0, "inactive": 0, "total": 0},
+        "expo_tokens": {"status": "ok", "active": 0, "total": 0},
+        "last_notifications": {"status": "unknown", "recent_sent": 0, "recent_failed": 0},
+        "cron_push_receipts": {"status": "unknown", "message": "Non verifie"},
+        "overall": "error"
+    }
+    try:
+        # 1. VAPID keys
+        vpub = os.environ.get("VAPID_PUBLIC_KEY")
+        vpriv = os.environ.get("VAPID_PRIVATE_KEY")
+        vsub = os.environ.get("VAPID_SUBJECT")
+        if vpub and vpriv and vsub:
+            result["vapid_keys"] = {"status": "ok", "message": "Configurees"}
+        elif vpub or vpriv:
+            result["vapid_keys"] = {"status": "warning", "message": "Configuration incomplete"}
+
+        # 2. Web push subscriptions
+        active_subs = await db.web_push_subscriptions.count_documents({"is_active": True})
+        inactive_subs = await db.web_push_subscriptions.count_documents({"is_active": False})
+        total_subs = active_subs + inactive_subs
+        sub_status = "ok" if active_subs > 0 else ("warning" if total_subs > 0 else "error")
+        result["web_push_subscriptions"] = {
+            "status": sub_status,
+            "active": active_subs,
+            "inactive": inactive_subs,
+            "total": total_subs,
+            "message": f"{active_subs} actif(s) / {total_subs} total"
+        }
+
+        # 3. Expo tokens
+        active_tokens = await db.device_tokens.count_documents({"is_active": True})
+        total_tokens = await db.device_tokens.count_documents({})
+        result["expo_tokens"] = {
+            "status": "ok",
+            "active": active_tokens,
+            "total": total_tokens,
+            "message": f"{active_tokens} actif(s) / {total_tokens} total"
+        }
+
+        # 4. Recent notification activity (last 24h from logs in notification_health_logs)
+        cutoff_24h = now - timedelta(hours=24)
+        recent_sent = await db.notification_health_logs.count_documents({
+            "type": "sent", "timestamp": {"$gte": cutoff_24h}
+        })
+        recent_failed = await db.notification_health_logs.count_documents({
+            "type": "failed", "timestamp": {"$gte": cutoff_24h}
+        })
+        notif_status = "ok"
+        if recent_sent == 0 and active_subs > 0:
+            notif_status = "warning"
+        if recent_failed > recent_sent and recent_failed > 0:
+            notif_status = "warning"
+        result["last_notifications"] = {
+            "status": notif_status,
+            "recent_sent": recent_sent,
+            "recent_failed": recent_failed,
+            "message": f"{recent_sent} envoyee(s), {recent_failed} echouee(s) (24h)"
+        }
+
+        # 5. Cron check_push_receipts status
+        last_check = await db.notification_health_checks.find_one(
+            {"check_type": "push_receipts_cron"},
+            sort=[("timestamp", -1)]
+        )
+        if last_check:
+            lc_time = last_check.get("timestamp")
+            if isinstance(lc_time, str):
+                from dateutil.parser import parse as parse_date
+                lc_time = parse_date(lc_time)
+            age_min = (now - lc_time).total_seconds() / 60 if lc_time else 999
+            cron_ok = last_check.get("success", False)
+            cron_status = "ok" if cron_ok and age_min < 45 else "warning" if age_min < 90 else "error"
+            result["cron_push_receipts"] = {
+                "status": cron_status,
+                "last_run": lc_time.isoformat() if hasattr(lc_time, 'isoformat') else str(lc_time),
+                "success": cron_ok,
+                "message": f"{'OK' if cron_ok else 'Erreur'} (il y a {int(age_min)} min)"
+            }
+        else:
+            result["cron_push_receipts"] = {"status": "warning", "message": "Jamais execute"}
+
+        # Overall status
+        statuses = [v.get("status", "unknown") for v in result.values() if isinstance(v, dict) and "status" in v]
+        if "error" in statuses:
+            result["overall"] = "error"
+        elif "warning" in statuses:
+            result["overall"] = "warning"
+        else:
+            result["overall"] = "ok"
+
+    except Exception as e:
+        logger.error(f"[NOTIF HEALTH] Erreur verification: {e}")
+        result["overall"] = "error"
+        result["error"] = str(e)
+
+    return result
+
+
+async def check_notification_health_cron():
+    """Tache planifiee: verifie la sante des notifications toutes les 30 min."""
+    try:
+        result = await _check_notification_health_internal()
+        now = datetime.now(timezone.utc)
+
+        # Store the check result
+        await db.notification_health_checks.insert_one({
+            "check_type": "periodic",
+            "timestamp": now,
+            "overall": result["overall"],
+            "details": result,
+            "checked": True
+        })
+
+        # Cleanup old checks (keep last 7 days)
+        week_ago = now - timedelta(days=7)
+        await db.notification_health_checks.delete_many({
+            "check_type": "periodic",
+            "timestamp": {"$lt": week_ago}
+        })
+
+        # Alert admins if notification system is down
+        if result["overall"] == "error":
+            logger.warning(f"[NOTIF HEALTH] Systeme de notification en ERREUR: {result}")
+            # Try to send web push alert to admins
+            try:
+                admin_cursor = db.users.find(
+                    {"role": "ADMIN", "statut": {"$in": ["actif", "ACTIF"]}},
+                    {"_id": 0, "id": 1}
+                )
+                admin_ids = [doc["id"] async for doc in admin_cursor if doc.get("id")]
+                if admin_ids:
+                    from web_push import send_web_push_to_users
+                    await send_web_push_to_users(
+                        db, admin_ids,
+                        title="Alerte: Systeme de notification",
+                        body="Le systeme de notification est en erreur. Verifiez la page Sante Systeme.",
+                        data={"type": "system_alert"},
+                        tag="notif-health-alert"
+                    )
+            except Exception as alert_err:
+                logger.warning(f"[NOTIF HEALTH] Impossible d'alerter les admins: {alert_err}")
+        else:
+            logger.info(f"[NOTIF HEALTH] Check OK: {result['overall']}")
+
+    except Exception as e:
+        logger.error(f"[NOTIF HEALTH] Erreur cron: {e}")
+
+
+@api_router.get("/health/notifications", tags=["Health"])
+async def get_notification_health(current_user: dict = Depends(get_current_admin_user)):
+    """Retourne l'etat de sante du systeme de notification (Admin uniquement)."""
+    result = await _check_notification_health_internal()
+    return result
+
+
+@api_router.get("/health/notifications/history", tags=["Health"])
+async def get_notification_health_history(
+    current_user: dict = Depends(get_current_admin_user),
+    limit: int = 48
+):
+    """Historique des verifications de sante des notifications (Admin uniquement)."""
+    checks = []
+    try:
+        async for doc in db.notification_health_checks.find(
+            {"check_type": {"$in": ["periodic", "manual"]}},
+            {"_id": 0}
+        ).sort("timestamp", -1).limit(limit):
+            # Convert all datetime objects to ISO strings recursively
+            sanitized = _sanitize_datetimes(doc)
+            checks.append(sanitized)
+    except Exception as e:
+        logger.error(f"[NOTIF HEALTH] Erreur historique: {e}")
+    return {"total": len(checks), "checks": checks}
+
+
+@api_router.post("/health/notifications/force-check", tags=["Health"])
+async def force_notification_health_check(current_user: dict = Depends(get_current_admin_user)):
+    """Lance une verification immediate de la sante des notifications."""
+    result = await _check_notification_health_internal()
+    now = datetime.now(timezone.utc)
+    await db.notification_health_checks.insert_one({
+        "check_type": "manual",
+        "timestamp": now,
+        "overall": result["overall"],
+        "details": result,
+        "triggered_by": str(current_user.get("id", ""))
+    })
+    return result
+
+
 @api_router.post("/health/reset-failures")
 async def reset_failure_counter(current_user: dict = Depends(get_current_admin_user)):
     """Remet à zéro le compteur d'échecs consécutifs (Admin uniquement)."""
@@ -12037,6 +12249,15 @@ async def startup_scheduler():
             replace_existing=True
         )
         
+        # Configurer la verification de sante des notifications toutes les 30 minutes
+        scheduler.add_job(
+            check_notification_health_cron,
+            CronTrigger(minute='*/30'),  # Toutes les 30 minutes
+            id='notification_health_check',
+            name='Verification sante systeme de notification',
+            replace_existing=True
+        )
+        
         scheduler.start()
         logger.info("✅ Scheduler démarré:")
         logger.info("   - Vérification maintenances préventives: tous les jours à 00h00")
@@ -12049,6 +12270,7 @@ async def startup_scheduler():
         logger.info("   - Rappels surveillance: tous les jours à 07h30")
         logger.info("   - Alertes contrats: tous les jours à 08h00")
         logger.info("   - Nettoyage push tokens invalides: toutes les 20 min")
+        logger.info("   - Verification sante notifications: toutes les 30 min")
 
         # Charger les planifications de backup automatique
         try:
