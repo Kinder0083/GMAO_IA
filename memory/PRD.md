@@ -1,79 +1,54 @@
-# FSAO Iris - PRD (Product Requirements Document)
+# FSAO Iris - GMAO (Gestion de Maintenance Assistée par Ordinateur)
 
-## Probleme Original
-Application GMAO / FSAO avec module "Arbre des Causes" pour l'analyse d'accidents.
+## Description
+Application web PWA de gestion de maintenance industrielle. Frontend React + Backend FastAPI + MongoDB.
+
+## Utilisateurs
+- **ADMIN** : Gestion complète
+- **TECHNICIEN** : Ordres de travail, interventions
+- **DEMANDEUR** : Demandes d'intervention
 
 ## Architecture
-- **Frontend** : React + Shadcn UI
-- **Backend** : FastAPI (Python)
-- **Base de donnees** : MongoDB
-- **IA** : Emergent LLM Key (OpenAI, Gemini, Claude)
+- Frontend: React (CRA) + Shadcn/UI + TailwindCSS
+- Backend: FastAPI + Motor (async MongoDB)
+- DB: MongoDB (gmao_iris)
+- Push: Web Push VAPID (PWA) + Expo Push (mobile)
 
-## Taches Accomplies
+## Fonctionnalités principales
+- Ordres de travail (OT) : création, assignation, suivi, clôture
+- Demandes d'intervention (DI) : création, conversion en OT
+- Équipements : gestion, statut, historique
+- Maintenance préventive : planification, planning
+- Notifications push : Web (PWA) et Mobile (Expo)
+- Chat live, inventaire, rapports, etc.
 
-### 18 Mars 2026 - Fix Safe Area Mobile PWA (barre de statut)
-- [x] `apple-mobile-web-app-status-bar-style="default"` (barre opaque blanche iOS)
-- [x] `theme-color="#ffffff"` + manifest `theme_color/background_color` (Android)
-- [x] Bande blanche fixe z-[31] pour safe-area-inset-top dans MainLayout
-- [x] Header, Sidebar et contenu décalés avec `env(safe-area-inset-top)`
+## Authentification
+- JWT Bearer token (champ `access_token` dans la réponse login)
+- Compte admin: buenogy@gmail.com / Admin2024!
 
-### 18 Mars 2026 - Fix Mobile PWA (GuidedTour + Photos + Navigation)
-- [x] **GuidedTour**: Tooltip responsive `max-w-[400px] w-[calc(100vw-2rem)]`, overlay `pointer-events-none`, `onTouchEnd` handlers
-- [x] **Photos Lightbox**: Portal dédié avec `pointer-events:auto` + `touchAction:auto` + `onTouchEnd` pour fermeture
-- [x] Corrigé dans 3 fichiers: AttachmentGallery.jsx, WorkOrderFormDialog.jsx, InterventionRequestFormDialog.jsx
-- [x] **Navigation mobile**: Lignes tableau cliquables (OT + DI) pour ouvrir le dialogue vue sans bouton oeil
-- [x] Test validé en viewport 375x812: tour, photos, fermeture lightbox OK
+## État actuel - Mars 2026
 
-### 18 Mars 2026 - Fix Lightbox photos bloquée (ne se ferme pas)
-- [x] **ROOT CAUSE**: `createPortal(element, document.body)` rendait la lightbox hors de l'arbre Radix Dialog → les clics étaient interceptés
-- [x] Fix: Supprimé `createPortal`, rendu en `fixed` dans l'arbre composant + `onPointerDown` + `stopPropagation`
-- [x] Corrigé dans 3 fichiers: AttachmentGallery.jsx, WorkOrderFormDialog.jsx, InterventionRequestFormDialog.jsx
-- [x] Test validé: ouverture lightbox + fermeture via bouton X fonctionnelle
+### Complété
+- Bug P0 écran blanc (AssigneeSelector) — Corrigé
+- Bug validation OT (UUID vs ObjectId) — Corrigé
+- Bug lightbox photo (React Portal) — Corrigé
+- Bugs PWA mobile (visite guidée, safe area) — Corrigés
+- Index uniques MongoDB (25 collections) — Mis en place
+- **Bug P0 Notifications (web + PWA)** — Corrigé (18/03/2026)
+  - `notifications.py` L.147: `if not _db` → `if _db is None:` (crash PyMongo)
+  - `usePWA.js`: syncWithBackend + forceResubscribe au chargement
+  - `Settings.jsx`: Bouton test/renouvellement notifications
+  - `sw.js`: tag + requireInteraction dans les options push
+- **P4 Déduplication services** — Corrigé (18/03/2026)
+  - `service_responsables`: 'Maintenance' → 'MAINTENANCE'
 
-### 18 Mars 2026 - Fix Validation OT (Erreur lors de la validation)
-- [x] **ROOT CAUSE**: Les endpoints `/comments` et `/add-time` utilisaient `ObjectId(wo_id)` qui crashait sur les UUID
-- [x] Créé helper `find_work_order_flexible()` (cherche par `id` UUID puis fallback `_id` ObjectId)
-- [x] Corrigé 6 endpoints OT: add-comment, add-time, delete, upload-attachment, add-parts, get-comments
-- [x] Test validé: commentaire + temps enregistrés avec succès via le frontend
-- [x] **ROOT CAUSE**: `<SelectItem value="">` dans AssigneeSelector crashait React quand un utilisateur en base avait un `id` vide
-- [x] Fix frontend: filtre `.filter(item => item.id)` avant rendu des SelectItem
-- [x] Fix backend: skip les utilisateurs sans `id` dans `/api/assignment-targets`
-- [x] Fix perte assignation service lors de l'édition d'un OT (chargement assigne_type/assigne_service)
-- [x] Fix affichage service dans la liste des OT (badge bleu)
-- [x] Fix conversion DI→OT transmet maintenant assigne_type et assigne_service
-- [x] Fix BonDeTravailForm: fallback défensif pour tableaux undefined
-- [x] Nettoyage doublons OT en base de données
-- [x] Index uniques sur champ `id` pour 25 collections (protection anti-doublons permanente)
-- [x] Tests automatisés: 100% backend + frontend
+### Tâches à venir
+- **(P2)** Corriger la logique de détection des membres d'un service (notifier tous les membres, pas seulement les responsables)
+- **(P3)** Tester le script de mise à jour `MAJ_FSAO.sh` (à la demande de l'utilisateur)
 
-### 17 Mars 2026 - Assignation aux Services
-- [x] Nouveau composant AssigneeSelector réutilisable (services en haut, utilisateurs alphabétiques)
-- [x] Endpoint GET /api/assignment-targets (pôles + utilisateurs triés)
-- [x] Notification service: tous les membres du service notifiés lors d'une assignation
-- [x] Harmonisation orthographe "Assigner à" dans toute l'application
-- [x] Intégration dans 4 formulaires: WorkOrderFormDialog, PreventiveMaintenanceFormDialog, ImprovementFormDialog, ConvertToWorkOrderDialog
-- [x] Nouveaux champs modèle: assigne_type, assigne_service
+### Backlog
+- Dédupliquer d'autres inconsistances de casse dans les collections si nécessaire
 
-### 17 Mars 2026 - Bug Permissions UUID
-- [x] Fix helper find_user_flexible pour gérer ObjectId ET UUID
-- [x] 8 endpoints utilisateur corrigés
-
-### 17 Mars 2026 - Système MAJ externalisé
-- [x] MAJ_FSAO.sh créé (fusion update_manual.sh + MAJ_SSH.sh)
-- [x] update_service.py: apply_update lance le script externe
-
-### 16 Mars 2026 - Refactoring Import
-- [x] process_import_item décomposé en 8 fonctions spécialisées
-
-### 15 Mars 2026
-- [x] Fix P0 race condition user_preferences
-- [x] Actions correctives semi-automatiques (checklists + maintenance préventive)
-- [x] Fix filtres OT (created_at -> dateCreation)
-
-## Taches En Attente
-- [ ] **(P2)** Tester MAJ_FSAO.sh sur serveur Proxmox
-- [ ] **(P3)** Dédupliquer services MAINTENANCE/Maintenance dans service_responsables
-
-## Credentials
-- Admin: buenogy@gmail.com / Admin2024!
-- GitHub: Kinder0083/GMAO
+## Clés d'API
+- VAPID keys dans backend/.env
+- MongoDB: mongodb://localhost:27017 / DB: gmao_iris
