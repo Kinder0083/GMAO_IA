@@ -4588,7 +4588,16 @@ async def set_password_permanent(
         current_user_id = current_user.get("id")
         is_admin = current_user.get("role") == "ADMIN"
         
-        if str(user_id) != str(current_user_id) and not is_admin:
+        # Comparer par _id MongoDB (ObjectId) pour eviter les mismatches UUID vs ObjectId
+        target_mongo_id = str(user.get("_id", ""))
+        is_same_user = (
+            str(user_id) == str(current_user_id)
+            or target_mongo_id == str(current_user_id)
+            or str(user_id) == target_mongo_id
+            or str(user.get("id", "")) == str(current_user_id)
+        )
+        
+        if not is_same_user and not is_admin:
             raise HTTPException(
                 status_code=403, 
                 detail="Vous ne pouvez modifier que votre propre statut"
