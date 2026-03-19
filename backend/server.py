@@ -1222,8 +1222,8 @@ async def get_service_manager_stats(current_user: dict = Depends(get_current_use
     eq_total = await db.equipments.count_documents(query)
     eq_panne = await db.equipments.count_documents({**query, "status": "EN_PANNE"})
     
-    # Statistiques des demandes d'intervention
-    di_en_attente = await db.intervention_requests.count_documents({**query, "status": "EN_ATTENTE"})
+    # Statistiques des demandes d'intervention (exclure les supprimees)
+    di_en_attente = await db.intervention_requests.count_documents({**query, "status": "EN_ATTENTE", "deleted_at": {"$exists": False}})
     
     # Membres de l'équipe
     team_count = await db.users.count_documents(query) if service_filter else 0
@@ -7752,7 +7752,7 @@ async def get_all_intervention_requests(current_user: dict = Depends(require_per
 async def get_intervention_requests_kpi(current_user: dict = Depends(require_permission("interventionRequests", "view"))):
     """KPI des demandes d'intervention : temps de reponse, taux de conversion, etc."""
     try:
-        all_irs = await db.intervention_requests.find({}, {"_id": 0}).to_list(5000)
+        all_irs = await db.intervention_requests.find({"deleted_at": {"$exists": False}}, {"_id": 0}).to_list(5000)
         total = len(all_irs)
         if total == 0:
             return {
