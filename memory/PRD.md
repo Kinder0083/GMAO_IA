@@ -19,12 +19,15 @@
 - **[BUG] Fix compteur DI dashboard** : Exclusion des DI soft-deleted
 - **[BUG] Fix equipements filtres par service** : Suppression du filtre service
 - **[FEATURE] Refonte page Rapports** :
-  - Pointage : vue tableau par defaut, OT supprimes exclus, lignes vides masquees, fix timestamp string
-  - Suppression widget "Tendance des couts de maintenance" (donnees fictives)
-  - Widget "Taux de realisation" : OT termines / total OT du mois
-  - Widget "MTTR - Temps avant realisation" : moyenne creation -> termine
-  - Widget "Maintenances preventives" : realise/total/pourcentage du mois
-  - Widget "Maintenances correctives" : realise/total/pourcentage du mois
+  - Widgets KPI recalcules avec donnees reelles
+  - Suppression widget "Tendance des couts" (donnees fictives)
+  - Taux de realisation, MTTR, M.Prev, M.Corr
+- **[FEATURE] Pointage horaire ameliore** :
+  - Navigation entre semaines (fleches + affichage semaine)
+  - Resume hebdomadaire des heures par categorie
+  - Export PDF avec semaine personnalisable
+  - Vue tableau par defaut, lignes vides masquees
+  - OT supprimes exclus du calcul
 
 ## Backlog
 - **(P3)** Tester le script de mise a jour `MAJ_FSAO.sh`
