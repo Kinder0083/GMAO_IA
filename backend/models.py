@@ -894,6 +894,12 @@ class AddTimeSpent(BaseModel):
     hours: int
     minutes: int
 
+class TimeEntryUpdate(BaseModel):
+    hours: float
+
+class CommentUpdate(BaseModel):
+    text: str
+
 class WorkOrder(WorkOrderBase):
     id: str
     numero: str
@@ -905,6 +911,7 @@ class WorkOrder(WorkOrderBase):
     emplacement: Optional[dict] = None
     attachments: List[dict] = []
     comments: List[Comment] = []
+    time_entries: List[dict] = []
     parts_used: List[PartUsed] = []  # Pièces utilisées
     createdByName: Optional[str] = None
 

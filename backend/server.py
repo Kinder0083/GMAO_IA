@@ -7352,6 +7352,210 @@ async def get_work_order_comments(
         )
 
 
+# ==================== ADMIN: EDIT/DELETE TIME ENTRIES & COMMENTS ====================
+
+@api_router.put("/work-orders/{work_order_id}/time-entries/{entry_id}",
+    summary="Modifier une entree de temps (admin)", tags=["Ordres de Travail"])
+async def update_time_entry(
+    work_order_id: str,
+    entry_id: str,
+    update_data: TimeEntryUpdate,
+    current_user: dict = Depends(get_current_admin_user)
+):
+    """Modifier une entrée de temps d'un OT (admin uniquement)"""
+    try:
+        work_order = await find_work_order_flexible(work_order_id)
+        if not work_order:
+            raise HTTPException(status_code=404, detail="Ordre de travail non trouvé")
+
+        wo_oid = work_order["_id"]
+        time_entries = work_order.get("time_entries", [])
+
+        # Trouver l'entrée existante
+        old_entry = next((e for e in time_entries if e.get("id") == entry_id), None)
+        if not old_entry:
+            raise HTTPException(status_code=404, detail="Entrée de temps non trouvée")
+
+        old_hours = old_entry.get("hours", 0)
+        new_hours = update_data.hours
+        diff = new_hours - old_hours
+
+        # Mettre à jour l'entrée dans le tableau + recalculer tempsReel
+        current_total = work_order.get("tempsReel", 0) or 0
+        new_total = max(0, current_total + diff)
+
+        await db.work_orders.update_one(
+            {"_id": wo_oid, "time_entries.id": entry_id},
+            {
+                "$set": {
+                    "time_entries.$.hours": new_hours,
+                    "tempsReel": new_total
+                }
+            }
+        )
+
+        await audit_service.log_action(
+            user_id=current_user["id"],
+            user_name=f"{current_user['prenom']} {current_user['nom']}",
+            user_email=current_user["email"],
+            action=ActionType.UPDATE,
+            entity_type=EntityType_Audit.WORK_ORDER,
+            entity_id=work_order_id,
+            entity_name=work_order.get("titre", ""),
+            details=f"Modification temps: {old_hours:.2f}h -> {new_hours:.2f}h (entrée de {old_entry.get('user_name', '?')})"
+        )
+
+        return {"message": "Entrée de temps modifiée", "new_total": new_total}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erreur modification time entry: {e}")
+        raise HTTPException(status_code=500, detail="Erreur lors de la modification")
+
+
+@api_router.delete("/work-orders/{work_order_id}/time-entries/{entry_id}",
+    summary="Supprimer une entree de temps (admin)", tags=["Ordres de Travail"])
+async def delete_time_entry(
+    work_order_id: str,
+    entry_id: str,
+    current_user: dict = Depends(get_current_admin_user)
+):
+    """Supprimer une entrée de temps d'un OT (admin uniquement)"""
+    try:
+        work_order = await find_work_order_flexible(work_order_id)
+        if not work_order:
+            raise HTTPException(status_code=404, detail="Ordre de travail non trouvé")
+
+        wo_oid = work_order["_id"]
+        time_entries = work_order.get("time_entries", [])
+
+        old_entry = next((e for e in time_entries if e.get("id") == entry_id), None)
+        if not old_entry:
+            raise HTTPException(status_code=404, detail="Entrée de temps non trouvée")
+
+        old_hours = old_entry.get("hours", 0)
+        current_total = work_order.get("tempsReel", 0) or 0
+        new_total = max(0, current_total - old_hours)
+
+        await db.work_orders.update_one(
+            {"_id": wo_oid},
+            {
+                "$pull": {"time_entries": {"id": entry_id}},
+                "$set": {"tempsReel": new_total}
+            }
+        )
+
+        await audit_service.log_action(
+            user_id=current_user["id"],
+            user_name=f"{current_user['prenom']} {current_user['nom']}",
+            user_email=current_user["email"],
+            action=ActionType.DELETE,
+            entity_type=EntityType_Audit.WORK_ORDER,
+            entity_id=work_order_id,
+            entity_name=work_order.get("titre", ""),
+            details=f"Suppression temps: {old_hours:.2f}h de {old_entry.get('user_name', '?')}"
+        )
+
+        return {"message": "Entrée de temps supprimée", "new_total": new_total}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erreur suppression time entry: {e}")
+        raise HTTPException(status_code=500, detail="Erreur lors de la suppression")
+
+
+@api_router.put("/work-orders/{work_order_id}/comments/{comment_id}",
+    summary="Modifier un commentaire (admin)", tags=["Ordres de Travail"])
+async def update_comment(
+    work_order_id: str,
+    comment_id: str,
+    update_data: CommentUpdate,
+    current_user: dict = Depends(get_current_admin_user)
+):
+    """Modifier un commentaire d'un OT (admin uniquement)"""
+    try:
+        work_order = await find_work_order_flexible(work_order_id)
+        if not work_order:
+            raise HTTPException(status_code=404, detail="Ordre de travail non trouvé")
+
+        wo_oid = work_order["_id"]
+        comments_list = work_order.get("comments", [])
+
+        old_comment = next((c for c in comments_list if c.get("id") == comment_id), None)
+        if not old_comment:
+            raise HTTPException(status_code=404, detail="Commentaire non trouvé")
+
+        await db.work_orders.update_one(
+            {"_id": wo_oid, "comments.id": comment_id},
+            {"$set": {"comments.$.text": update_data.text}}
+        )
+
+        await audit_service.log_action(
+            user_id=current_user["id"],
+            user_name=f"{current_user['prenom']} {current_user['nom']}",
+            user_email=current_user["email"],
+            action=ActionType.UPDATE,
+            entity_type=EntityType_Audit.WORK_ORDER,
+            entity_id=work_order_id,
+            entity_name=work_order.get("titre", ""),
+            details=f"Modification commentaire de {old_comment.get('user_name', '?')}: '{old_comment.get('text', '')[:30]}...' -> '{update_data.text[:30]}...'"
+        )
+
+        return {"message": "Commentaire modifié"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erreur modification commentaire: {e}")
+        raise HTTPException(status_code=500, detail="Erreur lors de la modification")
+
+
+@api_router.delete("/work-orders/{work_order_id}/comments/{comment_id}",
+    summary="Supprimer un commentaire (admin)", tags=["Ordres de Travail"])
+async def delete_comment(
+    work_order_id: str,
+    comment_id: str,
+    current_user: dict = Depends(get_current_admin_user)
+):
+    """Supprimer un commentaire d'un OT (admin uniquement)"""
+    try:
+        work_order = await find_work_order_flexible(work_order_id)
+        if not work_order:
+            raise HTTPException(status_code=404, detail="Ordre de travail non trouvé")
+
+        wo_oid = work_order["_id"]
+        comments_list = work_order.get("comments", [])
+
+        old_comment = next((c for c in comments_list if c.get("id") == comment_id), None)
+        if not old_comment:
+            raise HTTPException(status_code=404, detail="Commentaire non trouvé")
+
+        await db.work_orders.update_one(
+            {"_id": wo_oid},
+            {"$pull": {"comments": {"id": comment_id}}}
+        )
+
+        await audit_service.log_action(
+            user_id=current_user["id"],
+            user_name=f"{current_user['prenom']} {current_user['nom']}",
+            user_email=current_user["email"],
+            action=ActionType.DELETE,
+            entity_type=EntityType_Audit.WORK_ORDER,
+            entity_id=work_order_id,
+            entity_name=work_order.get("titre", ""),
+            details=f"Suppression commentaire de {old_comment.get('user_name', '?')}: '{old_comment.get('text', '')[:50]}...'"
+        )
+
+        return {"message": "Commentaire supprimé"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erreur suppression commentaire: {e}")
+        raise HTTPException(status_code=500, detail="Erreur lors de la suppression")
+
 
 # ==================== METERS (COMPTEURS) ENDPOINTS ====================
 

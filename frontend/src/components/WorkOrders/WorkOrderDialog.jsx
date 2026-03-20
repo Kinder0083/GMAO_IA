@@ -13,7 +13,7 @@ import { Textarea } from '../ui/textarea';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Calendar, Clock, User, MapPin, Wrench, FileText, MessageSquare, Send, Plus, Package, X } from 'lucide-react';
+import { Calendar, Clock, User, MapPin, Wrench, FileText, MessageSquare, Send, Plus, Package, X, Pencil, Trash2, Check } from 'lucide-react';
 import AttachmentsList from './AttachmentsList';
 import AttachmentUploader from './AttachmentUploader';
 import StatusChangeDialog from './StatusChangeDialog';
@@ -26,7 +26,7 @@ import { formatTimeToHoursMinutes } from '../../utils/timeFormat';
 
 const WorkOrderDialog = ({ open, onOpenChange, workOrder, onSuccess }) => {
   const { toast } = useToast();
-  const { canEdit } = usePermissions();
+  const { canEdit, isAdmin } = usePermissions();
   const [refreshAttachments, setRefreshAttachments] = useState(0);
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState('');
@@ -42,6 +42,12 @@ const WorkOrderDialog = ({ open, onOpenChange, workOrder, onSuccess }) => {
   const [partsUsed, setPartsUsed] = useState([]);
   const [inventoryItems, setInventoryItems] = useState([]);
   const [equipmentsList, setEquipmentsList] = useState([]);
+
+  // États pour l'édition admin des temps et commentaires
+  const [editingTimeId, setEditingTimeId] = useState(null);
+  const [editingTimeValue, setEditingTimeValue] = useState('');
+  const [editingCommentId, setEditingCommentId] = useState(null);
+  const [editingCommentText, setEditingCommentText] = useState('');
 
   // Fonction pour parser le temps saisi dans différents formats
   const parseTimeInput = (input) => {
@@ -174,6 +180,75 @@ const WorkOrderDialog = ({ open, onOpenChange, workOrder, onSuccess }) => {
     setPartsUsed(partsUsed.map(part => 
       part.id === id ? { ...part, [field]: value } : part
     ));
+  };
+
+  // === Fonctions Admin : édition/suppression des temps ===
+  const handleEditTimeEntry = (entry) => {
+    setEditingTimeId(entry.id);
+    // Convertir les heures décimales en format lisible
+    const h = Math.floor(entry.hours);
+    const m = Math.round((entry.hours - h) * 60);
+    setEditingTimeValue(`${h}h${m.toString().padStart(2, '0')}`);
+  };
+
+  const handleSaveTimeEntry = async () => {
+    const parsed = parseTimeInput(editingTimeValue);
+    if (!parsed || (parsed.hours === 0 && parsed.minutes === 0)) {
+      toast({ title: 'Erreur', description: 'Temps invalide', variant: 'destructive' });
+      return;
+    }
+    try {
+      const newHours = parsed.hours + parsed.minutes / 60;
+      await workOrdersAPI.updateTimeEntry(workOrder.id, editingTimeId, newHours);
+      toast({ title: 'Succès', description: 'Temps modifié' });
+      setEditingTimeId(null);
+      if (onSuccess) onSuccess();
+    } catch (error) {
+      toast({ title: 'Erreur', description: 'Impossible de modifier le temps', variant: 'destructive' });
+    }
+  };
+
+  const handleDeleteTimeEntry = async (entryId) => {
+    if (!window.confirm('Supprimer cette entrée de temps ?')) return;
+    try {
+      await workOrdersAPI.deleteTimeEntry(workOrder.id, entryId);
+      toast({ title: 'Succès', description: 'Entrée de temps supprimée' });
+      if (onSuccess) onSuccess();
+    } catch (error) {
+      toast({ title: 'Erreur', description: 'Impossible de supprimer', variant: 'destructive' });
+    }
+  };
+
+  // === Fonctions Admin : édition/suppression des commentaires ===
+  const handleEditComment = (comment) => {
+    setEditingCommentId(comment.id);
+    setEditingCommentText(comment.text);
+  };
+
+  const handleSaveComment = async () => {
+    if (!editingCommentText.trim()) {
+      toast({ title: 'Erreur', description: 'Le commentaire ne peut pas être vide', variant: 'destructive' });
+      return;
+    }
+    try {
+      await commentsAPI.updateComment(workOrder.id, editingCommentId, editingCommentText);
+      toast({ title: 'Succès', description: 'Commentaire modifié' });
+      setEditingCommentId(null);
+      await loadComments();
+    } catch (error) {
+      toast({ title: 'Erreur', description: 'Impossible de modifier le commentaire', variant: 'destructive' });
+    }
+  };
+
+  const handleDeleteComment = async (commentId) => {
+    if (!window.confirm('Supprimer ce commentaire ?')) return;
+    try {
+      await commentsAPI.deleteComment(workOrder.id, commentId);
+      toast({ title: 'Succès', description: 'Commentaire supprimé' });
+      await loadComments();
+    } catch (error) {
+      toast({ title: 'Erreur', description: 'Impossible de supprimer le commentaire', variant: 'destructive' });
+    }
   };
 
   const handleAddTime = async () => {
@@ -654,9 +729,60 @@ const WorkOrderDialog = ({ open, onOpenChange, workOrder, onSuccess }) => {
                   <div key={comment.id} className="bg-white rounded-lg p-3 shadow-sm">
                     <div className="flex justify-between items-start mb-1">
                       <span className="font-semibold text-sm text-gray-900">{comment.user_name}</span>
-                      <span className="text-xs text-gray-500">{formatDate(comment.timestamp)}</span>
+                      <div className="flex items-center gap-1">
+                        <span className="text-xs text-gray-500">{formatDate(comment.timestamp)}</span>
+                        {isAdmin() && (
+                          <>
+                            <button
+                              data-testid={`edit-comment-${comment.id}`}
+                              onClick={() => handleEditComment(comment)}
+                              className="p-1 text-gray-400 hover:text-blue-600 rounded"
+                              title="Modifier"
+                            >
+                              <Pencil size={13} />
+                            </button>
+                            <button
+                              data-testid={`delete-comment-${comment.id}`}
+                              onClick={() => handleDeleteComment(comment.id)}
+                              className="p-1 text-gray-400 hover:text-red-600 rounded"
+                              title="Supprimer"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </div>
-                    <p className="text-gray-700 text-sm whitespace-pre-wrap">{comment.text}</p>
+                    {editingCommentId === comment.id ? (
+                      <div className="flex gap-2 items-end">
+                        <Textarea
+                          data-testid={`edit-comment-textarea-${comment.id}`}
+                          value={editingCommentText}
+                          onChange={(e) => setEditingCommentText(e.target.value)}
+                          rows={2}
+                          className="flex-1 text-sm resize-none"
+                        />
+                        <div className="flex flex-col gap-1">
+                          <button
+                            data-testid={`save-comment-${comment.id}`}
+                            onClick={handleSaveComment}
+                            className="p-1.5 text-green-600 hover:bg-green-50 rounded"
+                            title="Enregistrer"
+                          >
+                            <Check size={14} />
+                          </button>
+                          <button
+                            onClick={() => setEditingCommentId(null)}
+                            className="p-1.5 text-gray-400 hover:bg-gray-100 rounded"
+                            title="Annuler"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-gray-700 text-sm whitespace-pre-wrap">{comment.text}</p>
+                    )}
                   </div>
                 ))
               )}
@@ -855,6 +981,72 @@ const WorkOrderDialog = ({ open, onOpenChange, workOrder, onSuccess }) => {
               <Clock size={20} className="text-gray-600" />
               <h3 className="text-lg font-semibold text-gray-900">Temps Passé</h3>
             </div>
+
+            {/* Historique des temps pointés */}
+            {workOrder.time_entries && workOrder.time_entries.length > 0 && (
+              <div className="bg-orange-50 rounded-lg p-3 mb-4 border border-orange-200 space-y-2" data-testid="time-entries-list">
+                <h4 className="text-xs font-semibold text-orange-900 mb-1">Historique des temps</h4>
+                {workOrder.time_entries.map((entry) => (
+                  <div key={entry.id} className="flex items-center justify-between text-sm bg-white rounded px-3 py-1.5 shadow-sm">
+                    {editingTimeId === entry.id ? (
+                      <div className="flex items-center gap-2 flex-1">
+                        <Input
+                          data-testid={`edit-time-input-${entry.id}`}
+                          type="text"
+                          value={editingTimeValue}
+                          onChange={(e) => setEditingTimeValue(e.target.value)}
+                          className="max-w-[120px] h-7 text-sm"
+                          placeholder="Ex: 1h30"
+                        />
+                        <button
+                          data-testid={`save-time-${entry.id}`}
+                          onClick={handleSaveTimeEntry}
+                          className="p-1 text-green-600 hover:bg-green-50 rounded"
+                          title="Enregistrer"
+                        >
+                          <Check size={14} />
+                        </button>
+                        <button
+                          onClick={() => setEditingTimeId(null)}
+                          className="p-1 text-gray-400 hover:bg-gray-100 rounded"
+                          title="Annuler"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <span className="text-gray-700">
+                          <span className="font-semibold">{formatTimeToHoursMinutes(entry.hours)}</span>
+                          {' — '}{entry.user_name}
+                          <span className="text-xs text-gray-400 ml-2">{formatDate(entry.timestamp)}</span>
+                        </span>
+                        {isAdmin() && (
+                          <div className="flex items-center gap-0.5 ml-2">
+                            <button
+                              data-testid={`edit-time-${entry.id}`}
+                              onClick={() => handleEditTimeEntry(entry)}
+                              className="p-1 text-gray-400 hover:text-blue-600 rounded"
+                              title="Modifier"
+                            >
+                              <Pencil size={13} />
+                            </button>
+                            <button
+                              data-testid={`delete-time-${entry.id}`}
+                              onClick={() => handleDeleteTimeEntry(entry.id)}
+                              className="p-1 text-gray-400 hover:text-red-600 rounded"
+                              title="Supprimer"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
 
             {/* Zone de saisie du temps - champ unique */}
             <div className="space-y-2">

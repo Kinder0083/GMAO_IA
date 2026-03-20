@@ -234,6 +234,12 @@ export const workOrdersAPI = {
     return api.delete(`/work-orders/${workOrderId}/attachments/${attachmentId}`);
   },
   
+  // Admin: Edit/Delete time entries
+  updateTimeEntry: (workOrderId, entryId, hours) =>
+    api.put(`/work-orders/${workOrderId}/time-entries/${entryId}`, { hours }),
+  deleteTimeEntry: (workOrderId, entryId) =>
+    api.delete(`/work-orders/${workOrderId}/time-entries/${entryId}`),
+
   // Parts used
   addWorkOrderParts: async (workOrderId, parts) => {
     const response = await api.post(`/work-orders/${workOrderId}/parts-used`, parts);
@@ -472,7 +478,12 @@ export const commentsAPI = {
   getWorkOrderComments: async (workOrderId) => {
     const response = await api.get(`/work-orders/${workOrderId}/comments`);
     return response.data;
-  }
+  },
+  // Admin: Edit/Delete comments
+  updateComment: (workOrderId, commentId, text) =>
+    api.put(`/work-orders/${workOrderId}/comments/${commentId}`, { text }),
+  deleteComment: (workOrderId, commentId) =>
+    api.delete(`/work-orders/${workOrderId}/comments/${commentId}`)
 };
 
 // ==================== METERS (COMPTEURS) ====================
