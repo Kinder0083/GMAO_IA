@@ -634,12 +634,17 @@ async def upload_public_intervention_attachment(request_id: str, file: UploadFil
     if len(content) > 25 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="Fichier trop volumineux (max 25MB)")
 
+    # Compression automatique des images
+    from image_compressor import get_compression_settings, compress_image
+    comp_settings = await get_compression_settings(db)
+    content, compressed_filename, new_mime, was_compressed = compress_image(content, file.filename, comp_settings)
+
     # Use the SAME upload dir as standard DI uploads
     IR_UPLOAD_DIR = Path("/app/backend/uploads/intervention-requests")
     IR_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
     import uuid as _uuid
-    file_ext = Path(file.filename).suffix
+    file_ext = Path(compressed_filename).suffix if was_compressed else Path(file.filename).suffix
     unique_filename = f"{_uuid.uuid4()}{file_ext}"
     file_path = IR_UPLOAD_DIR / unique_filename
 
@@ -653,7 +658,7 @@ async def upload_public_intervention_attachment(request_id: str, file: UploadFil
         "filename": unique_filename,
         "original_filename": file.filename,
         "size": len(content),
-        "mime_type": file.content_type or mimetypes.guess_type(file.filename)[0] or "application/octet-stream",
+        "mime_type": new_mime if was_compressed else (file.content_type or mimetypes.guess_type(file.filename)[0] or "application/octet-stream"),
         "uploaded_at": datetime.now(timezone.utc)
     }
 

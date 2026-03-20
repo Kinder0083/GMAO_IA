@@ -83,6 +83,56 @@ const PublicInterventionForm = ({ equipment, onClose }) => {
     setPhotos(prev => prev.filter((_, i) => i !== idx));
   };
 
+  // Compress image on client side before upload (for mobile compatibility)
+  const compressImage = (file, maxSize = 1200, quality = 0.8) => {
+    return new Promise((resolve) => {
+      // If not an image, return as-is
+      if (!file.type.startsWith('image/')) {
+        resolve(file);
+        return;
+      }
+      
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      const img = new Image();
+      
+      img.onload = () => {
+        let { width, height } = img;
+        
+        // Resize if larger than maxSize
+        if (Math.max(width, height) > maxSize) {
+          if (width > height) {
+            height = Math.round(height * (maxSize / width));
+            width = maxSize;
+          } else {
+            width = Math.round(width * (maxSize / height));
+            height = maxSize;
+          }
+        }
+        
+        canvas.width = width;
+        canvas.height = height;
+        ctx.drawImage(img, 0, 0, width, height);
+        
+        canvas.toBlob(
+          (blob) => {
+            if (blob) {
+              const compressed = new File([blob], file.name || 'photo.jpg', { type: 'image/jpeg' });
+              resolve(compressed);
+            } else {
+              resolve(file);
+            }
+          },
+          'image/jpeg',
+          quality
+        );
+      };
+      
+      img.onerror = () => resolve(file);
+      img.src = URL.createObjectURL(file);
+    });
+  };
+
   const handleSubmit = async () => {
     if (!form.titre.trim()) return setErrorMsg('Le titre est obligatoire');
     if (!form.description.trim()) return setErrorMsg('La description est obligatoire');
@@ -111,14 +161,25 @@ const PublicInterventionForm = ({ equipment, onClose }) => {
       const result = await res.json();
       const requestId = result.id;
 
-      // 2. Upload photos
+      // 2. Upload photos (compressed for mobile compatibility)
+      let uploadErrors = 0;
       for (const photo of photos) {
-        const fd = new FormData();
-        fd.append('file', photo.file);
-        await fetch(`${API_URL}/api/qr/public/intervention-request/${requestId}/attachments`, {
-          method: 'POST',
-          body: fd,
-        });
+        try {
+          const compressed = await compressImage(photo.file);
+          const fd = new FormData();
+          fd.append('file', compressed);
+          const uploadRes = await fetch(`${API_URL}/api/qr/public/intervention-request/${requestId}/attachments`, {
+            method: 'POST',
+            body: fd,
+          });
+          if (!uploadRes.ok) {
+            console.warn('[QR] Photo upload failed:', uploadRes.status);
+            uploadErrors++;
+          }
+        } catch (e) {
+          console.warn('[QR] Photo upload error:', e);
+          uploadErrors++;
+        }
       }
 
       setStep('success');
