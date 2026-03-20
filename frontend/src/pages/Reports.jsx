@@ -33,14 +33,17 @@ const Reports = () => {
         console.error('Erreur parsing user:', error);
       }
     }
-    loadData();
   }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [selectedPeriod]);
 
   const loadData = async () => {
     try {
       setLoading(true);
       const [analyticsRes, equipRes] = await Promise.all([
-        reportsAPI.getAnalytics(),
+        reportsAPI.getAnalytics(selectedPeriod),
         equipmentsAPI.getAll()
       ]);
       setAnalytics(analyticsRes.data);
@@ -142,6 +145,8 @@ const Reports = () => {
     { value: 'ANNEE', label: 'Cette année' }
   ];
 
+  const periodLabel = periods.find(p => p.value === selectedPeriod)?.label?.toLowerCase() || 'ce mois';
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -213,7 +218,7 @@ const Reports = () => {
                 <p className="text-sm font-medium text-gray-600">Taux de réalisation</p>
                 <p className="text-3xl font-bold text-gray-900 mt-2">{analytics.tauxRealisation}%</p>
                 <p className="text-xs text-gray-500 mt-1">
-                  {analytics.tauxRealisationDetail?.termine || 0} terminé(s) / {analytics.tauxRealisationDetail?.total || 0} OT ce mois
+                  {analytics.tauxRealisationDetail?.termine || 0} terminé(s) / {analytics.tauxRealisationDetail?.total || 0} OT {periodLabel}
                 </p>
               </div>
               <div className="bg-green-100 p-3 rounded-xl">
@@ -230,7 +235,7 @@ const Reports = () => {
               <div>
                 <p className="text-sm font-medium text-gray-600">MTTR - Temps avant réalisation</p>
                 <p className="text-3xl font-bold text-gray-900 mt-2">{analytics.mttrHeures || 0}h</p>
-                <p className="text-xs text-gray-500 mt-1">Moyenne création → terminé</p>
+                <p className="text-xs text-gray-500 mt-1">Moyenne création → terminé ({periodLabel})</p>
               </div>
               <div className="bg-blue-100 p-3 rounded-xl">
                 <BarChart3 size={24} className="text-blue-600" />
@@ -249,7 +254,7 @@ const Reports = () => {
                   {analytics.maintenancesPreventives?.realise || 0}
                 </p>
                 <p className="text-xs text-gray-500 mt-1">
-                  sur {analytics.maintenancesPreventives?.total || 0} prévue(s) — {analytics.maintenancesPreventives?.pourcentage || 0}% réalisé
+                  sur {analytics.maintenancesPreventives?.total || 0} prévue(s) {periodLabel} — {analytics.maintenancesPreventives?.pourcentage || 0}% réalisé
                 </p>
               </div>
               <div className="bg-purple-100 p-3 rounded-xl">
@@ -269,7 +274,7 @@ const Reports = () => {
                   {analytics.maintenancesCorrectives?.realise || 0}
                 </p>
                 <p className="text-xs text-gray-500 mt-1">
-                  sur {analytics.maintenancesCorrectives?.total || 0} créée(s) — {analytics.maintenancesCorrectives?.pourcentage || 0}% réalisé
+                  sur {analytics.maintenancesCorrectives?.total || 0} créée(s) {periodLabel} — {analytics.maintenancesCorrectives?.pourcentage || 0}% réalisé
                 </p>
               </div>
               <div className="bg-orange-100 p-3 rounded-xl">
@@ -357,7 +362,7 @@ const Reports = () => {
           <CardTitle>Performance des équipements</CardTitle>
         </CardHeader>
         <CardContent>
-          <EquipmentPerformanceTree equipments={equipments} />
+          <EquipmentPerformanceTree equipments={equipments} equipementStats={analytics.equipementStats || {}} />
         </CardContent>
       </Card>
 

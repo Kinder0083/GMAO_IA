@@ -5,7 +5,8 @@ import { Button } from '../ui/button';
 const EquipmentPerformanceNode = ({ 
   equipment, 
   level = 0, 
-  allEquipments 
+  allEquipments,
+  equipementStats
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -53,6 +54,7 @@ const EquipmentPerformanceNode = ({
   };
 
   const availability = getAvailability(equipment.statut);
+  const stats = equipementStats[equipment.id] || { interventions: 0, temps_total: 0 };
   const indentWidth = level * 32;
 
   return (
@@ -110,7 +112,21 @@ const EquipmentPerformanceNode = ({
         <td className="py-3 px-4 text-sm text-gray-700">
           {(equipment.coutAchat || 0).toLocaleString('fr-FR')} €
         </td>
-        
+
+        {/* Interventions sur la période */}
+        <td className="py-3 px-4 text-sm text-center">
+          {stats.interventions > 0 ? (
+            <div>
+              <span className="font-semibold text-gray-900">{stats.interventions}</span>
+              {stats.temps_total > 0 && (
+                <span className="text-xs text-gray-500 ml-1">({stats.temps_total}h)</span>
+              )}
+            </div>
+          ) : (
+            <span className="text-gray-400">-</span>
+          )}
+        </td>
+
         {/* Disponibilité */}
         <td className="py-3 px-4">
           <div className="flex items-center gap-2">
@@ -135,13 +151,14 @@ const EquipmentPerformanceNode = ({
           equipment={child}
           level={level + 1}
           allEquipments={allEquipments}
+          equipementStats={equipementStats}
         />
       ))}
     </>
   );
 };
 
-const EquipmentPerformanceTree = ({ equipments }) => {
+const EquipmentPerformanceTree = ({ equipments, equipementStats = {} }) => {
   // Filtrer uniquement les équipements racines (sans parent)
   const rootEquipments = equipments.filter(eq => !eq.parent_id);
 
@@ -163,6 +180,7 @@ const EquipmentPerformanceTree = ({ equipments }) => {
             <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Statut</th>
             <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Dernière maintenance</th>
             <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Coût d&apos;achat</th>
+            <th className="text-center py-3 px-4 text-sm font-semibold text-gray-700">Interventions</th>
             <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Disponibilité</th>
           </tr>
         </thead>
@@ -173,6 +191,7 @@ const EquipmentPerformanceTree = ({ equipments }) => {
               equipment={equipment}
               level={0}
               allEquipments={equipments}
+              equipementStats={equipementStats}
             />
           ))}
         </tbody>

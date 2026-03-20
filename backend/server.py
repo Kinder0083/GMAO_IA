@@ -6368,82 +6368,96 @@ async def delete_purchase(purchase_id: str, current_user: dict = Depends(require
 
 # ==================== REPORTS/ANALYTICS ROUTES ====================
 @api_router.get("/reports/analytics")
-async def get_analytics(current_user: dict = Depends(require_permission("reports", "view"))):
-    """Obtenir les données analytiques générales"""
+async def get_analytics(
+    period: str = "MOIS",
+    current_user: dict = Depends(require_permission("reports", "view"))
+):
+    """Obtenir les données analytiques générales, filtrées par période"""
     from datetime import datetime, timezone
     from dateutil.relativedelta import relativedelta
-    
+
     now = datetime.now()
-    first_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    next_month = first_of_month + relativedelta(months=1)
-    
-    # Work orders stats (exclure les supprimés)
+
+    # Calculer la date de début selon la période
+    if period == "SEMAINE":
+        # Lundi de la semaine en cours
+        start_date = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+    elif period == "TRIMESTRE":
+        quarter_month = ((now.month - 1) // 3) * 3 + 1
+        start_date = now.replace(month=quarter_month, day=1, hour=0, minute=0, second=0, microsecond=0)
+    elif period == "ANNEE":
+        start_date = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+    else:  # MOIS par défaut
+        start_date = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
     base_filter = {"deleted_at": {"$exists": False}}
-    total_wo = await db.work_orders.count_documents(base_filter)
+    period_filter = {**base_filter, "dateCreation": {"$gte": start_date}}
+
+    # Work orders stats filtrés par période
     wo_by_status = {}
-    for status in ["OUVERT", "EN_COURS", "EN_ATTENTE", "TERMINE"]:
-        count = await db.work_orders.count_documents({**base_filter, "statut": status})
-        wo_by_status[status] = count
-    
+    for s in ["OUVERT", "EN_COURS", "EN_ATTENTE", "TERMINE"]:
+        wo_by_status[s] = await db.work_orders.count_documents({**period_filter, "statut": s})
+
     wo_by_priority = {}
-    for priority in ["HAUTE", "MOYENNE", "BASSE", "AUCUNE"]:
-        count = await db.work_orders.count_documents({**base_filter, "priorite": priority})
-        wo_by_priority[priority] = count
-    
-    # Equipment stats
+    for p in ["HAUTE", "MOYENNE", "BASSE", "AUCUNE"]:
+        wo_by_priority[p] = await db.work_orders.count_documents({**period_filter, "priorite": p})
+
+    # Equipment stats (statut actuel, pas filtré par période)
     eq_by_status = {}
-    for status in ["OPERATIONNEL", "EN_MAINTENANCE", "HORS_SERVICE"]:
-        count = await db.equipments.count_documents({"statut": status})
-        eq_by_status[status] = count
-    
-    # --- Taux de réalisation du mois ---
-    month_filter = {**base_filter, "dateCreation": {"$gte": first_of_month, "$lt": next_month}}
-    total_wo_month = await db.work_orders.count_documents(month_filter)
-    termine_wo_month = await db.work_orders.count_documents({**month_filter, "statut": "TERMINE"})
-    taux_realisation = round((termine_wo_month / total_wo_month * 100) if total_wo_month > 0 else 0)
-    
-    # --- MTTR - Temps avant réalisation (heures) ---
+    for s in ["OPERATIONNEL", "EN_MAINTENANCE", "HORS_SERVICE"]:
+        eq_by_status[s] = await db.equipments.count_documents({"statut": s})
+
+    # Taux de réalisation sur la période
+    total_wo_period = await db.work_orders.count_documents(period_filter)
+    termine_wo_period = await db.work_orders.count_documents({**period_filter, "statut": "TERMINE"})
+    taux_realisation = round((termine_wo_period / total_wo_period * 100) if total_wo_period > 0 else 0)
+
+    # MTTR sur la période
     mttr_pipeline = [
-        {"$match": {**base_filter, "statut": "TERMINE", "dateTermine": {"$exists": True}, "dateCreation": {"$exists": True}}},
-        {"$project": {
-            "duration": {"$subtract": ["$dateTermine", "$dateCreation"]}
-        }},
-        {"$group": {
-            "_id": None,
-            "avg_duration_ms": {"$avg": "$duration"},
-            "count": {"$sum": 1}
-        }}
+        {"$match": {**period_filter, "statut": "TERMINE", "dateTermine": {"$exists": True}}},
+        {"$project": {"duration": {"$subtract": ["$dateTermine", "$dateCreation"]}}},
+        {"$group": {"_id": None, "avg_duration_ms": {"$avg": "$duration"}, "count": {"$sum": 1}}}
     ]
     mttr_result = await db.work_orders.aggregate(mttr_pipeline).to_list(1)
-    if mttr_result and mttr_result[0].get("avg_duration_ms"):
-        mttr_hours = round(mttr_result[0]["avg_duration_ms"] / (1000 * 60 * 60), 1)
-    else:
-        mttr_hours = 0
-    
-    # --- Maintenances préventives du mois ---
-    prev_month_filter = {**base_filter, "categorie": "TRAVAUX_PREVENTIFS", "dateCreation": {"$gte": first_of_month, "$lt": next_month}}
-    prev_total = await db.work_orders.count_documents(prev_month_filter)
-    prev_termine = await db.work_orders.count_documents({**prev_month_filter, "statut": "TERMINE"})
+    mttr_hours = round(mttr_result[0]["avg_duration_ms"] / (1000 * 60 * 60), 1) if mttr_result and mttr_result[0].get("avg_duration_ms") else 0
+
+    # Maintenances préventives sur la période
+    prev_filter = {**period_filter, "categorie": "TRAVAUX_PREVENTIFS"}
+    prev_total = await db.work_orders.count_documents(prev_filter)
+    prev_termine = await db.work_orders.count_documents({**prev_filter, "statut": "TERMINE"})
     prev_pct = round((prev_termine / prev_total * 100) if prev_total > 0 else 0)
-    
-    # --- Maintenances correctives du mois ---
-    corr_month_filter = {**base_filter, "categorie": {"$in": ["TRAVAUX_CURATIF", None]}, "dateCreation": {"$gte": first_of_month, "$lt": next_month}}
-    # Inclure aussi les OT sans categorie (traités comme correctif par défaut)
-    corr_total = await db.work_orders.count_documents(corr_month_filter)
-    corr_termine = await db.work_orders.count_documents({**corr_month_filter, "statut": "TERMINE"})
+
+    # Maintenances correctives sur la période
+    corr_filter = {**period_filter, "categorie": {"$in": ["TRAVAUX_CURATIF", None]}}
+    corr_total = await db.work_orders.count_documents(corr_filter)
+    corr_termine = await db.work_orders.count_documents({**corr_filter, "statut": "TERMINE"})
     corr_pct = round((corr_termine / corr_total * 100) if corr_total > 0 else 0)
-    
+
+    # Interventions par équipement sur la période
+    equip_pipeline = [
+        {"$match": {**period_filter, "equipement_id": {"$exists": True, "$ne": None}}},
+        {"$group": {
+            "_id": "$equipement_id",
+            "interventions": {"$sum": 1},
+            "temps_total": {"$sum": {"$ifNull": ["$tempsReel", 0]}}
+        }}
+    ]
+    equip_stats_cursor = await db.work_orders.aggregate(equip_pipeline).to_list(None)
+    equip_stats = {str(e["_id"]): {"interventions": e["interventions"], "temps_total": round(e["temps_total"], 1)} for e in equip_stats_cursor}
+
     analytics = {
         "workOrdersParStatut": wo_by_status,
         "workOrdersParPriorite": wo_by_priority,
         "equipementsParStatut": eq_by_status,
         "tauxRealisation": taux_realisation,
-        "tauxRealisationDetail": {"termine": termine_wo_month, "total": total_wo_month},
+        "tauxRealisationDetail": {"termine": termine_wo_period, "total": total_wo_period},
         "mttrHeures": mttr_hours,
         "maintenancesPreventives": {"realise": prev_termine, "total": prev_total, "pourcentage": prev_pct},
-        "maintenancesCorrectives": {"realise": corr_termine, "total": corr_total, "pourcentage": corr_pct}
+        "maintenancesCorrectives": {"realise": corr_termine, "total": corr_total, "pourcentage": corr_pct},
+        "equipementStats": equip_stats,
+        "period": period
     }
-    
+
     return analytics
 
 
