@@ -22,19 +22,26 @@
 - **[FEATURE] Pointage horaire** : Navigation semaines, resume hebdo, export PDF
 - **[FEATURE] Compression automatique des images** :
   - Module image_compressor.py (Pillow)
-  - Integre dans TOUS les endpoints upload (OT, DI, chat, presqu'accidents, ameliorations, demandes arret)
-  - Parametrage dans Parametres Speciaux (resolution max, qualite, format)
-  - Transparent pour l'utilisateur
+  - Integre dans TOUS les endpoints upload
+  - Parametrage dans Parametres Speciaux
   - Endpoints API: GET/PUT /settings/image-compression
 
 ### Session 20 mars 2026 (fork)
 - **[FEATURE] Edition/Suppression des temps et commentaires (OT) - Admin only**
-  - 4 endpoints backend: PUT/DELETE /work-orders/{id}/time-entries/{entry_id}, PUT/DELETE /work-orders/{id}/comments/{comment_id}
-  - Affichage de l'historique des time_entries dans WorkOrderDialog
-  - Icones crayon (edit) et poubelle (delete) visibles uniquement pour les admins
-  - Edition inline des temps et commentaires
-  - Recalcul automatique du tempsReel lors de modification/suppression
-  - Modele WorkOrder enrichi avec time_entries
+  - 4 endpoints backend: PUT/DELETE time-entries, PUT/DELETE comments
+  - Historique des time_entries affiché dans WorkOrderDialog
+  - Icones crayon/poubelle pour admins, edition inline
+  - Recalcul automatique du tempsReel
+  - Audit log integre pour toutes les modifications
+  - Tests: 100% backend, 100% frontend
+
+- **[FEATURE] Filtres de période fonctionnels sur Rapports & Analytiques**
+  - Boutons "Cette semaine/Ce mois/Ce trimestre/Cette année" désormais actifs
+  - Backend: GET /reports/analytics accepte param `period` (SEMAINE, MOIS, TRIMESTRE, ANNEE)
+  - Filtre appliqué sur: widgets KPI, répartition OT par statut/priorité, MTTR, maintenances
+  - Nouvelle colonne "Interventions" dans Performance des équipements (par période)
+  - Labels dynamiques reflétant la période sélectionnée
+  - Défaut: "Ce mois"
   - Tests: 100% backend (9/9), 100% frontend
 
 ## Backlog
