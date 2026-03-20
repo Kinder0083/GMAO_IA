@@ -1,57 +1,83 @@
-# FSAO Iris - GMAO
+# FSAO Iris - GMAO (Gestion de la Maintenance Assistée par Ordinateur)
 
-## Architecture
-- **Frontend**: React (CRA) + Shadcn/UI + TailwindCSS
-- **Backend**: FastAPI + Motor (MongoDB async)
-- **Base de donnees**: MongoDB
+## Problème original
+Application CMMS/GMAO complète pour la gestion de la maintenance industrielle, développée avec React/FastAPI/MongoDB.
 
-### Structure Backend (post-refactoring)
+## Personas utilisateurs
+- **Administrateurs** : Gestion complète (équipements, utilisateurs, rapports, configuration)
+- **Techniciens** : Exécution des ordres de travail, suivi des interventions
+- **Managers** : Supervision, rapports, analyses
+
+## Architecture technique
+- **Frontend** : React, Tailwind CSS, Shadcn UI
+- **Backend** : FastAPI (Python) - Architecture modulaire avec 22+ fichiers de routes
+- **Base de données** : MongoDB (Motor async)
+- **Temps réel** : WebSockets (realtime_manager)
+- **Intégrations** : OpenAI/Emergent LLM Key, Web Push PWA (VAPID)
+
+## Structure du code
 ```
-backend/
-├── server.py (6490 lignes - orchestrateur principal)
+/app/backend/
+├── server.py (~1740 lignes - point d'entrée principal)
+├── models.py (modèles Pydantic)
 ├── routes/
-│   ├── shared.py (utilitaires partagés: db, serialize_doc, find_*)
-│   ├── work_orders.py (CRUD, Attachments, Comments, Admin edits)
-│   ├── equipments.py (CRUD, Status, Hiérarchie)
-│   ├── users.py (CRUD, Permissions, Rôles)
-│   ├── notifications.py (CRUD, Web Push)
-│   ├── reports.py (Analytics, Filtres par période)
-│   ├── intervention_requests.py (DI CRUD, Attachments)
-│   ├── settings.py (Settings, SMTP, Image Compression)
-│   ├── vendors.py (Fournisseurs, Historique Achats)
-│   └── improvements.py (Améliorations, Demandes)
-├── qr_routes.py (existant)
-├── presqu_accident_routes.py (existant)
-└── ...autres modules existants
+│   ├── __init__.py
+│   ├── shared.py (utilitaires partagés: db, audit_service, serialize_doc)
+│   ├── auth.py (authentification)
+│   ├── work_orders.py (ordres de travail)
+│   ├── equipments.py (équipements)
+│   ├── intervention_requests.py (demandes d'intervention)
+│   ├── reports.py (rapports & analytiques)
+│   ├── notifications.py (notifications)
+│   ├── users.py (gestion utilisateurs)
+│   ├── settings.py (paramètres)
+│   ├── vendors.py (fournisseurs)
+│   ├── improvements.py (suggestions d'amélioration)
+│   ├── inventory.py (inventaire)
+│   ├── preventive_maintenance.py (maintenance préventive)
+│   ├── locations.py (emplacements)
+│   ├── meters.py (compteurs)
+│   ├── audit.py (journal d'audit)
+│   ├── availability.py (disponibilité)
+│   ├── support.py (support)
+│   ├── service_manager.py (gestionnaire de service)
+│   ├── notification_health.py (santé notifications + corbeille)
+│   ├── update_routes.py (mises à jour)
+│   ├── update_management.py (gestion des mises à jour)
+│   └── admin.py (administration)
+└── [~60 fichiers de modules externes: surveillance, AI, MQTT, etc.]
 ```
 
-## Taches accomplies
+## Fonctionnalités implémentées
+- Gestion des équipements (CRUD, arborescence, pièces jointes)
+- Ordres de travail (création, suivi, temps, commentaires, édition/suppression admin)
+- Demandes d'intervention
+- Maintenance préventive (calendrier, checklists)
+- Inventaire et pièces de rechange
+- Gestion des emplacements
+- Compteurs et relevés
+- Journal d'audit complet
+- Rapports & Analytiques (filtres période: semaine/mois/trimestre/année)
+- Gestion des utilisateurs et rôles
+- Notifications push (Web Push)
+- Chat en direct
+- Tableaux blancs collaboratifs
+- Consignes et LOTO
+- Import/Export de données
+- Sauvegarde et restauration
+- Surveillance et caméras (Frigate)
+- MQTT (IoT)
+- IA (maintenance, chat, analyses, widgets)
+- Gestion des contrats
+- Formation
 
-### Sessions precedentes
-- Monitoring sante des notifications
-- Logique de notification de service (P2)
-- Normalisation casse des services (P4)
-- Champ temps estime DI->OT
-
-### Session 18-20 mars 2026
-- **[P0] Fix notifications Web Push**
-- **[BUG] Fix "vous ne pouvez modifier que votre propre statut"**
-- **[BUG] Fix compteur DI dashboard**
-- **[BUG] Fix equipements filtres par service**
-- **[FEATURE] Refonte page Rapports**
-- **[FEATURE] Pointage horaire** (Navigation semaines, resume hebdo, export PDF)
-- **[FEATURE] Compression automatique des images**
-
-### Session 20 mars 2026 (fork)
-- **[FEATURE] Edition/Suppression temps et commentaires OT (Admin)**
-  - Tests: 100% backend, 100% frontend
-- **[FEATURE] Filtres de periode sur Rapports & Analytiques**
-  - Tests: 100% backend (9/9), 100% frontend
-- **[REFACTORING] server.py en routeurs séparés**
-  - 9 modules extraits (6553 lignes)
-  - server.py: 13043 -> 6490 lignes (-50%)
-  - Module shared.py pour utilitaires communs
-  - Tests de regression: 100% (27/27 backend, 100% frontend)
+## Tâches complétées (session actuelle - 2026-03-20)
+- [x] Edition/Suppression des entrées de temps dans les OT (Admin only) + audit
+- [x] Edition/Suppression des commentaires dans les OT (Admin only) + audit
+- [x] Filtres de période fonctionnels sur page Rapports & Analytiques
+- [x] **Refactoring massif de server.py** : de ~13000 lignes à ~1740 lignes avec 22+ fichiers de routes modulaires
+- [x] Tests de régression complets passés (23/23)
 
 ## Backlog
-- **(P3)** Tester le script de mise a jour `MAJ_FSAO.sh`
+- **(P3)** Tester le script de mise à jour `MAJ_FSAO.sh`
+- En attente des consignes utilisateur pour les prochaines tâches
