@@ -5,6 +5,26 @@
 - **Backend**: FastAPI + Motor (MongoDB async)
 - **Base de donnees**: MongoDB
 
+### Structure Backend (post-refactoring)
+```
+backend/
+├── server.py (6490 lignes - orchestrateur principal)
+├── routes/
+│   ├── shared.py (utilitaires partagés: db, serialize_doc, find_*)
+│   ├── work_orders.py (CRUD, Attachments, Comments, Admin edits)
+│   ├── equipments.py (CRUD, Status, Hiérarchie)
+│   ├── users.py (CRUD, Permissions, Rôles)
+│   ├── notifications.py (CRUD, Web Push)
+│   ├── reports.py (Analytics, Filtres par période)
+│   ├── intervention_requests.py (DI CRUD, Attachments)
+│   ├── settings.py (Settings, SMTP, Image Compression)
+│   ├── vendors.py (Fournisseurs, Historique Achats)
+│   └── improvements.py (Améliorations, Demandes)
+├── qr_routes.py (existant)
+├── presqu_accident_routes.py (existant)
+└── ...autres modules existants
+```
+
 ## Taches accomplies
 
 ### Sessions precedentes
@@ -16,34 +36,22 @@
 ### Session 18-20 mars 2026
 - **[P0] Fix notifications Web Push**
 - **[BUG] Fix "vous ne pouvez modifier que votre propre statut"**
-- **[BUG] Fix compteur DI dashboard** : Exclusion DI soft-deleted
+- **[BUG] Fix compteur DI dashboard**
 - **[BUG] Fix equipements filtres par service**
-- **[FEATURE] Refonte page Rapports** : Widgets KPI reels + pointage ameliore
-- **[FEATURE] Pointage horaire** : Navigation semaines, resume hebdo, export PDF
-- **[FEATURE] Compression automatique des images** :
-  - Module image_compressor.py (Pillow)
-  - Integre dans TOUS les endpoints upload
-  - Parametrage dans Parametres Speciaux
-  - Endpoints API: GET/PUT /settings/image-compression
+- **[FEATURE] Refonte page Rapports**
+- **[FEATURE] Pointage horaire** (Navigation semaines, resume hebdo, export PDF)
+- **[FEATURE] Compression automatique des images**
 
 ### Session 20 mars 2026 (fork)
-- **[FEATURE] Edition/Suppression des temps et commentaires (OT) - Admin only**
-  - 4 endpoints backend: PUT/DELETE time-entries, PUT/DELETE comments
-  - Historique des time_entries affiché dans WorkOrderDialog
-  - Icones crayon/poubelle pour admins, edition inline
-  - Recalcul automatique du tempsReel
-  - Audit log integre pour toutes les modifications
+- **[FEATURE] Edition/Suppression temps et commentaires OT (Admin)**
   - Tests: 100% backend, 100% frontend
-
-- **[FEATURE] Filtres de période fonctionnels sur Rapports & Analytiques**
-  - Boutons "Cette semaine/Ce mois/Ce trimestre/Cette année" désormais actifs
-  - Backend: GET /reports/analytics accepte param `period` (SEMAINE, MOIS, TRIMESTRE, ANNEE)
-  - Filtre appliqué sur: widgets KPI, répartition OT par statut/priorité, MTTR, maintenances
-  - Nouvelle colonne "Interventions" dans Performance des équipements (par période)
-  - Labels dynamiques reflétant la période sélectionnée
-  - Défaut: "Ce mois"
+- **[FEATURE] Filtres de periode sur Rapports & Analytiques**
   - Tests: 100% backend (9/9), 100% frontend
+- **[REFACTORING] server.py en routeurs séparés**
+  - 9 modules extraits (6553 lignes)
+  - server.py: 13043 -> 6490 lignes (-50%)
+  - Module shared.py pour utilitaires communs
+  - Tests de regression: 100% (27/27 backend, 100% frontend)
 
 ## Backlog
 - **(P3)** Tester le script de mise a jour `MAJ_FSAO.sh`
-- Refactoring potentiel de server.py (13000+ lignes) en routeurs separes
