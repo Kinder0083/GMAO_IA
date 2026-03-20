@@ -201,6 +201,161 @@ async def check_notification_health_cron():
         logger.error(f"[NOTIF HEALTH] Erreur cron: {e}")
 
 
+# ==================== ARCHITECTURE & MONITORING ====================
+
+@router.get("/health/architecture", tags=["Health"])
+async def get_system_architecture(current_user: dict = Depends(get_current_admin_user)):
+    """Retourne l'architecture modulaire du backend, les metriques et le statut des services."""
+    import time
+    import importlib
+    import inspect
+
+    # 1. Scanner les modules de routes
+    routes_dir = Path(__file__).parent
+    modules_info = []
+
+    route_files = sorted([
+        f.stem for f in routes_dir.glob("*.py")
+        if f.stem not in ("__init__", "shared") and not f.stem.startswith("__")
+    ])
+
+    for mod_name in route_files:
+        try:
+            mod = importlib.import_module(f"routes.{mod_name}")
+            mod_router = getattr(mod, "router", None)
+            route_count = 0
+            methods_detail = []
+            if mod_router and hasattr(mod_router, "routes"):
+                for route in mod_router.routes:
+                    methods = getattr(route, "methods", set())
+                    path = getattr(route, "path", "")
+                    route_count += 1
+                    methods_detail.append({
+                        "path": path,
+                        "methods": list(methods) if methods else ["WS"]
+                    })
+            modules_info.append({
+                "name": mod_name,
+                "status": "ok",
+                "route_count": route_count,
+                "routes": methods_detail[:5],
+                "has_more": route_count > 5
+            })
+        except Exception as e:
+            modules_info.append({
+                "name": mod_name,
+                "status": "error",
+                "route_count": 0,
+                "error": str(e)[:100],
+                "routes": []
+            })
+
+    # 2. Compter les modules externes (fichiers .py hors routes/)
+    backend_dir = Path(__file__).parent.parent
+    external_modules = []
+    external_router_files = [
+        f.stem for f in backend_dir.glob("*_routes.py")
+        if f.stem not in ("__init__",)
+    ]
+    for ef in sorted(external_router_files):
+        try:
+            mod = importlib.import_module(ef)
+            mod_router = getattr(mod, "router", None)
+            rc = len(mod_router.routes) if mod_router and hasattr(mod_router, "routes") else 0
+            external_modules.append({"name": ef, "status": "ok", "route_count": rc})
+        except Exception as e:
+            external_modules.append({"name": ef, "status": "error", "route_count": 0, "error": str(e)[:80]})
+
+    # 3. Services status
+    services = []
+
+    # MongoDB
+    try:
+        t0 = time.time()
+        await db.command("ping")
+        mongo_ms = round((time.time() - t0) * 1000, 1)
+        db_stats = await db.command("dbstats")
+        collections_count = db_stats.get("collections", 0)
+        data_size_mb = round(db_stats.get("dataSize", 0) / (1024 * 1024), 1)
+        services.append({
+            "name": "MongoDB",
+            "status": "ok",
+            "response_ms": mongo_ms,
+            "details": f"{collections_count} collections, {data_size_mb} Mo"
+        })
+    except Exception as e:
+        services.append({"name": "MongoDB", "status": "error", "details": str(e)[:80]})
+
+    # MQTT
+    try:
+        from mqtt_manager import mqtt_manager as _mqtt
+        mqtt_connected = _mqtt.client and _mqtt.client.is_connected() if hasattr(_mqtt, 'client') and _mqtt.client else False
+        services.append({
+            "name": "MQTT",
+            "status": "ok" if mqtt_connected else "warning",
+            "details": "Connecte" if mqtt_connected else "Non connecte"
+        })
+    except Exception:
+        services.append({"name": "MQTT", "status": "warning", "details": "Module non charge"})
+
+    # WebSocket / Realtime Manager
+    try:
+        from routes.shared import realtime_manager as _rm
+        ws_connections = 0
+        if hasattr(_rm, '_connections'):
+            for entity_conns in _rm._connections.values():
+                ws_connections += len(entity_conns)
+        services.append({
+            "name": "WebSocket",
+            "status": "ok",
+            "details": f"{ws_connections} connexion(s) active(s)"
+        })
+    except Exception:
+        services.append({"name": "WebSocket", "status": "warning", "details": "Non disponible"})
+
+    # Email Service
+    try:
+        import email_service as _es
+        smtp_configured = bool(getattr(_es, 'smtp_host', None) or os.environ.get('SMTP_HOST'))
+        services.append({
+            "name": "Email (SMTP)",
+            "status": "ok" if smtp_configured else "warning",
+            "details": "Configure" if smtp_configured else "Non configure"
+        })
+    except Exception:
+        services.append({"name": "Email (SMTP)", "status": "warning", "details": "Module non charge"})
+
+    # 4. Uptime et info systeme
+    import platform
+    try:
+        with open("/proc/uptime", "r") as f:
+            uptime_seconds = float(f.readline().split()[0])
+        uptime_hours = round(uptime_seconds / 3600, 1)
+    except Exception:
+        uptime_hours = None
+
+    # 5. Resume global
+    total_internal_routes = sum(m["route_count"] for m in modules_info)
+    total_external_routes = sum(m["route_count"] for m in external_modules)
+    ok_modules = sum(1 for m in modules_info if m["status"] == "ok")
+    error_modules = sum(1 for m in modules_info if m["status"] == "error")
+
+    return {
+        "summary": {
+            "total_modules": len(modules_info) + len(external_modules),
+            "internal_modules": len(modules_info),
+            "external_modules": len(external_modules),
+            "total_routes": total_internal_routes + total_external_routes,
+            "modules_ok": ok_modules + sum(1 for m in external_modules if m["status"] == "ok"),
+            "modules_error": error_modules + sum(1 for m in external_modules if m["status"] == "error"),
+            "python_version": platform.python_version(),
+            "uptime_hours": uptime_hours
+        },
+        "internal_modules": modules_info,
+        "external_modules": external_modules,
+        "services": services
+    }
+
 @router.get("/health/notifications", tags=["Health"])
 async def get_notification_health(current_user: dict = Depends(get_current_admin_user)):
     """Retourne l'etat de sante du systeme de notification (Admin uniquement)."""

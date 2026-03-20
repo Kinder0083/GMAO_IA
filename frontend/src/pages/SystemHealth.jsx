@@ -7,7 +7,8 @@ import {
   Activity, CheckCircle2, XCircle, AlertTriangle, RefreshCw,
   Shield, ShieldOff, Clock, HardDrive, Database, Cpu, Zap,
   ChevronDown, ChevronUp, RotateCcw, Mail, Plus, X, Send, Bell, BellOff,
-  Wifi, WifiOff, Trash2, Upload, FolderSync, Smartphone
+  Wifi, WifiOff, Trash2, Upload, FolderSync, Smartphone,
+  Server, Layers, GitBranch, Box, Radio, BarChart3
 } from 'lucide-react';
 import { useToast } from '../hooks/use-toast';
 import api from '../services/api';
@@ -91,6 +92,12 @@ export default function SystemHealth() {
   const [alertsTesting, setAlertsTesting] = useState(false);
   const [newEmail, setNewEmail] = useState('');
 
+  // Architecture state
+  const [archData, setArchData] = useState(null);
+  const [archExpanded, setArchExpanded] = useState(true);
+  const [archLoading, setArchLoading] = useState(false);
+  const [archModuleFilter, setArchModuleFilter] = useState('all');
+
   const ALERT_TYPES_CONFIG = [
     { key: 'app_down', label: 'Application en panne', desc: 'Backend ne répond plus', icon: XCircle, color: '#ef4444', hasThreshold: true, thresholdLabel: 'Après X échec(s)', thresholdUnit: 'échec(s)', min: 1, max: 10 },
     { key: 'recovery_success', label: 'Récupération réussie', desc: 'Système auto-réparé', icon: CheckCircle2, color: '#22c55e' },
@@ -126,6 +133,18 @@ export default function SystemHealth() {
       setNotifHealth(res.data);
     } catch (e) {
       console.error('Erreur fetch notif health:', e);
+    }
+  }, []);
+
+  const fetchArchitecture = useCallback(async () => {
+    setArchLoading(true);
+    try {
+      const res = await api.get('/health/architecture');
+      setArchData(res.data);
+    } catch (e) {
+      console.error('Erreur fetch architecture:', e);
+    } finally {
+      setArchLoading(false);
     }
   }, []);
 
@@ -213,8 +232,9 @@ export default function SystemHealth() {
     fetchAlertsConfig();
     fetchNotifHealth();
     fetchNotifHistory();
+    fetchArchitecture();
     runHealthCheck();
-  }, [fetchStatus, fetchAlertsConfig, fetchNotifHealth, fetchNotifHistory]);
+  }, [fetchStatus, fetchAlertsConfig, fetchNotifHealth, fetchNotifHistory, fetchArchitecture]);
 
   // Auto-refresh every 30s
   useEffect(() => {
@@ -546,6 +566,17 @@ export default function SystemHealth() {
           </Card>
         </div>
       </div>
+
+      {/* ──── Architecture Backend & Services ──── */}
+      <ArchitectureSection
+        archData={archData}
+        archExpanded={archExpanded}
+        setArchExpanded={setArchExpanded}
+        archLoading={archLoading}
+        fetchArchitecture={fetchArchitecture}
+        archModuleFilter={archModuleFilter}
+        setArchModuleFilter={setArchModuleFilter}
+      />
 
       {/* ──── Santé des Notifications Section ──── */}
       <NotificationHealthSection
@@ -887,6 +918,212 @@ function StatusBlock({ icon, label, status, value, message }) {
       )}
       <div className="text-[11px] text-gray-500 mt-0.5 truncate" title={message}>{message}</div>
     </div>
+  );
+}
+
+function ArchitectureSection({ archData, archExpanded, setArchExpanded, archLoading, fetchArchitecture, archModuleFilter, setArchModuleFilter }) {
+  const summary = archData?.summary;
+  const services = archData?.services || [];
+  const internalMods = archData?.internal_modules || [];
+  const externalMods = archData?.external_modules || [];
+
+  const allModules = [
+    ...internalMods.map(m => ({ ...m, type: 'core' })),
+    ...externalMods.map(m => ({ ...m, type: 'ext' }))
+  ];
+
+  const filteredModules = archModuleFilter === 'all'
+    ? allModules
+    : archModuleFilter === 'core'
+      ? allModules.filter(m => m.type === 'core')
+      : archModuleFilter === 'ext'
+        ? allModules.filter(m => m.type === 'ext')
+        : archModuleFilter === 'error'
+          ? allModules.filter(m => m.status === 'error')
+          : allModules;
+
+  const serviceStatusIcon = (s) => {
+    if (s === 'ok') return <CheckCircle2 size={14} className="text-green-500" />;
+    if (s === 'warning') return <AlertTriangle size={14} className="text-amber-500" />;
+    return <XCircle size={14} className="text-red-500" />;
+  };
+
+  return (
+    <Card data-testid="architecture-section">
+      <CardHeader className="py-3 px-4 border-b cursor-pointer select-none" onClick={() => setArchExpanded(e => !e)}>
+        <CardTitle className="text-sm flex items-center justify-between">
+          <span className="flex items-center gap-2">
+            <Layers size={16} className="text-cyan-600" />
+            Architecture Backend & Services
+            {summary && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-cyan-50 text-cyan-700 font-medium">
+                {summary.total_modules} modules / {summary.total_routes} routes
+              </span>
+            )}
+          </span>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost" size="sm" className="h-6 px-2"
+              onClick={(e) => { e.stopPropagation(); fetchArchitecture(); }}
+              disabled={archLoading}
+              data-testid="arch-refresh-btn"
+            >
+              <RefreshCw size={12} className={archLoading ? 'animate-spin' : ''} />
+            </Button>
+            {archExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          </div>
+        </CardTitle>
+      </CardHeader>
+      {archExpanded && (
+        <CardContent className="p-4 space-y-5">
+          {archLoading && !archData ? (
+            <div className="flex items-center justify-center py-6 text-gray-400">
+              <RefreshCw size={16} className="animate-spin mr-2" /> Chargement...
+            </div>
+          ) : !archData ? (
+            <div className="text-center py-6 text-gray-400 text-sm">
+              Impossible de charger les donnees d'architecture
+            </div>
+          ) : (
+            <>
+              {/* Summary cards */}
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3" data-testid="arch-summary-grid">
+                <div className="bg-gradient-to-br from-cyan-50 to-blue-50 border border-cyan-100 rounded-lg p-3 text-center">
+                  <div className="text-2xl font-bold text-cyan-700">{summary.total_modules}</div>
+                  <div className="text-xs text-gray-500 mt-0.5">Modules</div>
+                </div>
+                <div className="bg-gradient-to-br from-indigo-50 to-violet-50 border border-indigo-100 rounded-lg p-3 text-center">
+                  <div className="text-2xl font-bold text-indigo-700">{summary.total_routes}</div>
+                  <div className="text-xs text-gray-500 mt-0.5">Routes API</div>
+                </div>
+                <div className="bg-gradient-to-br from-green-50 to-emerald-50 border border-green-100 rounded-lg p-3 text-center">
+                  <div className="text-2xl font-bold text-green-700">{summary.modules_ok}</div>
+                  <div className="text-xs text-gray-500 mt-0.5">Modules OK</div>
+                </div>
+                <div className={`rounded-lg p-3 text-center border ${summary.modules_error > 0 ? 'bg-gradient-to-br from-red-50 to-orange-50 border-red-100' : 'bg-gray-50 border-gray-100'}`}>
+                  <div className={`text-2xl font-bold ${summary.modules_error > 0 ? 'text-red-600' : 'text-gray-400'}`}>{summary.modules_error}</div>
+                  <div className="text-xs text-gray-500 mt-0.5">En erreur</div>
+                </div>
+                <div className="bg-gradient-to-br from-slate-50 to-gray-50 border border-slate-100 rounded-lg p-3 text-center">
+                  <div className="text-lg font-bold text-slate-700">Python {summary.python_version}</div>
+                  <div className="text-xs text-gray-500 mt-0.5">
+                    {summary.uptime_hours != null ? `Uptime: ${summary.uptime_hours}h` : ''}
+                  </div>
+                </div>
+              </div>
+
+              {/* Services status */}
+              <div>
+                <p className="text-sm font-medium mb-2 flex items-center gap-2">
+                  <Radio size={14} className="text-blue-500" />
+                  Statut des services
+                </p>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                  {services.map((svc) => (
+                    <div
+                      key={svc.name}
+                      className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg border ${
+                        svc.status === 'ok' ? 'bg-green-50/50 border-green-100' :
+                        svc.status === 'warning' ? 'bg-amber-50/50 border-amber-100' :
+                        'bg-red-50/50 border-red-100'
+                      }`}
+                      data-testid={`service-status-${svc.name.toLowerCase().replace(/[\s()]/g, '-')}`}
+                    >
+                      {serviceStatusIcon(svc.status)}
+                      <div className="min-w-0">
+                        <div className="text-xs font-medium text-gray-800">{svc.name}</div>
+                        <div className="text-[11px] text-gray-500 truncate" title={svc.details}>
+                          {svc.details}
+                          {svc.response_ms != null && <span className="ml-1 text-gray-400">({svc.response_ms}ms)</span>}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Module list */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm font-medium flex items-center gap-2">
+                    <Box size={14} className="text-violet-500" />
+                    Modules de routes
+                  </p>
+                  <div className="flex gap-1">
+                    {[
+                      { key: 'all', label: 'Tous' },
+                      { key: 'core', label: 'Core' },
+                      { key: 'ext', label: 'Externes' },
+                      { key: 'error', label: 'Erreurs' }
+                    ].map(f => (
+                      <button
+                        key={f.key}
+                        onClick={() => setArchModuleFilter(f.key)}
+                        className={`text-[11px] px-2 py-0.5 rounded-full transition-colors ${
+                          archModuleFilter === f.key
+                            ? 'bg-cyan-600 text-white'
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        }`}
+                        data-testid={`arch-filter-${f.key}`}
+                      >
+                        {f.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="max-h-[400px] overflow-y-auto border rounded-lg divide-y">
+                  {filteredModules.length === 0 ? (
+                    <div className="p-4 text-center text-gray-400 text-sm">Aucun module</div>
+                  ) : (
+                    filteredModules.map((mod) => (
+                      <div
+                        key={`${mod.type}-${mod.name}`}
+                        className="px-3 py-2 flex items-center gap-3 hover:bg-gray-50/50 transition-colors"
+                        data-testid={`arch-module-${mod.name}`}
+                      >
+                        {mod.status === 'ok' ? (
+                          <CheckCircle2 size={14} className="text-green-500 flex-shrink-0" />
+                        ) : (
+                          <XCircle size={14} className="text-red-500 flex-shrink-0" />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-mono text-gray-800">{mod.name}</span>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                              mod.type === 'core'
+                                ? 'bg-cyan-50 text-cyan-700 border border-cyan-200'
+                                : 'bg-violet-50 text-violet-700 border border-violet-200'
+                            }`}>
+                              {mod.type === 'core' ? 'Core' : 'Ext'}
+                            </span>
+                          </div>
+                          {mod.error && (
+                            <p className="text-[11px] text-red-500 font-mono truncate mt-0.5" title={mod.error}>{mod.error}</p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                          <GitBranch size={12} className="text-gray-400" />
+                          <span className={`text-xs font-medium ${mod.route_count > 0 ? 'text-gray-700' : 'text-gray-400'}`}>
+                            {mod.route_count}
+                          </span>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+                <div className="mt-2 text-[11px] text-gray-400 flex justify-between">
+                  <span>{filteredModules.length} module(s) affiches</span>
+                  <span>
+                    {filteredModules.filter(m => m.status === 'ok').length} OK,{' '}
+                    {filteredModules.filter(m => m.status === 'error').length} en erreur
+                  </span>
+                </div>
+              </div>
+            </>
+          )}
+        </CardContent>
+      )}
+    </Card>
   );
 }
 
