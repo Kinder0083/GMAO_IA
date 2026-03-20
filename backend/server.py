@@ -2132,17 +2132,13 @@ async def delete_attachment(
 @api_router.get("/equipments",
     summary="Lister les equipements", tags=["Equipements"])
 async def get_equipments(current_user: dict = Depends(get_current_user)):
-    """Liste tous les équipements avec filtrage par service
+    """Liste tous les équipements visibles par l'utilisateur authentifie.
     
-    Note : Accessible à tous les utilisateurs authentifiés pour permettre
-    la sélection d'équipements dans les ordres de travail (Prélevée Sur), 
-    même sans permission 'assets'.
+    Note : Pas de filtrage par service - seules les permissions du profil
+    utilisateur determinent l'acces. Accessible a tous les utilisateurs 
+    authentifies pour permettre la selection d'equipements dans les OT.
     """
-    from service_filter import apply_service_filter
-    
     query = {"deleted_at": {"$exists": False}}
-    # Appliquer le filtre par service pour les responsables de service
-    query = await apply_service_filter(query, current_user, "service")
     
     equipments = await db.equipments.find(query).sort("display_order", 1).to_list(1000)
     
