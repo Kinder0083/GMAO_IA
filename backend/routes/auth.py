@@ -17,16 +17,30 @@ from email.mime.multipart import MIMEMultipart
 from models import (
     ActionType, EntityType, Token, User, UserCreate, LoginRequest,
     MessageResponse, SuccessResponse, ForgotPasswordRequest, ResetPasswordRequest,
-    ValidateInvitationResponse, UserPermissions, get_default_permissions_by_role
+    ValidateInvitationResponse, UserPermissions, get_default_permissions_by_role,
+    InviteMemberResponse, InviteMemberRequest, CreateMemberRequest,
+    CompleteRegistrationRequest, ChangePasswordRequest, UserProfileUpdate
 )
-from auth import get_password_hash, create_access_token
+from auth import get_password_hash, verify_password, create_access_token, decode_access_token
+from jose import jwt, JWTError
 from dependencies import get_current_user, get_current_admin_user
 from openapi_config import AUTH_ERRORS, STANDARD_ERRORS
 from routes.shared import db, audit_service, serialize_doc, find_user_flexible
+import email_service
+import string
+
+SECRET_KEY = os.environ.get("SECRET_KEY", "your_jwt_secret_key_change_in_production")
+ALGORITHM = os.environ.get("ALGORITHM", "HS256")
 
 EntityType_Audit = EntityType
 logger = logging.getLogger(__name__)
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+
+def _get_realtime_manager():
+    """Récupère le realtime_manager depuis le module shared."""
+    from routes.shared import realtime_manager
+    return realtime_manager
 
 router = APIRouter(tags=["Authentification"])
 

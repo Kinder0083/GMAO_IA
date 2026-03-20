@@ -52,8 +52,9 @@ dependencies.set_database(db)
 audit_service = AuditService(db)
 
 # Initialiser le module partagé pour les routes extraites
+from realtime_manager import realtime_manager
 from routes.shared import init_shared
-init_shared(db, audit_service)
+init_shared(db, audit_service, realtime_manager)
 
 # Create the main app (docs desactivees par defaut, servies manuellement avec auth)
 app = FastAPI(
@@ -589,6 +590,7 @@ from routes.update_routes import router as update_routes_router
 from routes.audit import router as audit_router
 from routes.meters import router as meters_router
 from routes.update_management import router as update_management_router
+from routes.update_management import update_service
 from routes.notification_health import router as notification_health_router
 from routes.admin import router as admin_router
 
@@ -614,6 +616,248 @@ api_router.include_router(meters_router)
 api_router.include_router(update_management_router)
 api_router.include_router(notification_health_router)
 api_router.include_router(admin_router)
+
+# ==================== MODULES EXTERNES ====================
+
+# Surveillance routes
+from surveillance_routes import router as surveillance_router, init_surveillance_routes
+init_surveillance_routes(db, audit_service, realtime_manager)
+api_router.include_router(surveillance_router)
+
+# AI maintenance routes
+from ai_maintenance_routes import router as ai_maintenance_router, init_ai_maintenance_routes
+init_ai_maintenance_routes(db, audit_service)
+api_router.include_router(ai_maintenance_router)
+
+# AI routes
+from ai_presqu_accident_routes import router as ai_pa_router, init_ai_pa_routes
+init_ai_pa_routes(db, audit_service)
+api_router.include_router(ai_pa_router)
+
+from ai_work_order_routes import router as ai_wo_router, init_ai_wo_routes
+init_ai_wo_routes(db, audit_service)
+api_router.include_router(ai_wo_router)
+
+from ai_weekly_report_routes import router as ai_report_router, init_ai_report_routes
+init_ai_report_routes(db)
+api_router.include_router(ai_report_router)
+
+from ai_sensor_routes import router as ai_sensor_router, init_ai_sensor_routes
+init_ai_sensor_routes(db)
+api_router.include_router(ai_sensor_router)
+
+from ai_purchase_history_routes import router as ai_purchase_history_router, init_ai_purchase_history_routes
+init_ai_purchase_history_routes(db, audit_service)
+api_router.include_router(ai_purchase_history_router)
+
+from automation_routes import router as automation_router, init_automation_routes
+init_automation_routes(db)
+api_router.include_router(automation_router)
+
+# Presqu'accident routes
+from presqu_accident_routes import router as presqu_accident_router, init_presqu_accident_routes
+init_presqu_accident_routes(db, audit_service, realtime_manager)
+api_router.include_router(presqu_accident_router)
+
+# Documentations, SSH, preferences, surveillance history, tailscale, autorisations
+from documentations_routes import router as documentations_router, init_documentations_routes
+from ssh_routes import router as ssh_router
+from user_preferences_routes import router as user_preferences_router
+from surveillance_history_routes import router as surveillance_history_router
+from tailscale_routes import router as tailscale_router
+from autorisation_routes import router as autorisation_router
+init_documentations_routes(db, audit_service, realtime_manager)
+api_router.include_router(documentations_router)
+api_router.include_router(ssh_router)
+api_router.include_router(user_preferences_router)
+api_router.include_router(surveillance_history_router)
+api_router.include_router(tailscale_router)
+api_router.include_router(autorisation_router)
+
+# Demandes d'arret pour maintenance
+from demande_arret_routes import router as demande_arret_router
+from demande_arret_reports_routes import router as demande_arret_reports_router
+from demande_arret_attachments_routes import router as demande_arret_attachments_router
+api_router.include_router(demande_arret_reports_router)
+api_router.include_router(demande_arret_attachments_router)
+api_router.include_router(demande_arret_router)
+
+# Import/Export routes
+from import_export_routes import router as import_export_router, init_db as init_import_export_db
+init_import_export_db(db)
+api_router.include_router(import_export_router)
+
+# Backup routes
+from backup_routes import router as backup_router, init_db as init_backup_db, set_scheduler as set_backup_scheduler
+from backup_service import init_db as init_backup_service_db
+init_backup_db(db)
+init_backup_service_db(db)
+api_router.include_router(backup_router)
+
+# Chat Live
+from chat_routes import router as chat_router, init_chat_routes
+init_chat_routes(db)
+api_router.include_router(chat_router)
+
+# Chat Cleanup Service
+from chat_cleanup_service import init_chat_cleanup_service
+chat_cleanup_service = init_chat_cleanup_service(db)
+
+# Manuel utilisateur
+from manual_routes import router as manual_router
+api_router.include_router(manual_router)
+
+# Changelog
+from changelog_routes import router as releases_router
+api_router.include_router(releases_router)
+
+# QR Codes
+from qr_routes import router as qr_router
+api_router.include_router(qr_router)
+from qr_inventory_routes import router as qr_inventory_router
+api_router.include_router(qr_inventory_router)
+
+# Purchase Request routes
+from purchase_request_routes import router as purchase_request_router
+api_router.include_router(purchase_request_router)
+
+# MQTT routes
+from mqtt_routes import router as mqtt_router, init_mqtt_routes
+init_mqtt_routes(db)
+api_router.include_router(mqtt_router)
+from mqtt_manager import mqtt_manager
+
+# MQTT Collectors
+from mqtt_meter_collector import mqtt_meter_collector
+from mqtt_sensor_collector import mqtt_sensor_collector
+
+# Sensor routes
+from sensor_routes import router as sensor_router, init_sensor_routes
+init_sensor_routes(db, realtime_manager)
+api_router.include_router(sensor_router)
+
+# Alert routes and service
+from alert_routes import router as alert_router, init_alert_routes
+init_alert_routes(db)
+api_router.include_router(alert_router)
+from alert_service import alert_service
+
+# MQTT Logger
+from mqtt_logger import init_mqtt_logger
+mqtt_logger = init_mqtt_logger(db)
+from mqtt_logs_routes import router as mqtt_logs_router, init_mqtt_logs_routes
+init_mqtt_logs_routes(db, mqtt_logger)
+api_router.include_router(mqtt_logs_router)
+
+# M.E.S routes
+from mes_routes import router as mes_router, init_mes_routes, mes_service as _mes_svc_ref
+init_mes_routes(db, mqtt_manager)
+api_router.include_router(mes_router)
+
+from mes_report_scheduler import init_mes_report_scheduler
+import email_service as email_service_module
+
+# AI Chatbot routes
+from ai_chat_routes import router as ai_router, init_ai_routes
+init_ai_routes(db)
+api_router.include_router(ai_router)
+
+# Roles Management routes
+from roles_routes import router as roles_router, init_system_roles, init_roles_routes
+init_roles_routes(db)
+api_router.include_router(roles_router)
+
+# Timezone Configuration routes
+from timezone_routes import router as timezone_router, init_timezone_routes
+init_timezone_routes(db)
+api_router.include_router(timezone_router)
+
+# Consignes routes
+from consignes_routes import router as consignes_router, init_consignes_routes, consignes_websocket_endpoint
+init_consignes_routes(db, get_current_user, mqtt_manager, audit_service)
+api_router.include_router(consignes_router)
+
+# Work Order Templates routes
+from work_order_templates_routes import router as wo_templates_router
+api_router.include_router(wo_templates_router)
+
+# Custom Widgets routes
+from custom_widgets_routes import router as custom_widgets_router, init_custom_widgets_routes
+init_custom_widgets_routes(db, audit_service)
+api_router.include_router(custom_widgets_router)
+from ai_widget_routes import router as ai_widget_router, init_ai_widget_routes
+init_ai_widget_routes(db)
+api_router.include_router(ai_widget_router)
+
+# Service de filtrage par service
+from service_filter import init_service_filter
+init_service_filter(db)
+
+# Service d'email pour les demandes d'amelioration
+from improvement_request_email_service import init_improvement_request_email_service
+init_improvement_request_email_service(db)
+
+# Whiteboard routes
+from whiteboard_routes import router as whiteboard_router, init_whiteboards, init_whiteboard_audit
+from whiteboard_object_routes import router as whiteboard_object_router
+from whiteboard_manager import whiteboard_manager, handle_whiteboard_message
+init_whiteboard_audit(audit_service)
+api_router.include_router(whiteboard_router)
+api_router.include_router(whiteboard_object_router)
+
+# Weekly/Team reports and time tracking
+from weekly_report_routes import router as weekly_report_router, set_database as set_weekly_report_db
+set_weekly_report_db(db)
+api_router.include_router(weekly_report_router)
+from team_management_routes import router as team_router, set_database as set_team_db
+set_team_db(db)
+api_router.include_router(team_router)
+from time_tracking_routes import router as time_tracking_router, set_database as set_time_tracking_db
+set_time_tracking_db(db)
+api_router.include_router(time_tracking_router)
+
+# Camera routes (Frigate AVANT camera_router)
+from frigate_routes import router as frigate_router, set_database as set_frigate_db, init_frigate_from_db
+set_frigate_db(db)
+api_router.include_router(frigate_router, prefix="/cameras")
+from camera_routes import router as camera_router, set_database as set_camera_db
+from camera_snapshot_scheduler import set_database as set_camera_scheduler_db, start_snapshot_scheduler
+set_camera_db(db)
+set_camera_scheduler_db(db)
+api_router.include_router(camera_router)
+
+# Analytics Checklists
+from analytics_routes import router as analytics_router, set_database as set_analytics_db
+set_analytics_db(db)
+api_router.include_router(analytics_router)
+
+# Contrats
+from contract_routes import router as contract_router, init_db as init_contract_db
+init_contract_db(db, audit_service)
+api_router.include_router(contract_router)
+
+# LOTO (Lockout/Tagout)
+from loto_routes import router as loto_router, init_loto_routes
+init_loto_routes(db, audit_service)
+api_router.include_router(loto_router)
+
+# Push Notifications
+from notifications import router as push_notifications_router, set_db as set_notifications_db, check_push_receipts
+set_notifications_db(db)
+api_router.include_router(push_notifications_router)
+
+# Formation (Training)
+from training_routes import router as training_router, init_training_routes
+init_training_routes(db)
+api_router.include_router(training_router)
+
+# Analyse d'Accidents (Arbre des Causes)
+from accident_analysis_routes import router as accident_analysis_router, init_accident_analysis_routes
+init_accident_analysis_routes(db, audit_service)
+api_router.include_router(accident_analysis_router)
+
+# check_notification_health_cron pour le scheduler
+from routes.notification_health import check_notification_health_cron
 
 
 # WebSocket pour le tableau d'affichage
@@ -649,7 +893,6 @@ async def whiteboard_websocket(websocket: WebSocket, board_id: str):
         await whiteboard_manager.disconnect(board_id, user_id)
 
 # WebSocket Centralisé pour toutes les entités temps réel
-from realtime_manager import realtime_manager
 from realtime_events import EntityType as RealtimeEntityType
 
 @app.websocket("/api/ws/realtime/{entity_type}")
@@ -897,6 +1140,18 @@ async def check_llm_versions_job():
     except Exception as e:
         logger.error(f"Erreur vérification versions LLM: {e}")
 
+
+@app.on_event("startup")
+async def start_mes_report_scheduler():
+    try:
+        await init_mes_report_scheduler(db, _mes_svc_ref, email_service_module)
+        logger.info("Scheduler rapports M.E.S. demarre")
+    except Exception as e:
+        logger.warning(f"Erreur demarrage scheduler rapports M.E.S.: {e}")
+
+@app.on_event("startup")
+async def init_frigate():
+    await init_frigate_from_db()
 
 @app.on_event("startup")
 async def fix_surveillance_ecart_data():

@@ -119,6 +119,11 @@ async def get_location_by_id(location_id: str):
         return None
 
 
+def _get_realtime_manager():
+    """Récupère le realtime_manager initialisé."""
+    return realtime_manager
+
+
 async def get_equipment_by_id(equipment_id: str):
     """Get equipment details by ID"""
     try:

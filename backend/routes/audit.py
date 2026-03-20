@@ -1,14 +1,17 @@
 """
 Routes du Journal d'Audit
 """
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from bson import ObjectId
 from datetime import datetime, timezone
 from typing import List, Optional
 import logging
+import io
+import pandas as pd
+import pytz
 
 from models import ActionType, EntityType
-from dependencies import get_current_user, require_permission
+from dependencies import get_current_user, get_current_admin_user, require_permission
 from routes.shared import db, audit_service, serialize_doc
 
 EntityType_Audit = EntityType

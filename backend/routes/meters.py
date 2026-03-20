@@ -3,17 +3,21 @@ Routes des Compteurs et Releves
 """
 from fastapi import APIRouter, Depends, HTTPException
 from bson import ObjectId
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 import uuid
 import logging
 
-from models import ActionType, EntityType, MessageResponse
+from models import ActionType, EntityType, MessageResponse, Meter, MeterCreate, MeterUpdate, MeterReading, MeterReadingCreate
 from dependencies import get_current_user, require_permission
-from routes.shared import db, audit_service, serialize_doc
+from routes.shared import db, audit_service, serialize_doc, _get_realtime_manager
 
 EntityType_Audit = EntityType
 logger = logging.getLogger(__name__)
+
+def _get_mqtt_meter_collector():
+    from mqtt_meter_collector import mqtt_meter_collector
+    return mqtt_meter_collector
 
 router = APIRouter(tags=["Compteurs"])
 
@@ -39,7 +43,7 @@ async def create_meter(meter: MeterCreate, current_user: dict = Depends(require_
         
         # Rafraîchir les abonnements MQTT si activé
         if meter_data.get("mqtt_enabled"):
-            await mqtt_meter_collector.refresh_subscriptions()
+            await _get_mqtt_meter_collector().refresh_subscriptions()
         
         # Audit log
         await audit_service.log_action(
@@ -117,7 +121,7 @@ async def update_meter(
     
     # Rafraîchir les abonnements MQTT si MQTT activé/modifié
     if "mqtt_enabled" in update_data or "mqtt_topic" in update_data:
-        await mqtt_meter_collector.refresh_subscriptions()
+        await _get_mqtt_meter_collector().refresh_subscriptions()
     
     # Audit log
     await audit_service.log_action(

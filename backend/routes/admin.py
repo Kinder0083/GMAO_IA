@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
 import logging
 
-from models import ActionType, EntityType, MessageResponse
+from models import ActionType, EntityType, MessageResponse, ResetSectionResponse, ResetAllResponse
 from dependencies import get_current_user, get_current_admin_user, require_permission
 from routes.shared import db, audit_service, serialize_doc
 

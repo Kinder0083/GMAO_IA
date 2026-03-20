@@ -9,6 +9,7 @@ import logging
 
 from models import ActionType, EntityType
 from dependencies import get_current_user, require_permission
+from openapi_config import STANDARD_ERRORS
 from routes.shared import db, audit_service, serialize_doc
 
 EntityType_Audit = EntityType

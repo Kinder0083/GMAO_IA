@@ -8,9 +8,9 @@ from typing import List, Optional
 import uuid
 import logging
 
-from models import ActionType, EntityType
-from dependencies import get_current_user, require_permission
-from routes.shared import db, audit_service, serialize_doc
+from models import ActionType, EntityType, UserAvailabilityCreate, UserAvailabilityUpdate, MessageResponse
+from dependencies import get_current_user, get_current_admin_user, require_permission
+from routes.shared import db, audit_service, serialize_doc, _get_realtime_manager
 
 EntityType_Audit = EntityType
 logger = logging.getLogger(__name__)

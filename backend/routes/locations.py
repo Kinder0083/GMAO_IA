@@ -9,7 +9,7 @@ import logging
 
 from models import ActionType, EntityType, Location, LocationCreate, LocationUpdate, MessageResponse
 from dependencies import get_current_user, require_permission
-from routes.shared import db, audit_service, serialize_doc
+from routes.shared import db, audit_service, serialize_doc, _get_realtime_manager
 
 EntityType_Audit = EntityType
 logger = logging.getLogger(__name__)

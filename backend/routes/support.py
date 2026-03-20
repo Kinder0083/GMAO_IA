@@ -3,14 +3,16 @@ Routes de Support / Aide - Contacts
 """
 from fastapi import APIRouter, Depends, HTTPException
 from bson import ObjectId
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 import uuid
 import logging
 
-from models import ActionType, EntityType, MessageResponse
+from models import ActionType, EntityType, MessageResponse, SuccessResponse, HelpRequestResponse, HelpRequest
+from pydantic import BaseModel
 from dependencies import get_current_user, get_current_admin_user, require_permission
 from routes.shared import db, audit_service, serialize_doc
+import email_service
 
 EntityType_Audit = EntityType
 logger = logging.getLogger(__name__)

@@ -4,7 +4,7 @@ Routes de la Maintenance Preventive - CRUD, Attachments, Checklists
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse
 from bson import ObjectId
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import List, Optional
 import uuid
@@ -13,9 +13,14 @@ import mimetypes
 import aiofiles
 import logging
 
-from models import ActionType, EntityType, MessageResponse
+from models import (
+    ActionType, EntityType, MessageResponse, SuccessResponse,
+    PreventiveMaintenance, PreventiveMaintenanceCreate, PreventiveMaintenanceUpdate,
+    ChecklistTemplate, ChecklistTemplateCreate, ChecklistTemplateUpdate,
+    ChecklistExecution, ChecklistExecutionCreate, ChecklistExecutionUpdate
+)
 from dependencies import get_current_user, get_current_admin_user, require_permission
-from routes.shared import db, audit_service, serialize_doc
+from routes.shared import db, audit_service, serialize_doc, _get_realtime_manager, get_equipment_by_id, get_user_by_id
 
 EntityType_Audit = EntityType
 logger = logging.getLogger(__name__)
