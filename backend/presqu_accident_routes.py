@@ -722,7 +722,17 @@ async def upload_attachment(
         
         # Lire et sauvegarder le fichier
         content = await file.read()
+        
+        # Compression automatique des images
+        from image_compressor import get_compression_settings, compress_image
+        comp_settings = await get_compression_settings(db)
+        content, compressed_filename, new_mime, was_compressed = compress_image(content, file.filename, comp_settings)
         file_size = len(content)
+        
+        file_ext = Path(compressed_filename).suffix if was_compressed else Path(file.filename).suffix
+        attachment_id = str(uuid.uuid4())
+        unique_filename = f"{attachment_id}{file_ext}"
+        file_path = upload_dir / unique_filename
         
         with open(file_path, "wb") as f:
             f.write(content)
@@ -733,7 +743,7 @@ async def upload_attachment(
             "filename": unique_filename,
             "original_filename": file.filename,
             "path": str(file_path),
-            "mime_type": file.content_type or "application/octet-stream",
+            "mime_type": new_mime if was_compressed else (file.content_type or "application/octet-stream"),
             "size": file_size,
             "uploaded_at": datetime.now(timezone.utc).isoformat(),
             "uploaded_by": current_user.get("id")

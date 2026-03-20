@@ -14,6 +14,7 @@ import {
 import FormAIModelSettings from '../components/Settings/FormAIModelSettings';
 import TrashSettings from '../components/Settings/TrashSettings';
 import AccidentAISettings from '../components/Settings/AccidentAISettings';
+import ImageCompressionSettings from '../components/Settings/ImageCompressionSettings';
 
 /**
  * Page de paramètres spéciaux / système
@@ -81,6 +82,9 @@ const SpecialSettings = () => {
 
           {/* Analyse d'Accidents — Modele IA */}
           <AccidentAISettings />
+
+          {/* Compression des images */}
+          <ImageCompressionSettings />
         </div>
       </div>
     </div>

@@ -35,15 +35,20 @@ async def upload_attachment(
         
         # Lire le contenu du fichier
         content = await file.read()
-        file_size = len(content)
         
         # Vérifier la taille
-        if file_size > MAX_FILE_SIZE:
+        if len(content) > MAX_FILE_SIZE:
             raise HTTPException(status_code=400, detail=f"Fichier trop volumineux (max {MAX_FILE_SIZE // (1024*1024)}MB)")
+        
+        # Compression automatique des images
+        from image_compressor import get_compression_settings, compress_image
+        comp_settings = await get_compression_settings(db)
+        content, compressed_filename, new_mime, was_compressed = compress_image(content, file.filename, comp_settings)
+        file_size = len(content)
         
         # Générer un ID unique et un nom de fichier sécurisé
         attachment_id = str(uuid.uuid4())
-        safe_filename = f"{attachment_id}_{file.filename}"
+        safe_filename = f"{attachment_id}_{compressed_filename if was_compressed else file.filename}"
         file_path = UPLOAD_DIR / safe_filename
         
         # Sauvegarder le fichier
@@ -56,7 +61,7 @@ async def upload_attachment(
             "id": attachment_id,
             "filename": file.filename,
             "safe_filename": safe_filename,
-            "content_type": file.content_type or mimetypes.guess_type(file.filename)[0] or "application/octet-stream",
+            "content_type": new_mime if was_compressed else (file.content_type or mimetypes.guess_type(file.filename)[0] or "application/octet-stream"),
             "size": file_size,
             "uploaded_by_id": current_user.get("id"),
             "uploaded_by_name": f"{current_user.get('prenom', '')} {current_user.get('nom', '')}",

@@ -1938,8 +1938,13 @@ async def upload_attachment(
         if len(content) > MAX_FILE_SIZE:
             raise HTTPException(status_code=400, detail="Fichier trop volumineux (max 25MB)")
         
+        # Compression automatique des images
+        from image_compressor import get_compression_settings, compress_image
+        comp_settings = await get_compression_settings(db)
+        content, compressed_filename, new_mime, was_compressed = compress_image(content, file.filename, comp_settings)
+        
         # Générer un nom de fichier unique
-        file_ext = Path(file.filename).suffix
+        file_ext = Path(compressed_filename).suffix if was_compressed else Path(file.filename).suffix
         unique_filename = f"{uuid.uuid4()}{file_ext}"
         file_path = UPLOAD_DIR / unique_filename
         
@@ -1953,7 +1958,7 @@ async def upload_attachment(
             "filename": unique_filename,
             "original_filename": file.filename,
             "size": len(content),
-            "mime_type": file.content_type or mimetypes.guess_type(file.filename)[0] or "application/octet-stream",
+            "mime_type": new_mime if was_compressed else (file.content_type or mimetypes.guess_type(file.filename)[0] or "application/octet-stream"),
             "uploaded_at": datetime.utcnow()
         }
         
@@ -3692,7 +3697,18 @@ async def upload_pm_attachment(
         
         # Lire et sauvegarder le fichier
         content = await file.read()
+        
+        # Compression automatique des images
+        from image_compressor import get_compression_settings, compress_image
+        comp_settings = await get_compression_settings(db)
+        content, compressed_filename, new_mime, was_compressed = compress_image(content, file.filename, comp_settings)
+        
         file_size = len(content)
+        
+        file_ext = os.path.splitext(compressed_filename)[1] if was_compressed else (os.path.splitext(file.filename)[1] if file.filename else "")
+        attachment_id = str(uuid_mod.uuid4())
+        unique_filename = f"{attachment_id}{file_ext}"
+        file_path = os.path.join(upload_dir, unique_filename)
         
         with open(file_path, "wb") as f:
             f.write(content)
@@ -3703,7 +3719,7 @@ async def upload_pm_attachment(
             "filename": unique_filename,
             "original_filename": file.filename,
             "path": file_path,
-            "mime_type": file.content_type or "application/octet-stream",
+            "mime_type": new_mime if was_compressed else (file.content_type or "application/octet-stream"),
             "size": file_size,
             "uploaded_at": datetime.now(timezone.utc).isoformat(),
             "uploaded_by": current_user.get("id")
@@ -4777,6 +4793,51 @@ async def update_system_settings(
     except Exception as e:
         logger.error(f"Erreur lors de la mise à jour des paramètres : {str(e)}")
         raise HTTPException(status_code=500, detail=f"Erreur serveur: {str(e)}")
+
+
+# ==================== IMAGE COMPRESSION SETTINGS ====================
+
+@api_router.get("/settings/image-compression", tags=["Parametres"])
+async def get_image_compression_settings(current_user: dict = Depends(get_current_admin_user)):
+    """Recuperer les parametres de compression d'images"""
+    from image_compressor import get_compression_settings, DEFAULT_SETTINGS
+    settings = await get_compression_settings(db)
+    return settings
+
+@api_router.put("/settings/image-compression", tags=["Parametres"])
+async def update_image_compression_settings(
+    body: dict,
+    current_user: dict = Depends(get_current_admin_user)
+):
+    """Mettre a jour les parametres de compression d'images"""
+    from image_compressor import DEFAULT_SETTINGS
+    
+    allowed_keys = {"enabled", "max_resolution", "quality", "output_format"}
+    update_data = {k: v for k, v in body.items() if k in allowed_keys}
+    
+    # Validation
+    if "max_resolution" in update_data:
+        val = update_data["max_resolution"]
+        if not isinstance(val, int) or val < 200 or val > 4000:
+            raise HTTPException(status_code=400, detail="Resolution max doit etre entre 200 et 4000 pixels")
+    
+    if "quality" in update_data:
+        val = update_data["quality"]
+        if not isinstance(val, int) or val < 10 or val > 100:
+            raise HTTPException(status_code=400, detail="Qualite doit etre entre 10 et 100%")
+    
+    if "output_format" in update_data:
+        if update_data["output_format"] not in ("jpeg", "webp"):
+            raise HTTPException(status_code=400, detail="Format doit etre jpeg ou webp")
+    
+    await db.system_settings.update_one(
+        {"key": "image_compression"},
+        {"$set": {**update_data, "key": "image_compression"}},
+        upsert=True
+    )
+    
+    settings = await db.system_settings.find_one({"key": "image_compression"}, {"_id": 0, "key": 0})
+    return {**DEFAULT_SETTINGS, **(settings or {})}
 
 
 
@@ -8015,7 +8076,12 @@ async def upload_ir_attachment(
         if len(content) > MAX_FILE_SIZE:
             raise HTTPException(status_code=400, detail="Fichier trop volumineux (max 25MB)")
         
-        file_ext = Path(file.filename).suffix
+        # Compression automatique des images
+        from image_compressor import get_compression_settings, compress_image
+        comp_settings = await get_compression_settings(db)
+        content, compressed_filename, new_mime, was_compressed = compress_image(content, file.filename, comp_settings)
+        
+        file_ext = Path(compressed_filename).suffix if was_compressed else Path(file.filename).suffix
         unique_filename = f"{uuid.uuid4()}{file_ext}"
         file_path = IR_UPLOAD_DIR / unique_filename
         
@@ -8027,7 +8093,7 @@ async def upload_ir_attachment(
             "filename": unique_filename,
             "original_filename": file.filename,
             "size": len(content),
-            "mime_type": file.content_type or mimetypes.guess_type(file.filename)[0] or "application/octet-stream",
+            "mime_type": new_mime if was_compressed else (file.content_type or mimetypes.guess_type(file.filename)[0] or "application/octet-stream"),
             "uploaded_at": datetime.utcnow()
         }
         
@@ -9131,6 +9197,64 @@ async def convert_to_improvement(
     except Exception as e:
         logger.error(f"Erreur conversion demande: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== GENERIC ATTACHMENT HELPERS ====================
+
+async def upload_attachment_generic(item_id: str, file: UploadFile, collection_name: str, current_user: dict):
+    """Upload generique de piece jointe avec compression d'image automatique"""
+    try:
+        upload_dir = Path(f"/app/backend/uploads/{collection_name}")
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        
+        content = await file.read()
+        if len(content) > MAX_FILE_SIZE:
+            raise HTTPException(status_code=400, detail="Fichier trop volumineux (max 25MB)")
+        
+        # Compression automatique des images
+        from image_compressor import get_compression_settings, compress_image
+        comp_settings = await get_compression_settings(db)
+        content, compressed_filename, new_mime, was_compressed = compress_image(content, file.filename, comp_settings)
+        
+        file_ext = Path(compressed_filename).suffix if was_compressed else Path(file.filename).suffix
+        attachment_id = str(uuid.uuid4())
+        unique_filename = f"{attachment_id}{file_ext}"
+        file_path = upload_dir / unique_filename
+        
+        async with aiofiles.open(file_path, 'wb') as f:
+            await f.write(content)
+        
+        new_attachment = {
+            "id": attachment_id,
+            "filename": unique_filename,
+            "original_filename": file.filename,
+            "path": str(file_path),
+            "mime_type": new_mime if was_compressed else (file.content_type or "application/octet-stream"),
+            "size": len(content),
+            "uploaded_at": datetime.now(timezone.utc).isoformat(),
+            "uploaded_by": current_user.get("id")
+        }
+        
+        await db[collection_name].update_one(
+            {"id": item_id},
+            {"$push": {"attachments": new_attachment}}
+        )
+        
+        return {"success": True, "attachment": new_attachment}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erreur upload attachment {collection_name}: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+async def download_attachment_generic(item_id: str, filename: str, collection_name: str):
+    """Download generique de piece jointe"""
+    file_path = Path(f"/app/backend/uploads/{collection_name}") / filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Fichier non trouve")
+    return FileResponse(str(file_path))
+
 
 # Attachments et Comments pour Improvement Requests
 @api_router.post("/improvement-requests/{request_id}/attachments", tags=["Demandes Amelioration"])
