@@ -6309,16 +6309,24 @@ async def delete_purchase(purchase_id: str, current_user: dict = Depends(require
 @api_router.get("/reports/analytics")
 async def get_analytics(current_user: dict = Depends(require_permission("reports", "view"))):
     """Obtenir les données analytiques générales"""
-    # Work orders stats
-    total_wo = await db.work_orders.count_documents({})
+    from datetime import datetime, timezone
+    from dateutil.relativedelta import relativedelta
+    
+    now = datetime.now()
+    first_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    next_month = first_of_month + relativedelta(months=1)
+    
+    # Work orders stats (exclure les supprimés)
+    base_filter = {"deleted_at": {"$exists": False}}
+    total_wo = await db.work_orders.count_documents(base_filter)
     wo_by_status = {}
     for status in ["OUVERT", "EN_COURS", "EN_ATTENTE", "TERMINE"]:
-        count = await db.work_orders.count_documents({"statut": status})
+        count = await db.work_orders.count_documents({**base_filter, "statut": status})
         wo_by_status[status] = count
     
     wo_by_priority = {}
     for priority in ["HAUTE", "MOYENNE", "BASSE", "AUCUNE"]:
-        count = await db.work_orders.count_documents({"priorite": priority})
+        count = await db.work_orders.count_documents({**base_filter, "priorite": priority})
         wo_by_priority[priority] = count
     
     # Equipment stats
@@ -6327,28 +6335,52 @@ async def get_analytics(current_user: dict = Depends(require_permission("reports
         count = await db.equipments.count_documents({"statut": status})
         eq_by_status[status] = count
     
-    # Simple mock data for costs and time response
+    # --- Taux de réalisation du mois ---
+    month_filter = {**base_filter, "dateCreation": {"$gte": first_of_month, "$lt": next_month}}
+    total_wo_month = await db.work_orders.count_documents(month_filter)
+    termine_wo_month = await db.work_orders.count_documents({**month_filter, "statut": "TERMINE"})
+    taux_realisation = round((termine_wo_month / total_wo_month * 100) if total_wo_month > 0 else 0)
+    
+    # --- MTTR - Temps avant réalisation (heures) ---
+    mttr_pipeline = [
+        {"$match": {**base_filter, "statut": "TERMINE", "dateTermine": {"$exists": True}, "dateCreation": {"$exists": True}}},
+        {"$project": {
+            "duration": {"$subtract": ["$dateTermine", "$dateCreation"]}
+        }},
+        {"$group": {
+            "_id": None,
+            "avg_duration_ms": {"$avg": "$duration"},
+            "count": {"$sum": 1}
+        }}
+    ]
+    mttr_result = await db.work_orders.aggregate(mttr_pipeline).to_list(1)
+    if mttr_result and mttr_result[0].get("avg_duration_ms"):
+        mttr_hours = round(mttr_result[0]["avg_duration_ms"] / (1000 * 60 * 60), 1)
+    else:
+        mttr_hours = 0
+    
+    # --- Maintenances préventives du mois ---
+    prev_month_filter = {**base_filter, "categorie": "TRAVAUX_PREVENTIFS", "dateCreation": {"$gte": first_of_month, "$lt": next_month}}
+    prev_total = await db.work_orders.count_documents(prev_month_filter)
+    prev_termine = await db.work_orders.count_documents({**prev_month_filter, "statut": "TERMINE"})
+    prev_pct = round((prev_termine / prev_total * 100) if prev_total > 0 else 0)
+    
+    # --- Maintenances correctives du mois ---
+    corr_month_filter = {**base_filter, "categorie": {"$in": ["TRAVAUX_CURATIF", None]}, "dateCreation": {"$gte": first_of_month, "$lt": next_month}}
+    # Inclure aussi les OT sans categorie (traités comme correctif par défaut)
+    corr_total = await db.work_orders.count_documents(corr_month_filter)
+    corr_termine = await db.work_orders.count_documents({**corr_month_filter, "statut": "TERMINE"})
+    corr_pct = round((corr_termine / corr_total * 100) if corr_total > 0 else 0)
+    
     analytics = {
         "workOrdersParStatut": wo_by_status,
         "workOrdersParPriorite": wo_by_priority,
         "equipementsParStatut": eq_by_status,
-        "coutsMaintenance": {
-            "janvier": 4500,
-            "decembre": 3200,
-            "novembre": 2800,
-            "octobre": 3500,
-            "septembre": 2900,
-            "aout": 3100
-        },
-        "tempsReponse": {
-            "moyen": 2.5,
-            "median": 2,
-            "min": 1,
-            "max": 6
-        },
-        "tauxRealisation": 87,
-        "nombreMaintenancesPrev": await db.preventive_maintenances.count_documents({"statut": "ACTIF"}),
-        "nombreMaintenancesCorrectives": await db.work_orders.count_documents({"priorite": {"$ne": "AUCUNE"}})
+        "tauxRealisation": taux_realisation,
+        "tauxRealisationDetail": {"termine": termine_wo_month, "total": total_wo_month},
+        "mttrHeures": mttr_hours,
+        "maintenancesPreventives": {"realise": prev_termine, "total": prev_total, "pourcentage": prev_pct},
+        "maintenancesCorrectives": {"realise": corr_termine, "total": corr_total, "pourcentage": corr_pct}
     }
     
     return analytics
@@ -6567,7 +6599,19 @@ async def get_user_time_tracking(
         # Cela permet d'afficher par défaut tous les utilisateurs actifs, pas seulement celui connecté
         auto_discovered_user_ids = set()
         
+        # Helper pour parser les timestamps (peuvent etre datetime ou string)
+        def parse_ts(ts):
+            if isinstance(ts, datetime):
+                return ts
+            if isinstance(ts, str):
+                try:
+                    return datetime.fromisoformat(ts.replace('Z', '+00:00').replace('+00:00', ''))
+                except:
+                    return None
+            return None
+        
         wo_discovery_match = {
+            "deleted_at": {"$exists": False},
             "time_entries": {
                 "$elemMatch": {
                     "timestamp": {"$gte": date_start, "$lte": date_end}
@@ -6577,7 +6621,7 @@ async def get_user_time_tracking(
         wo_disc_cursor = db.work_orders.find(wo_discovery_match, {"time_entries": 1})
         async for wo in wo_disc_cursor:
             for entry in wo.get("time_entries", []):
-                ts = entry.get("timestamp")
+                ts = parse_ts(entry.get("timestamp"))
                 if ts and date_start <= ts <= date_end:
                     uid = entry.get("user_id")
                     if uid:
@@ -6586,7 +6630,7 @@ async def get_user_time_tracking(
         imp_disc_cursor = db.improvements.find(wo_discovery_match, {"time_entries": 1})
         async for imp in imp_disc_cursor:
             for entry in imp.get("time_entries", []):
-                ts = entry.get("timestamp")
+                ts = parse_ts(entry.get("timestamp"))
                 if ts and date_start <= ts <= date_end:
                     uid = entry.get("user_id")
                     if uid:
@@ -6616,6 +6660,7 @@ async def get_user_time_tracking(
             wo_categories = [cat for cat in selected_categories if cat != "AMELIORATIONS"]
             if wo_categories:
                 wo_match = {
+                    "deleted_at": {"$exists": False},
                     "categorie": {"$in": wo_categories},
                     "time_entries": {
                         "$elemMatch": {
@@ -6632,7 +6677,7 @@ async def get_user_time_tracking(
                     if category and time_entries:
                         for entry in time_entries:
                             if entry.get("user_id") == user_id:
-                                entry_timestamp = entry.get("timestamp")
+                                entry_timestamp = parse_ts(entry.get("timestamp"))
                                 if entry_timestamp and date_start <= entry_timestamp <= date_end:
                                     idx = get_time_index(entry_timestamp, date_start, group_by, len(time_labels))
                                     if 0 <= idx < len(time_labels) and category in user_data:
@@ -6654,7 +6699,7 @@ async def get_user_time_tracking(
                     time_entries = imp.get("time_entries", [])
                     for entry in time_entries:
                         if entry.get("user_id") == user_id:
-                            entry_timestamp = entry.get("timestamp")
+                            entry_timestamp = parse_ts(entry.get("timestamp"))
                             if entry_timestamp and date_start <= entry_timestamp <= date_end:
                                 idx = get_time_index(entry_timestamp, date_start, group_by, len(time_labels))
                                 if 0 <= idx < len(time_labels):

@@ -97,17 +97,11 @@ const Reports = () => {
     // KPIs
     csvData.push(['Indicateurs Clés']);
     csvData.push(['Taux de réalisation', `${analytics.tauxRealisation}%`]);
-    csvData.push(['Temps de réponse moyen', `${analytics.tempsReponse.moyen}h`]);
-    csvData.push(['Maintenances préventives', analytics.nombreMaintenancesPrev]);
-    csvData.push(['Maintenances correctives', analytics.nombreMaintenancesCorrectives]);
-    csvData.push([]);
-    
-    // Coûts de maintenance
-    csvData.push(['Coûts de Maintenance']);
-    csvData.push(['Mois', 'Coût (€)']);
-    Object.entries(analytics.coutsMaintenance).forEach(([mois, cout]) => {
-      csvData.push([mois, cout]);
-    });
+    csvData.push(['MTTR', `${analytics.mttrHeures}h`]);
+    csvData.push(['Maintenances préventives réalisées', analytics.maintenancesPreventives?.realise || 0]);
+    csvData.push(['Maintenances préventives total', analytics.maintenancesPreventives?.total || 0]);
+    csvData.push(['Maintenances correctives réalisées', analytics.maintenancesCorrectives?.realise || 0]);
+    csvData.push(['Maintenances correctives total', analytics.maintenancesCorrectives?.total || 0]);
     csvData.push([]);
     
     // Ordres de travail par statut
@@ -147,8 +141,6 @@ const Reports = () => {
     { value: 'TRIMESTRE', label: 'Ce trimestre' },
     { value: 'ANNEE', label: 'Cette année' }
   ];
-
-  const coutsMaintenance = Object.entries(analytics.coutsMaintenance);
 
   return (
     <div className="space-y-6">
@@ -213,13 +205,16 @@ const Reports = () => {
 
       {/* KPIs */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        {/* Taux de réalisation */}
         <Card className="hover:shadow-lg transition-shadow">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Taux de réalisation</p>
                 <p className="text-3xl font-bold text-gray-900 mt-2">{analytics.tauxRealisation}%</p>
-                <p className="text-xs text-green-600 mt-1 font-medium">+8% vs mois précédent</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  {analytics.tauxRealisationDetail?.termine || 0} terminé(s) / {analytics.tauxRealisationDetail?.total || 0} OT ce mois
+                </p>
               </div>
               <div className="bg-green-100 p-3 rounded-xl">
                 <TrendingUp size={24} className="text-green-600" />
@@ -228,13 +223,14 @@ const Reports = () => {
           </CardContent>
         </Card>
 
+        {/* MTTR */}
         <Card className="hover:shadow-lg transition-shadow">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Temps de réponse moyen</p>
-                <p className="text-3xl font-bold text-gray-900 mt-2">{analytics.tempsReponse.moyen}h</p>
-                <p className="text-xs text-green-600 mt-1 font-medium">-15% vs mois précédent</p>
+                <p className="text-sm font-medium text-gray-600">MTTR - Temps avant réalisation</p>
+                <p className="text-3xl font-bold text-gray-900 mt-2">{analytics.mttrHeures || 0}h</p>
+                <p className="text-xs text-gray-500 mt-1">Moyenne création → terminé</p>
               </div>
               <div className="bg-blue-100 p-3 rounded-xl">
                 <BarChart3 size={24} className="text-blue-600" />
@@ -243,13 +239,18 @@ const Reports = () => {
           </CardContent>
         </Card>
 
+        {/* Maintenances préventives */}
         <Card className="hover:shadow-lg transition-shadow">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Maintenances préventives</p>
-                <p className="text-3xl font-bold text-gray-900 mt-2">{analytics.nombreMaintenancesPrev}</p>
-                <p className="text-xs text-gray-500 mt-1">Ce mois</p>
+                <p className="text-3xl font-bold text-gray-900 mt-2">
+                  {analytics.maintenancesPreventives?.realise || 0}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  sur {analytics.maintenancesPreventives?.total || 0} prévue(s) — {analytics.maintenancesPreventives?.pourcentage || 0}% réalisé
+                </p>
               </div>
               <div className="bg-purple-100 p-3 rounded-xl">
                 <Calendar size={24} className="text-purple-600" />
@@ -258,13 +259,18 @@ const Reports = () => {
           </CardContent>
         </Card>
 
+        {/* Maintenances correctives */}
         <Card className="hover:shadow-lg transition-shadow">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Maintenances correctives</p>
-                <p className="text-3xl font-bold text-gray-900 mt-2">{analytics.nombreMaintenancesCorrectives}</p>
-                <p className="text-xs text-gray-500 mt-1">Ce mois</p>
+                <p className="text-3xl font-bold text-gray-900 mt-2">
+                  {analytics.maintenancesCorrectives?.realise || 0}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  sur {analytics.maintenancesCorrectives?.total || 0} créée(s) — {analytics.maintenancesCorrectives?.pourcentage || 0}% réalisé
+                </p>
               </div>
               <div className="bg-orange-100 p-3 rounded-xl">
                 <BarChart3 size={24} className="text-orange-600" />
@@ -275,36 +281,7 @@ const Reports = () => {
       </div>
 
       {/* Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Cost Trends */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Tendance des coûts de maintenance</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {coutsMaintenance.map(([mois, cout], index) => {
-                const maxCout = Math.max(...coutsMaintenance.map(c => c[1]));
-                const percentage = (cout / maxCout) * 100;
-                return (
-                  <div key={mois}>
-                    <div className="flex justify-between text-sm mb-1">
-                      <span className="font-medium text-gray-700 capitalize">{mois}</span>
-                      <span className="text-gray-900 font-bold">{(cout || 0).toLocaleString('fr-FR')} €</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-3">
-                      <div
-                        className="bg-gradient-to-r from-blue-500 to-blue-600 h-3 rounded-full transition-all"
-                        style={{ width: `${percentage}%` }}
-                      ></div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-
+      <div className="grid grid-cols-1 gap-6">
         {/* Work Order Distribution */}
         <Card>
           <CardHeader>

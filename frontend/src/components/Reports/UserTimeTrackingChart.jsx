@@ -27,7 +27,7 @@ const UserTimeTrackingChart = () => {
   
   // États pour les filtres
   const [period, setPeriod] = useState('weekly');
-  const [displayMode, setDisplayMode] = useState('grouped'); // grouped, stacked, table
+  const [displayMode, setDisplayMode] = useState('table'); // grouped, stacked, table
   const [selectedUsers, setSelectedUsers] = useState([]);
   const [selectedCategories, setSelectedCategories] = useState([
     'CHANGEMENT_FORMAT', 'TRAVAUX_PREVENTIFS', 'TRAVAUX_CURATIF', 
@@ -314,13 +314,21 @@ const UserTimeTrackingChart = () => {
             </tr>
           </thead>
           <tbody>
-            {users.map(([userId, userData]) => (
-              selectedCategories.map((cat, catIdx) => {
+            {users.map(([userId, userData]) => {
+              // Filtrer les catégories ayant au moins un pointage pour cet utilisateur
+              const catsWithData = selectedCategories.filter(cat => {
+                const total = userData.data[cat]?.reduce((sum, val) => sum + val, 0) || 0;
+                return total > 0;
+              });
+              
+              if (catsWithData.length === 0) return null;
+              
+              return catsWithData.map((cat, catIdx) => {
                 const total = userData.data[cat]?.reduce((sum, val) => sum + val, 0) || 0;
                 return (
                   <tr key={`${userId}-${cat}`} className={catIdx === 0 ? 'border-t' : ''}>
                     {catIdx === 0 && (
-                      <td rowSpan={selectedCategories.length} className="py-2 px-3 font-medium border-r">
+                      <td rowSpan={catsWithData.length} className="py-2 px-3 font-medium border-r">
                         {userData.user.name}
                       </td>
                     )}
@@ -343,8 +351,8 @@ const UserTimeTrackingChart = () => {
                     </td>
                   </tr>
                 );
-              })
-            ))}
+              });
+            })}
           </tbody>
         </table>
       </div>
