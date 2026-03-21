@@ -21,8 +21,7 @@ Application CMMS/GMAO complète pour la gestion de la maintenance industrielle, 
 ├── server.py (~1740 lignes - point d'entrée principal)
 ├── models.py (modèles Pydantic)
 ├── routes/
-│   ├── __init__.py
-│   ├── shared.py (utilitaires partagés: db, audit_service, serialize_doc)
+│   ├── shared.py (utilitaires partagés: db, audit_service, serialize_doc, get_equipment_by_id)
 │   ├── auth.py, work_orders.py, equipments.py, intervention_requests.py
 │   ├── reports.py, notifications.py, users.py, settings.py
 │   ├── vendors.py, improvements.py, inventory.py, preventive_maintenance.py
@@ -30,19 +29,21 @@ Application CMMS/GMAO complète pour la gestion de la maintenance industrielle, 
 │   ├── support.py, service_manager.py, notification_health.py
 │   ├── update_routes.py, update_management.py, admin.py
 │   └── (22 modules core total)
-└── [~51 fichiers de modules externes: surveillance, AI, MQTT, cameras, etc.]
+└── [~51 fichiers de modules externes]
 ```
 
 ## Tâches complétées
 - [x] Edition/Suppression des entrées de temps dans les OT (Admin only) + audit
 - [x] Edition/Suppression des commentaires dans les OT (Admin only) + audit
 - [x] Filtres de période fonctionnels sur page Rapports & Analytiques
-- [x] **Refactoring massif de server.py** : de ~13000 à ~1740 lignes (22+ modules core)
-- [x] **Section Architecture Backend & Services** dans la page Santé Système :
-  - Résumé global (73 modules, 830 routes, Python version, uptime)
-  - Statut des services (MongoDB, MQTT, WebSocket, Email SMTP)
-  - Liste des modules avec filtres (Tous/Core/Externes/Erreurs)
-  - Endpoint GET /api/health/architecture
+- [x] Refactoring massif de server.py : de ~13000 à ~1740 lignes (22+ modules core)
+- [x] Section Architecture Backend & Services dans la page Santé Système
+- [x] **Correction dropdown Equipement dans OT et DI** :
+  - Dropdown principal affiche uniquement les équipements parents (via `?parents_only=true`)
+  - Second dropdown "Sous-equipement" apparaît quand un parent avec enfants est sélectionné
+  - `get_equipment_by_id` enrichi pour retourner `parent_id`
+  - Comportement identique entre OT et DI
+  - 8 parents avec enfants, 128 parents nommés au total
 
 ## Backlog
 - **(P3)** Tester le script de mise à jour `MAJ_FSAO.sh`
