@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -13,7 +13,7 @@ import { Textarea } from '../ui/textarea';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Calendar, Clock, User, MapPin, Wrench, FileText, MessageSquare, Send, Plus, Package, X, Pencil, Trash2, Check } from 'lucide-react';
+import { Calendar, Clock, User, MapPin, Wrench, FileText, MessageSquare, Send, Plus, Package, X, Pencil, Trash2, Check, Printer, Download } from 'lucide-react';
 import AttachmentsList from './AttachmentsList';
 import AttachmentUploader from './AttachmentUploader';
 import StatusChangeDialog from './StatusChangeDialog';
@@ -23,6 +23,7 @@ import { commentsAPI, workOrdersAPI, inventoryAPI, equipmentsAPI } from '../../s
 import { useToast } from '../../hooks/use-toast';
 import { usePermissions } from '../../hooks/usePermissions';
 import { formatTimeToHoursMinutes } from '../../utils/timeFormat';
+import jsPDF from 'jspdf';
 
 const WorkOrderDialog = ({ open, onOpenChange, workOrder, onSuccess }) => {
   const { toast } = useToast();
@@ -48,6 +49,279 @@ const WorkOrderDialog = ({ open, onOpenChange, workOrder, onSuccess }) => {
   const [editingTimeValue, setEditingTimeValue] = useState('');
   const [editingCommentId, setEditingCommentId] = useState(null);
   const [editingCommentText, setEditingCommentText] = useState('');
+  const [generatingPDF, setGeneratingPDF] = useState(false);
+
+  // ==================== PDF / IMPRESSION ====================
+  const buildPdfDocument = useCallback(async (forPrint = false) => {
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const pageW = 210;
+    const pageH = 297;
+    const margin = 15;
+    const contentW = pageW - margin * 2;
+    let y = margin;
+
+    const addNewPageIfNeeded = (needed) => {
+      if (y + needed > pageH - margin) {
+        doc.addPage();
+        y = margin;
+        return true;
+      }
+      return false;
+    };
+
+    // --- En-tete ---
+    try {
+      const logoImg = new Image();
+      logoImg.crossOrigin = 'anonymous';
+      await new Promise((resolve, reject) => {
+        logoImg.onload = resolve;
+        logoImg.onerror = reject;
+        logoImg.src = '/logo-iris.png';
+      });
+      doc.addImage(logoImg, 'PNG', margin, y, 20, 20);
+    } catch {
+      doc.setFontSize(10);
+      doc.setTextColor(100);
+      doc.text('FSAO Iris', margin, y + 12);
+    }
+    doc.setFontSize(16);
+    doc.setTextColor(30);
+    doc.setFont(undefined, 'bold');
+    doc.text(`OT-${workOrder.numero || '---'}`, margin + 24, y + 8);
+    doc.setFontSize(9);
+    doc.setFont(undefined, 'normal');
+    doc.setTextColor(120);
+    const statusMap = { OUVERT: 'Ouvert', EN_COURS: 'En cours', EN_ATTENTE: 'En attente', TERMINE: 'Termine' };
+    const prioMap = { HAUTE: 'Haute', MOYENNE: 'Moyenne', BASSE: 'Basse', AUCUNE: 'Normale' };
+    doc.text(`Statut: ${statusMap[workOrder.statut] || workOrder.statut}  |  Priorite: ${prioMap[workOrder.priorite] || workOrder.priorite}`, margin + 24, y + 14);
+    // Ligne horizontale
+    y += 22;
+    doc.setDrawColor(200);
+    doc.line(margin, y, pageW - margin, y);
+    y += 5;
+
+    // --- Titre ---
+    doc.setFontSize(13);
+    doc.setTextColor(30);
+    doc.setFont(undefined, 'bold');
+    const titleLines = doc.splitTextToSize(workOrder.titre || 'Sans titre', contentW);
+    doc.text(titleLines, margin, y);
+    y += titleLines.length * 5.5 + 2;
+
+    // --- Description ---
+    if (workOrder.description) {
+      doc.setFontSize(9);
+      doc.setFont(undefined, 'normal');
+      doc.setTextColor(80);
+      const descLines = doc.splitTextToSize(workOrder.description, contentW);
+      const descToPrint = descLines.slice(0, 8);
+      doc.text(descToPrint, margin, y);
+      y += descToPrint.length * 4 + 3;
+    }
+
+    // --- Infos en grille ---
+    doc.setFontSize(8.5);
+    doc.setTextColor(100);
+    doc.setFont(undefined, 'normal');
+    const fmtDate = (d) => { try { return new Date(d).toLocaleDateString('fr-FR'); } catch { return d || '-'; } };
+    const infos = [
+      ['Cree le', fmtDate(workOrder.dateCreation) + (workOrder.createdByName ? ` par ${workOrder.createdByName}` : '')],
+      ['Date limite', fmtDate(workOrder.dateLimite)],
+      ['Temps estime', workOrder.tempsEstime ? `${workOrder.tempsEstime}h` : '-'],
+      ['Emplacement', workOrder.emplacement?.nom || '-'],
+      ['Equipement', workOrder.equipement?.nom || '-'],
+    ];
+    const colW = contentW / 2;
+    infos.forEach((info, i) => {
+      const col = i % 2;
+      if (col === 0 && i > 0) y += 8;
+      addNewPageIfNeeded(8);
+      const xPos = margin + col * colW;
+      doc.setFont(undefined, 'bold');
+      doc.setTextColor(60);
+      doc.text(info[0] + ' :', xPos, y);
+      doc.setFont(undefined, 'normal');
+      doc.setTextColor(30);
+      const valLines = doc.splitTextToSize(info[1], colW - 25);
+      doc.text(valLines[0] || '-', xPos + 25, y);
+    });
+    y += 10;
+
+    // --- Ligne separatrice ---
+    doc.setDrawColor(220);
+    doc.line(margin, y, pageW - margin, y);
+    y += 5;
+
+    // --- Rapport detaille (commentaires) ---
+    if (comments.length > 0) {
+      addNewPageIfNeeded(12);
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'bold');
+      doc.setTextColor(30);
+      doc.text('Rapport Detaille', margin, y);
+      y += 6;
+
+      doc.setFontSize(8);
+      comments.forEach((c) => {
+        addNewPageIfNeeded(14);
+        doc.setFont(undefined, 'bold');
+        doc.setTextColor(60);
+        const header = `${c.user_name || 'Inconnu'} - ${fmtDate(c.timestamp)}`;
+        doc.text(header, margin + 2, y);
+        y += 4;
+        doc.setFont(undefined, 'normal');
+        doc.setTextColor(40);
+        const cLines = doc.splitTextToSize(c.text || '', contentW - 4);
+        const cToPrint = cLines.slice(0, 5);
+        doc.text(cToPrint, margin + 2, y);
+        y += cToPrint.length * 3.5 + 3;
+      });
+      y += 2;
+    }
+
+    // --- Pieces jointes (liste) ---
+    let attachments = [];
+    try {
+      const res = await workOrdersAPI.getAttachments(workOrder.id);
+      attachments = res.data || [];
+    } catch { /* ignore */ }
+
+    if (attachments.length > 0) {
+      addNewPageIfNeeded(10);
+      doc.setDrawColor(220);
+      doc.line(margin, y, pageW - margin, y);
+      y += 5;
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'bold');
+      doc.setTextColor(30);
+      doc.text('Pieces jointes', margin, y);
+      y += 5;
+      doc.setFontSize(7.5);
+      doc.setFont(undefined, 'normal');
+      doc.setTextColor(80);
+      attachments.forEach((att) => {
+        addNewPageIfNeeded(5);
+        doc.text(`- ${att.filename || att.name || 'Fichier'}`, margin + 2, y);
+        y += 3.5;
+      });
+      y += 3;
+    }
+
+    // --- Photos (remplissent le reste de la page, debordent si besoin) ---
+    const imageAttachments = attachments.filter(a =>
+      (a.mime_type || a.content_type || '').startsWith('image/')
+    );
+    if (imageAttachments.length > 0) {
+      addNewPageIfNeeded(10);
+      doc.setDrawColor(220);
+      doc.line(margin, y, pageW - margin, y);
+      y += 5;
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'bold');
+      doc.setTextColor(30);
+      doc.text('Photos', margin, y);
+      y += 6;
+
+      // Calculer la disposition des photos
+      const remainingH = pageH - margin - y;
+      const cols = imageAttachments.length === 1 ? 1 : 2;
+      const imgGap = 4;
+      const imgW = cols === 1 ? contentW * 0.7 : (contentW - imgGap) / 2;
+
+      for (let i = 0; i < imageAttachments.length; i++) {
+        try {
+          const att = imageAttachments[i];
+          const imgResponse = await workOrdersAPI.downloadAttachment(workOrder.id, att.id);
+          const blob = new Blob([imgResponse.data], { type: att.mime_type || 'image/jpeg' });
+          const imgUrl = URL.createObjectURL(blob);
+
+          const img = new Image();
+          await new Promise((resolve, reject) => {
+            img.onload = resolve;
+            img.onerror = reject;
+            img.src = imgUrl;
+          });
+
+          const ratio = img.naturalHeight / img.naturalWidth;
+          const drawW = imgW;
+          let drawH = drawW * ratio;
+          // Limiter la hauteur max a la moitie de la page
+          const maxH = (pageH - margin * 2) * 0.45;
+          if (drawH > maxH) {
+            drawH = maxH;
+          }
+
+          addNewPageIfNeeded(drawH + 4);
+
+          const col = cols === 1 ? 0 : (i % 2);
+          if (cols === 2 && col === 0 && i > 0) {
+            // Pas de y bump, on est sur la meme ligne
+          }
+          const xPos = cols === 1
+            ? margin + (contentW - drawW) / 2
+            : margin + col * (imgW + imgGap);
+
+          doc.addImage(img, 'JPEG', xPos, y, drawW, drawH);
+
+          if (cols === 1 || col === 1) {
+            y += drawH + imgGap;
+          }
+
+          URL.revokeObjectURL(imgUrl);
+        } catch (e) {
+          console.error('Erreur chargement image PDF:', e);
+        }
+      }
+    }
+
+    // --- Pied de page ---
+    const totalPages = doc.internal.getNumberOfPages();
+    for (let p = 1; p <= totalPages; p++) {
+      doc.setPage(p);
+      doc.setFontSize(7);
+      doc.setTextColor(160);
+      doc.text(`FSAO Iris - OT-${workOrder.numero || '---'} - Page ${p}/${totalPages}`, pageW / 2, pageH - 8, { align: 'center' });
+    }
+
+    return doc;
+  }, [workOrder, comments]);
+
+  const handleExportPDF = async () => {
+    setGeneratingPDF(true);
+    try {
+      const doc = await buildPdfDocument();
+      doc.save(`OT-${workOrder.numero || 'export'}.pdf`);
+      toast({ title: 'PDF exporte', description: `OT-${workOrder.numero || ''}.pdf telecharge` });
+    } catch (e) {
+      console.error('Erreur export PDF:', e);
+      toast({ title: 'Erreur', description: 'Impossible de generer le PDF', variant: 'destructive' });
+    } finally {
+      setGeneratingPDF(false);
+    }
+  };
+
+  const handlePrint = async () => {
+    setGeneratingPDF(true);
+    try {
+      const doc = await buildPdfDocument(true);
+      const pdfBlob = doc.output('blob');
+      const url = URL.createObjectURL(pdfBlob);
+      const printWindow = window.open(url, '_blank');
+      if (printWindow) {
+        printWindow.addEventListener('load', () => {
+          setTimeout(() => {
+            printWindow.print();
+          }, 500);
+        });
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (e) {
+      console.error('Erreur impression:', e);
+      toast({ title: 'Erreur', description: 'Impossible de lancer l\'impression', variant: 'destructive' });
+    } finally {
+      setGeneratingPDF(false);
+    }
+  };
 
   // Fonction pour parser le temps saisi dans différents formats
   const parseTimeInput = (input) => {
@@ -595,7 +869,29 @@ const WorkOrderDialog = ({ open, onOpenChange, workOrder, onSuccess }) => {
         <DialogHeader>
           <div className="flex items-center justify-between">
             <DialogTitle className="text-2xl">{workOrder.titre}</DialogTitle>
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExportPDF}
+                disabled={generatingPDF}
+                data-testid="wo-export-pdf-btn"
+                className="h-8 text-xs gap-1.5"
+              >
+                <Download size={14} />
+                Export PDF
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handlePrint}
+                disabled={generatingPDF}
+                data-testid="wo-print-btn"
+                className="h-8 w-8 p-0"
+                title="Imprimer"
+              >
+                <Printer size={16} />
+              </Button>
               {getStatusBadge(workOrder.statut)}
               {getPriorityBadge(workOrder.priorite)}
             </div>
