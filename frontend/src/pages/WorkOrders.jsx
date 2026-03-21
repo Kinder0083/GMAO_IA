@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import { Plus, Search, Filter, Eye, Pencil, Trash2, Calendar, ArrowUpDown, Paperclip, BookOpen, FileText } from 'lucide-react';
+import { Plus, Search, Filter, Eye, Pencil, Trash2, Calendar, ArrowUpDown, Paperclip, BookOpen, FileText, Printer, Download, CheckSquare, Square, X as XIcon } from 'lucide-react';
 import WorkOrderDialog from '../components/WorkOrders/WorkOrderDialog';
 import WorkOrderFormDialog from '../components/WorkOrders/WorkOrderFormDialog';
 import DeleteConfirmDialog from '../components/Common/DeleteConfirmDialog';
@@ -14,7 +14,7 @@ import TemplateSelectionDialog from '../components/WorkOrders/TemplateSelectionD
 import { LOTOBadge } from '../components/Common/LOTOBadge';
 import { useLotoByLinked } from '../hooks/useLotoRealtime';
 
-import { workOrdersAPI, checklistsAPI, workOrderTemplatesAPI } from '../services/api';
+import { workOrdersAPI, checklistsAPI, workOrderTemplatesAPI, commentsAPI } from '../services/api';
 import api from '../services/api';
 import { useToast } from '../hooks/use-toast';
 import { useWorkOrders } from '../hooks/useWorkOrders';
@@ -23,6 +23,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../com
 import AvatarInitials from '../components/ui/avatar-initials';
 import { formatTimeToHoursMinutes } from '../utils/timeFormat';
 import { formatErrorMessage } from '../utils/errorFormatter';
+import jsPDF from 'jspdf';
 
 const WorkOrders = () => {
   const navigate = useNavigate();
@@ -50,6 +51,12 @@ const WorkOrders = () => {
   const [hasTemplateAccess, setHasTemplateAccess] = useState(false);
   const [templateFormData, setTemplateFormData] = useState(null);
   const lotoByLinked = useLotoByLinked();
+  
+  // Mode sélection pour export PDF / impression groupée
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectionAction, setSelectionAction] = useState(null); // 'pdf' ou 'print'
+  const [selectedWOIds, setSelectedWOIds] = useState(new Set());
+  const [generatingPDF, setGeneratingPDF] = useState(false);
   
   // Filtres de date
   const [dateFilter, setDateFilter] = useState('today'); // today, week, month, custom
@@ -343,6 +350,283 @@ const WorkOrders = () => {
     { value: 'TERMINE', label: 'Terminé' }
   ];
 
+  // ==================== MODE SELECTION & EXPORT PDF GROUPE ====================
+  const startSelectionMode = (action) => {
+    setSelectionMode(true);
+    setSelectionAction(action);
+    setSelectedWOIds(new Set());
+  };
+
+  const cancelSelectionMode = () => {
+    setSelectionMode(false);
+    setSelectionAction(null);
+    setSelectedWOIds(new Set());
+  };
+
+  const toggleWOSelection = (woId) => {
+    setSelectedWOIds(prev => {
+      const next = new Set(prev);
+      if (next.has(woId)) next.delete(woId);
+      else next.add(woId);
+      return next;
+    });
+  };
+
+  const selectAll = () => {
+    setSelectedWOIds(new Set(filteredWorkOrders.map(wo => wo.id)));
+  };
+
+  const deselectAll = () => {
+    setSelectedWOIds(new Set());
+  };
+
+  const buildSingleWoPdf = async (doc, wo, isFirst) => {
+    if (!isFirst) doc.addPage();
+    const pageW = 210;
+    const pageH = 297;
+    const margin = 15;
+    const contentW = pageW - margin * 2;
+    let y = margin;
+
+    const addNewPageIfNeeded = (needed) => {
+      if (y + needed > pageH - margin) {
+        doc.addPage();
+        y = margin;
+      }
+    };
+
+    // En-tete
+    try {
+      const logoImg = new Image();
+      logoImg.crossOrigin = 'anonymous';
+      await new Promise((resolve, reject) => {
+        logoImg.onload = resolve;
+        logoImg.onerror = reject;
+        logoImg.src = '/logo-iris.png';
+      });
+      doc.addImage(logoImg, 'PNG', margin, y, 20, 20);
+    } catch {
+      doc.setFontSize(10);
+      doc.setTextColor(100);
+      doc.text('FSAO Iris', margin, y + 12);
+    }
+    doc.setFontSize(16);
+    doc.setTextColor(30);
+    doc.setFont(undefined, 'bold');
+    doc.text(`OT-${wo.numero || '---'}`, margin + 24, y + 8);
+    doc.setFontSize(9);
+    doc.setFont(undefined, 'normal');
+    doc.setTextColor(120);
+    const statusMap = { OUVERT: 'Ouvert', EN_COURS: 'En cours', EN_ATTENTE: 'En attente', TERMINE: 'Termine' };
+    const prioMap = { HAUTE: 'Haute', MOYENNE: 'Moyenne', BASSE: 'Basse', AUCUNE: 'Normale' };
+    doc.text(`Statut: ${statusMap[wo.statut] || wo.statut}  |  Priorite: ${prioMap[wo.priorite] || wo.priorite}`, margin + 24, y + 14);
+    y += 22;
+    doc.setDrawColor(200);
+    doc.line(margin, y, pageW - margin, y);
+    y += 5;
+
+    // Titre
+    doc.setFontSize(13);
+    doc.setTextColor(30);
+    doc.setFont(undefined, 'bold');
+    const titleLines = doc.splitTextToSize(wo.titre || 'Sans titre', contentW);
+    doc.text(titleLines, margin, y);
+    y += titleLines.length * 5.5 + 2;
+
+    // Description
+    if (wo.description) {
+      doc.setFontSize(9);
+      doc.setFont(undefined, 'normal');
+      doc.setTextColor(80);
+      const descLines = doc.splitTextToSize(wo.description, contentW).slice(0, 8);
+      doc.text(descLines, margin, y);
+      y += descLines.length * 4 + 3;
+    }
+
+    // Infos grille
+    doc.setFontSize(8.5);
+    doc.setTextColor(100);
+    const fmtDate = (d) => { try { return new Date(d).toLocaleDateString('fr-FR'); } catch { return d || '-'; } };
+    const infos = [
+      ['Cree le', fmtDate(wo.dateCreation) + (wo.createdByName ? ` par ${wo.createdByName}` : '')],
+      ['Date limite', fmtDate(wo.dateLimite)],
+      ['Temps estime', wo.tempsEstime ? `${wo.tempsEstime}h` : '-'],
+      ['Emplacement', wo.emplacement?.nom || '-'],
+      ['Equipement', wo.equipement?.nom || '-'],
+    ];
+    const colW = contentW / 2;
+    infos.forEach((info, i) => {
+      const col = i % 2;
+      if (col === 0 && i > 0) y += 8;
+      addNewPageIfNeeded(8);
+      const xPos = margin + col * colW;
+      doc.setFont(undefined, 'bold');
+      doc.setTextColor(60);
+      doc.text(info[0] + ' :', xPos, y);
+      doc.setFont(undefined, 'normal');
+      doc.setTextColor(30);
+      const val = doc.splitTextToSize(info[1], colW - 25);
+      doc.text(val[0] || '-', xPos + 25, y);
+    });
+    y += 10;
+    doc.setDrawColor(220);
+    doc.line(margin, y, pageW - margin, y);
+    y += 5;
+
+    // Commentaires
+    let comments = [];
+    try {
+      const res = await commentsAPI.getByWorkOrder(wo.id);
+      comments = res.data || [];
+    } catch { /* ignore */ }
+
+    if (comments.length > 0) {
+      addNewPageIfNeeded(12);
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'bold');
+      doc.setTextColor(30);
+      doc.text('Rapport Detaille', margin, y);
+      y += 6;
+      doc.setFontSize(8);
+      comments.forEach((c) => {
+        addNewPageIfNeeded(14);
+        doc.setFont(undefined, 'bold');
+        doc.setTextColor(60);
+        doc.text(`${c.user_name || 'Inconnu'} - ${fmtDate(c.timestamp)}`, margin + 2, y);
+        y += 4;
+        doc.setFont(undefined, 'normal');
+        doc.setTextColor(40);
+        const cLines = doc.splitTextToSize(c.text || '', contentW - 4).slice(0, 5);
+        doc.text(cLines, margin + 2, y);
+        y += cLines.length * 3.5 + 3;
+      });
+      y += 2;
+    }
+
+    // Pieces jointes
+    let attachments = [];
+    try {
+      const res = await workOrdersAPI.getAttachments(wo.id);
+      attachments = res.data || [];
+    } catch { /* ignore */ }
+
+    if (attachments.length > 0) {
+      addNewPageIfNeeded(10);
+      doc.setDrawColor(220);
+      doc.line(margin, y, pageW - margin, y);
+      y += 5;
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'bold');
+      doc.setTextColor(30);
+      doc.text('Pieces jointes', margin, y);
+      y += 5;
+      doc.setFontSize(7.5);
+      doc.setFont(undefined, 'normal');
+      doc.setTextColor(80);
+      attachments.forEach((att) => {
+        addNewPageIfNeeded(5);
+        doc.text(`- ${att.filename || att.name || 'Fichier'}`, margin + 2, y);
+        y += 3.5;
+      });
+      y += 3;
+    }
+
+    // Photos
+    const imageAttachments = attachments.filter(a =>
+      (a.mime_type || a.content_type || '').startsWith('image/')
+    );
+    if (imageAttachments.length > 0) {
+      addNewPageIfNeeded(10);
+      doc.setDrawColor(220);
+      doc.line(margin, y, pageW - margin, y);
+      y += 5;
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'bold');
+      doc.setTextColor(30);
+      doc.text('Photos', margin, y);
+      y += 6;
+
+      const cols = imageAttachments.length === 1 ? 1 : 2;
+      const imgGap = 4;
+      const imgW = cols === 1 ? contentW * 0.7 : (contentW - imgGap) / 2;
+
+      for (let idx = 0; idx < imageAttachments.length; idx++) {
+        try {
+          const att = imageAttachments[idx];
+          const imgResponse = await workOrdersAPI.downloadAttachment(wo.id, att.id);
+          const blob = new Blob([imgResponse.data], { type: att.mime_type || 'image/jpeg' });
+          const imgUrl = URL.createObjectURL(blob);
+          const img = new Image();
+          await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; img.src = imgUrl; });
+          const ratio = img.naturalHeight / img.naturalWidth;
+          const drawW = imgW;
+          let drawH = Math.min(drawW * ratio, (pageH - margin * 2) * 0.45);
+          addNewPageIfNeeded(drawH + 4);
+          const col = cols === 1 ? 0 : (idx % 2);
+          const xPos = cols === 1 ? margin + (contentW - drawW) / 2 : margin + col * (imgW + imgGap);
+          doc.addImage(img, 'JPEG', xPos, y, drawW, drawH);
+          if (cols === 1 || col === 1) y += drawH + imgGap;
+          URL.revokeObjectURL(imgUrl);
+        } catch { /* skip */ }
+      }
+    }
+  };
+
+  const handleBulkValidate = async () => {
+    if (selectedWOIds.size === 0) {
+      toast({ title: 'Aucun OT selectionne', description: 'Veuillez selectionner au moins un ordre de travail.', variant: 'destructive' });
+      return;
+    }
+    setGeneratingPDF(true);
+    try {
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const selectedWOs = filteredWorkOrders.filter(wo => selectedWOIds.has(wo.id));
+      
+      const detailedWOs = [];
+      for (const wo of selectedWOs) {
+        try {
+          const res = await workOrdersAPI.getById(wo.id);
+          detailedWOs.push(res.data || wo);
+        } catch {
+          detailedWOs.push(wo);
+        }
+      }
+
+      for (let i = 0; i < detailedWOs.length; i++) {
+        await buildSingleWoPdf(doc, detailedWOs[i], i === 0);
+      }
+
+      const totalPages = doc.internal.getNumberOfPages();
+      for (let p = 1; p <= totalPages; p++) {
+        doc.setPage(p);
+        doc.setFontSize(7);
+        doc.setTextColor(160);
+        doc.text(`FSAO Iris - Export ${detailedWOs.length} OT - Page ${p}/${totalPages}`, 105, 289, { align: 'center' });
+      }
+
+      if (selectionAction === 'pdf') {
+        doc.save(`OT-export-${detailedWOs.length}.pdf`);
+        toast({ title: 'PDF exporte', description: `${detailedWOs.length} OT exporte(s) dans un seul fichier PDF` });
+      } else {
+        const pdfBlob = doc.output('blob');
+        const url = URL.createObjectURL(pdfBlob);
+        const printWindow = window.open(url, '_blank');
+        if (printWindow) {
+          printWindow.addEventListener('load', () => {
+            setTimeout(() => printWindow.print(), 500);
+          });
+        }
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+      }
+      cancelSelectionMode();
+    } catch (e) {
+      console.error('Erreur export PDF groupe:', e);
+      toast({ title: 'Erreur', description: 'Impossible de generer le PDF', variant: 'destructive' });
+    } finally {
+      setGeneratingPDF(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -353,6 +637,41 @@ const WorkOrders = () => {
           <p className="text-gray-600 mt-1">Gérez vos interventions et maintenances</p>
         </div>
         <div className="flex gap-3">
+          {/* Boutons Export PDF / Impression */}
+          {!selectionMode && (
+            <>
+              <Button
+                variant="outline"
+                className="border-emerald-600 text-emerald-600 hover:bg-emerald-50"
+                onClick={() => startSelectionMode('pdf')}
+                data-testid="wo-bulk-export-pdf-btn"
+              >
+                <Download size={18} className="mr-2" />
+                Export PDF
+              </Button>
+              <Button
+                variant="outline"
+                className="border-gray-500 text-gray-600 hover:bg-gray-50 px-3"
+                onClick={() => startSelectionMode('print')}
+                data-testid="wo-bulk-print-btn"
+                title="Imprimer"
+              >
+                <Printer size={18} />
+              </Button>
+            </>
+          )}
+          {selectionMode && (
+            <Button
+              variant="outline"
+              className="border-red-400 text-red-500 hover:bg-red-50"
+              onClick={cancelSelectionMode}
+              data-testid="wo-cancel-selection-btn"
+            >
+              <XIcon size={18} className="mr-2" />
+              Annuler
+            </Button>
+          )}
+
           {/* Bouton Ordres Type (visible pour admins et responsables de service) */}
           {hasTemplateAccess && (
             <Button 
@@ -539,6 +858,9 @@ const WorkOrders = () => {
               <table className="w-full">
                 <thead>
                   <tr className="border-b">
+                    {selectionMode && (
+                      <th className="py-3 px-2 w-10"></th>
+                    )}
                     <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">ID</th>
                     <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Statut</th>
                     <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Titre</th>
@@ -569,6 +891,21 @@ const WorkOrders = () => {
                       data-ai-status={wo.statut}
                       data-ai-extra={JSON.stringify({ numero: wo.numero, priorite: wo.priorite, categorie: wo.categorie })}
                     >
+                      {selectionMode && (
+                        <td className="py-3 px-2" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            onClick={() => toggleWOSelection(wo.id)}
+                            className="flex items-center justify-center w-6 h-6 rounded border hover:bg-gray-100 transition-colors"
+                            data-testid={`wo-select-${wo.id}`}
+                          >
+                            {selectedWOIds.has(wo.id) ? (
+                              <CheckSquare size={18} className="text-blue-600" />
+                            ) : (
+                              <Square size={18} className="text-gray-400" />
+                            )}
+                          </button>
+                        </td>
+                      )}
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-2">
                           <span className="text-sm text-gray-900 font-medium">#{wo.numero}</span>
@@ -736,6 +1073,66 @@ const WorkOrders = () => {
           )}
         </CardContent>
       </Card>
+
+      {/* ──── Barre flottante mode selection ──── */}
+      {selectionMode && (
+        <div
+          className="fixed bottom-8 left-0 right-0 z-50 bg-white border-t-2 border-blue-500 shadow-lg px-6 py-3 flex items-center justify-between"
+          data-testid="wo-selection-bar"
+        >
+          <div className="flex items-center gap-4">
+            <span className="text-sm font-medium text-gray-700">
+              {selectedWOIds.size} OT selectionne{selectedWOIds.size > 1 ? 's' : ''}
+            </span>
+            <div className="h-5 w-px bg-gray-300" />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={selectAll}
+              data-testid="wo-select-all-btn"
+              className="text-xs h-7"
+            >
+              <CheckSquare size={14} className="mr-1.5" />
+              Tout selectionner
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={deselectAll}
+              data-testid="wo-deselect-all-btn"
+              className="text-xs h-7"
+            >
+              <Square size={14} className="mr-1.5" />
+              Tout deselectionner
+            </Button>
+          </div>
+          <div className="flex items-center gap-3">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={cancelSelectionMode}
+              className="text-gray-500"
+            >
+              Annuler
+            </Button>
+            <Button
+              onClick={handleBulkValidate}
+              disabled={selectedWOIds.size === 0 || generatingPDF}
+              data-testid="wo-bulk-validate-btn"
+              className="bg-blue-600 hover:bg-blue-700 text-white gap-2"
+            >
+              {generatingPDF ? (
+                <>Generation en cours...</>
+              ) : (
+                <>
+                  {selectionAction === 'pdf' ? <Download size={16} /> : <Printer size={16} />}
+                  Valider ({selectedWOIds.size})
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+      )}
 
       <WorkOrderDialog
         open={dialogOpen}
