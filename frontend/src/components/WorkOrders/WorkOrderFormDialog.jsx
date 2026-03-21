@@ -13,9 +13,10 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Textarea } from '../ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Paperclip, Camera, X, Eye, Upload } from 'lucide-react';
+import { Paperclip, Camera, X, Eye, Upload, RefreshCw } from 'lucide-react';
 import { useToast } from '../../hooks/use-toast';
 import { workOrdersAPI, equipmentsAPI, locationsAPI, usersAPI, workOrderTemplatesAPI } from '../../services/api';
+import api from '../../services/api';
 import AssigneeSelector from '../AssigneeSelector';
 import StatusChangeDialog from './StatusChangeDialog';
 import { validateDateNotPast } from '../../utils/dateValidation';
@@ -35,6 +36,7 @@ const WorkOrderFormDialog = ({ open, onOpenChange, workOrder, prefillData, onSuc
     priorite: 'AUCUNE',
     categorie: '',
     equipement_id: '',
+    sous_equipement_id: '',
     assigne_a_id: '',
     emplacement_id: '',
     dateLimite: '',
@@ -51,6 +53,8 @@ const WorkOrderFormDialog = ({ open, onOpenChange, workOrder, prefillData, onSuc
   const [isClosing, setIsClosing] = useState(false);
   const [savedWorkOrderId, setSavedWorkOrderId] = useState(null);
   const [savedWorkOrderStatus, setSavedWorkOrderStatus] = useState(null);
+  const [childEquipments, setChildEquipments] = useState([]);
+  const [loadingChildren, setLoadingChildren] = useState(false);
   // Utiliser une ref au lieu d'un state pour une mise à jour synchrone
   const submitSuccessfulRef = useRef(false);
 
@@ -64,13 +68,25 @@ const WorkOrderFormDialog = ({ open, onOpenChange, workOrder, prefillData, onSuc
       submitSuccessfulRef.current = false; // Reset le flag à l'ouverture
       if (workOrder) {
         // Mode édition d'un OT existant
+        // Déterminer si l'équipement est un parent ou un enfant
+        const eqId = workOrder.equipement?.id || '';
+        let parentId = eqId;
+        let sousEqId = '';
+
+        // Si l'équipement a un parent_id, c'est un sous-équipement
+        if (workOrder.equipement?.parent_id) {
+          parentId = workOrder.equipement.parent_id;
+          sousEqId = eqId;
+        }
+
         setFormData({
           titre: workOrder.titre || '',
           description: workOrder.description || '',
           statut: workOrder.statut || 'OUVERT',
           priorite: workOrder.priorite || 'AUCUNE',
           categorie: workOrder.categorie || '',
-          equipement_id: workOrder.equipement?.id || '',
+          equipement_id: parentId,
+          sous_equipement_id: sousEqId,
           assigne_a_id: workOrder.assigneA?.id || workOrder.assigne_a_id || '',
           assigne_type: workOrder.assigne_type || null,
           assigne_service: workOrder.assigne_service || null,
@@ -140,6 +156,7 @@ const WorkOrderFormDialog = ({ open, onOpenChange, workOrder, prefillData, onSuc
           priorite: prefillData.priorite || 'AUCUNE',
           categorie: prefillData.categorie || '',
           equipement_id: prefillData.equipement_id || '',
+          sous_equipement_id: '',
           assigne_a_id: '',
           emplacement_id: '', // Sera auto-rempli par le useEffect si équipement présent
           dateLimite: today,
@@ -159,6 +176,7 @@ const WorkOrderFormDialog = ({ open, onOpenChange, workOrder, prefillData, onSuc
           priorite: 'AUCUNE',
           categorie: '',
           equipement_id: '',
+          sous_equipement_id: '',
           assigne_a_id: '',
           emplacement_id: '',
           dateLimite: today,
@@ -181,26 +199,44 @@ const WorkOrderFormDialog = ({ open, onOpenChange, workOrder, prefillData, onSuc
     return () => { cancelled = true; };
   }, [open, workOrder, prefillData]);
 
-  // Auto-remplir l'emplacement quand un équipement est sélectionné
+  // Auto-remplir l'emplacement et charger les sous-équipements
   useEffect(() => {
     if (formData.equipement_id && equipments.length > 0) {
-      const selectedEquipment = equipments.find(eq => eq.id === formData.equipement_id);
-      if (selectedEquipment && selectedEquipment.emplacement_id) {
-        // Ne mettre à jour que si l'emplacement est différent (évite les boucles)
-        if (formData.emplacement_id !== selectedEquipment.emplacement_id) {
-          setFormData(prev => ({
-            ...prev,
-            emplacement_id: selectedEquipment.emplacement_id
-          }));
+      const parentEq = equipments.find(eq => eq.id === formData.equipement_id);
+      if (parentEq) {
+        if (parentEq.emplacement_id && formData.emplacement_id !== parentEq.emplacement_id) {
+          setFormData(prev => ({ ...prev, emplacement_id: parentEq.emplacement_id }));
+        }
+        if (parentEq.hasChildren) {
+          loadChildren(parentEq.id);
+        } else {
+          setChildEquipments([]);
         }
       }
+    } else if (!formData.equipement_id) {
+      setChildEquipments([]);
     }
   }, [formData.equipement_id, equipments]);
+
+  const loadChildren = async (parentId) => {
+    setLoadingChildren(true);
+    try {
+      const response = await equipmentsAPI.getChildren(parentId);
+      setChildEquipments(response.data || []);
+    } catch (error) {
+      console.error('Erreur chargement sous-equipements:', error);
+      setChildEquipments([]);
+    } finally {
+      setLoadingChildren(false);
+    }
+  };
+
+  const parentEquipments = equipments.filter(eq => !eq.parent_id && eq.nom);
 
   const loadData = async () => {
     try {
       const [equipRes, locRes, userRes] = await Promise.all([
-        equipmentsAPI.getAll(),
+        equipmentsAPI.getParents(),
         locationsAPI.getAll(),
         usersAPI.getAll()
       ]);
@@ -342,14 +378,16 @@ const WorkOrderFormDialog = ({ open, onOpenChange, workOrder, prefillData, onSuc
     setLoading(true);
 
     try {
+      const actualEquipementId = formData.sous_equipement_id || formData.equipement_id || null;
       const submitData = {
         ...formData,
         tempsEstime: formData.tempsEstime ? parseFloat(formData.tempsEstime) : null,
         dateLimite: formData.dateLimite ? new Date(formData.dateLimite).toISOString() : null,
-        equipement_id: formData.equipement_id || null,
+        equipement_id: actualEquipementId,
         assigne_a_id: formData.assigne_a_id || null,
         emplacement_id: formData.emplacement_id || null
       };
+      delete submitData.sous_equipement_id;
 
       if (workOrder) {
         await workOrdersAPI.update(workOrder.id, submitData);
@@ -524,18 +562,49 @@ const WorkOrderFormDialog = ({ open, onOpenChange, workOrder, prefillData, onSuc
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="equipement_id">Équipement</Label>
-            <Select value={formData.equipement_id} onValueChange={(value) => setFormData({ ...formData, equipement_id: value })}>
-              <SelectTrigger>
-                <SelectValue placeholder="Sélectionner un équipement" />
+            <Label htmlFor="equipement_id">Equipement</Label>
+            <Select
+              value={formData.equipement_id || "none"}
+              onValueChange={(value) => setFormData({ ...formData, equipement_id: value === "none" ? "" : value, sous_equipement_id: '' })}
+            >
+              <SelectTrigger data-testid="wo-equipement-select">
+                <SelectValue placeholder="Selectionner un equipement" />
               </SelectTrigger>
               <SelectContent>
-                {equipments.map(eq => (
+                <SelectItem value="none">Aucun</SelectItem>
+                {parentEquipments.map(eq => (
                   <SelectItem key={eq.id} value={eq.id}>{eq.nom}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
+
+          {formData.equipement_id && childEquipments.length > 0 && (
+            <div className="space-y-2">
+              <Label htmlFor="sous_equipement">Sous-equipement</Label>
+              <Select
+                value={formData.sous_equipement_id || "none"}
+                onValueChange={(value) => setFormData({ ...formData, sous_equipement_id: value === "none" ? "" : value })}
+              >
+                <SelectTrigger data-testid="wo-sous-equipement-select">
+                  <SelectValue placeholder="Selectionner un sous-equipement" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Aucun</SelectItem>
+                  {childEquipments.map(eq => (
+                    <SelectItem key={eq.id} value={eq.id}>{eq.nom}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          {loadingChildren && (
+            <div className="flex items-center gap-2 text-sm text-gray-500">
+              <RefreshCw className="h-4 w-4 animate-spin" />
+              Chargement des sous-equipements...
+            </div>
+          )}
 
           <div className="space-y-2">
             <AssigneeSelector

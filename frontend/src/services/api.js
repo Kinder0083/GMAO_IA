@@ -250,6 +250,7 @@ export const workOrdersAPI = {
 // ==================== EQUIPMENTS ====================
 export const equipmentsAPI = {
   getAll: () => api.get('/equipments'),
+  getParents: () => api.get('/equipments?parents_only=true'),
   getById: (id) => api.get(`/equipments/${id}`),
   create: (data) => api.post('/equipments', data),
   update: (id, data) => api.put(`/equipments/${id}`, data),

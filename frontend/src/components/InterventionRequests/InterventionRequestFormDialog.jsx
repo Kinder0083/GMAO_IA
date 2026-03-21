@@ -134,7 +134,7 @@ const InterventionRequestFormDialog = ({ open, onOpenChange, request, onSuccess 
   const loadData = async () => {
     try {
       const [eqRes, locRes] = await Promise.all([
-        equipmentsAPI.getAll(),
+        equipmentsAPI.getParents(),
         locationsAPI.getAll()
       ]);
       setEquipments(eqRes.data);
@@ -156,7 +156,7 @@ const InterventionRequestFormDialog = ({ open, onOpenChange, request, onSuccess 
     }
   };
 
-  const parentEquipments = equipments.filter(eq => !eq.parent_id);
+  const parentEquipments = equipments.filter(eq => !eq.parent_id && eq.nom);
 
   const handleFileSelect = (event) => {
     const files = Array.from(event.target.files || []);

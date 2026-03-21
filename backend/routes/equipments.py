@@ -38,7 +38,10 @@ router = APIRouter(tags=["Equipements"])
 
 @router.get("/equipments",
     summary="Lister les equipements", tags=["Equipements"])
-async def get_equipments(current_user: dict = Depends(get_current_user)):
+async def get_equipments(
+    current_user: dict = Depends(get_current_user),
+    parents_only: bool = False
+):
     """Liste tous les équipements visibles par l'utilisateur authentifie.
     
     Note : Pas de filtrage par service - seules les permissions du profil
@@ -47,7 +50,12 @@ async def get_equipments(current_user: dict = Depends(get_current_user)):
     """
     query = {"deleted_at": {"$exists": False}}
     
-    equipments = await db.equipments.find(query).sort("display_order", 1).to_list(1000)
+    if parents_only:
+        query["$or"] = [{"parent_id": None}, {"parent_id": {"$exists": False}}]
+        query["nom"] = {"$exists": True, "$nin": [None, ""]}
+    
+    limit = None if parents_only else 1000
+    equipments = await db.equipments.find(query).sort("display_order", 1).to_list(limit)
     
     result = []
     for eq in equipments:

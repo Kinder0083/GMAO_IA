@@ -129,9 +129,12 @@ async def get_equipment_by_id(equipment_id: str):
     try:
         equipment = await db.equipments.find_one({"_id": ObjectId(equipment_id)})
         if equipment:
-            return {
+            result = {
                 "id": str(equipment["_id"]),
                 "nom": equipment.get("nom")
             }
+            if equipment.get("parent_id"):
+                result["parent_id"] = str(equipment["parent_id"]) if not isinstance(equipment["parent_id"], str) else equipment["parent_id"]
+            return result
     except Exception:
         return None
