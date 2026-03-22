@@ -10,6 +10,8 @@ const FALLBACK_INTERVAL = 300000; // 5 min
 export const useBellCounts = () => {
   const [bellCounts, setBellCounts] = useState({
     work_orders: 0,
+    att_materiel: 0,
+    att_decision: 0,
     improvements: 0,
     preventive: 0
   });

@@ -475,24 +475,33 @@ async def get_bell_counts(current_user: dict = Depends(get_current_user)):
     """Compteurs pour les badges de la cloche du header."""
     now = datetime.utcnow()
 
-    # 1. Ordres de travail en attente (statut ATT_MATERIEL, ATT_DECISION ou ancien EN_ATTENTE)
-    wo_count = await db.work_orders.count_documents({
-        "statut": {"$in": ["ATT_MATERIEL", "ATT_DECISION", "EN_ATTENTE"]}
+    # 1. OT en attente matériel
+    wo_att_materiel = await db.work_orders.count_documents({
+        "statut": {"$in": ["ATT_MATERIEL", "EN_ATTENTE"]},
+        "deleted_at": {"$exists": False}
     })
 
-    # 2. Améliorations en attente (statut EN_ATTENTE uniquement)
+    # 2. OT en attente décision
+    wo_att_decision = await db.work_orders.count_documents({
+        "statut": "ATT_DECISION",
+        "deleted_at": {"$exists": False}
+    })
+
+    # 3. Améliorations en attente (statut EN_ATTENTE uniquement)
     imp_count = await db.improvements.count_documents({
         "statut": "EN_ATTENTE"
     })
 
-    # 3. Maintenances préventives planifiées mais pas encore réalisées (date dépassée)
+    # 4. Maintenances préventives planifiées mais pas encore réalisées (date dépassée)
     pm_count = await db.preventive_maintenances.count_documents({
         "statut": "ACTIF",
         "prochaineMaintenance": {"$lte": now}
     })
 
     return {
-        "work_orders": wo_count,
+        "work_orders": wo_att_materiel + wo_att_decision,
+        "att_materiel": wo_att_materiel,
+        "att_decision": wo_att_decision,
         "improvements": imp_count,
         "preventive": pm_count
     }

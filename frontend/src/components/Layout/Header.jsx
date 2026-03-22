@@ -302,10 +302,18 @@ const Header = ({
                   <h3 className="font-semibold text-gray-800">Notifications activite</h3>
                 </div>
                 <div className="py-2">
-                  <button onClick={() => { navigate('/work-orders', { state: { filterStatus: 'EN_ATTENTE' } }); setBellMenuOpen(false); }} className="w-full px-4 py-3 hover:bg-gray-50 transition-colors flex items-center justify-between group">
-                    <div className="flex items-center gap-3"><div className="w-2.5 h-2.5 bg-red-500 rounded-full"></div><span className="text-sm text-gray-700 group-hover:text-red-600 font-medium">OT en attente</span></div>
-                    <span className="text-sm font-semibold text-red-500">{bellCounts.work_orders}</span>
-                  </button>
+                  {bellCounts.att_materiel > 0 && (
+                    <button onClick={() => { navigate('/work-orders', { state: { filterStatus: 'ATT_MATERIEL' } }); setBellMenuOpen(false); }} className="w-full px-4 py-3 hover:bg-gray-50 transition-colors flex items-center justify-between group">
+                      <div className="flex items-center gap-3"><div className="w-2.5 h-2.5 bg-yellow-500 rounded-full"></div><span className="text-sm text-gray-700 group-hover:text-yellow-600 font-medium">OT Att Materiel</span></div>
+                      <span className="text-sm font-semibold text-yellow-600">{bellCounts.att_materiel}</span>
+                    </button>
+                  )}
+                  {bellCounts.att_decision > 0 && (
+                    <button onClick={() => { navigate('/work-orders', { state: { filterStatus: 'ATT_DECISION' } }); setBellMenuOpen(false); }} className="w-full px-4 py-3 hover:bg-gray-50 transition-colors flex items-center justify-between group">
+                      <div className="flex items-center gap-3"><div className="w-2.5 h-2.5 bg-orange-500 rounded-full"></div><span className="text-sm text-gray-700 group-hover:text-orange-600 font-medium">OT Att Decision</span></div>
+                      <span className="text-sm font-semibold text-orange-600">{bellCounts.att_decision}</span>
+                    </button>
+                  )}
                   <button onClick={() => { navigate('/improvements', { state: { filterStatus: 'EN_ATTENTE' } }); setBellMenuOpen(false); }} className="w-full px-4 py-3 hover:bg-gray-50 transition-colors flex items-center justify-between group">
                     <div className="flex items-center gap-3"><div className="w-2.5 h-2.5 bg-purple-500 rounded-full"></div><span className="text-sm text-gray-700 group-hover:text-purple-600 font-medium">Ameliorations en attente</span></div>
                     <span className="text-sm font-semibold text-purple-500">{bellCounts.improvements}</span>

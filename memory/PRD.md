@@ -34,19 +34,21 @@ Application GMAO (Gestion de Maintenance Assistée par Ordinateur) complète pou
 ### Session Actuelle (22 mars 2026)
 - **Fix: Statuts OT "Att Matériel" et "Att Décision"** - Complet et testé
   - Modèle `WorkOrder` response: ajout `att_materiel_info`, `att_decision_info`
-  - Route PUT: correction `is_status_only` pour autoriser les champs info avec le statut
-  - Tests: iteration_153.json - 100% backend et frontend
+  - Route PUT: correction `is_status_only`
+  - Tests: iteration_153.json - 100%
 
 - **Fix: Numéros OT en doublon** - Complet et testé
-  - Cause: `count_documents({})` non-atomique, sensible aux suppressions/restaurations
-  - Solution: Compteur atomique MongoDB (`counters.work_order_numero` + `findOneAndUpdate` + `$inc`)
-  - Corrigé dans 4 fichiers: `work_orders.py`, `intervention_requests.py`, `surveillance_routes.py`, `ai_maintenance_routes.py`
-  - Startup event initialise le compteur au max existant
-  - Vérifié: le compteur ne recule jamais après suppression
+  - Compteur atomique MongoDB (`counters.work_order_numero` + `findOneAndUpdate` + `$inc`)
+  - Corrigé dans 4 fichiers
+
+- **Fix: Notifications cloche (Header)** - Complet et testé
+  - Backend: `/api/bell-counts` retourne `att_materiel` et `att_decision` séparément
+  - Frontend: Header affiche "OT Att Materiel" et "OT Att Decision" (conditionnel si > 0)
+  - Navigation filtre vers le bon statut (`ATT_MATERIEL` ou `ATT_DECISION`)
 
 ## Schéma DB Clé
-- `work_orders`: `{_id, id, numero, statut, att_materiel_info, att_decision_info, titre, description, ...}`
-- `counters`: `{_id: "work_order_numero", seq: <dernier_numero>}` (compteur atomique)
+- `work_orders`: `{_id, id, numero, statut, att_materiel_info, att_decision_info, titre, ...}`
+- `counters`: `{_id: "work_order_numero", seq: <dernier_numero>}`
 - `equipments`: `{_id, id, nom, parent_id, ...}`
 
 ## Credentials de Test
