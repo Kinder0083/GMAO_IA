@@ -341,26 +341,9 @@ const Dashboard = () => {
     const savedItems = preferences?.dashboard_layout?.items;
     
     if (savedItems && savedItems.length > 0) {
-      // Garder les elements existants du layout qui sont encore actives
-      const reconciledItems = [...savedItems];
-      
-      // Ajouter les widgets actives qui ne sont pas dans le layout sauvegarde
-      const existingWidgetIds = savedItems
-        .filter(item => item.type === 'widget')
-        .map(item => item.widgetId);
-      
-      const missingWidgets = enabledWidgets.filter(wId => !existingWidgetIds.includes(wId));
-      missingWidgets.forEach((widgetId, i) => {
-        reconciledItems.push({
-          id: `widget-${widgetId}`,
-          type: 'widget',
-          widgetId: widgetId,
-          order: reconciledItems.length + i
-        });
-      });
-      
-      setLayoutItems(reconciledItems);
-      setOriginalLayout(reconciledItems);
+      // Respecter le layout sauvegardé tel quel
+      setLayoutItems(savedItems);
+      setOriginalLayout(savedItems);
     } else {
       // Layout par défaut : tous les widgets activés
       const defaultLayout = enabledWidgets.map((widgetId, index) => ({
@@ -427,20 +410,61 @@ const Dashboard = () => {
   }, [layoutItems, updatePreferences, toast]);
 
   const handleResetLayout = useCallback(() => {
-    const defaultLayout = enabledWidgets.map((widgetId, index) => ({
+    // Garder les raccourcis existants, remettre tous les widgets
+    const shortcuts = layoutItems.filter(i => i.type === 'shortcut');
+    const defaultWidgets = enabledWidgets.map((widgetId, index) => ({
       id: `widget-${widgetId}`,
       type: 'widget',
       widgetId: widgetId,
-      order: index
+      order: shortcuts.length + index
     }));
-    setLayoutItems(defaultLayout);
+    setLayoutItems([...shortcuts, ...defaultWidgets]);
     setHasChanges(true);
-  }, [enabledWidgets]);
+  }, [enabledWidgets, layoutItems]);
 
   const handleSaveShortcutEdit = useCallback((updatedShortcut) => {
     setLayoutItems(prev => prev.map(item =>
       item.id === updatedShortcut.id ? { ...item, ...updatedShortcut } : item
     ));
+    setHasChanges(true);
+  }, []);
+
+  // Labels des widgets pour le bouton "Ajouter un widget"
+  const WIDGET_LABELS = {
+    'work_orders_active': 'Ordres Actifs',
+    'equipment_maintenance': 'Equipements en maintenance',
+    'overdue_tasks': 'Taches en retard',
+    'maintenance_stats': 'Taux de completion',
+    'demandes_arret_pending': 'Demandes d\'arret',
+    'di_en_attente': 'DI en attente',
+    'di_temps_reponse': 'Temps reponse DI',
+    'ecart_temps': 'Ecart Temps Est./Reel',
+    'charge_maintenance': 'Charge OT restante',
+    'equipment_status_overview': 'Apercu statut equipements',
+    'global_summary': 'Resume global'
+  };
+
+  // Widgets présents dans le layout actuel
+  const presentWidgetIds = useMemo(() =>
+    layoutItems.filter(i => i.type === 'widget').map(i => i.widgetId),
+    [layoutItems]
+  );
+
+  // Widgets disponibles mais absents du layout
+  const missingWidgets = useMemo(() =>
+    enabledWidgets
+      .filter(wId => !presentWidgetIds.includes(wId))
+      .map(wId => ({ id: wId, label: WIDGET_LABELS[wId] || wId })),
+    [enabledWidgets, presentWidgetIds]
+  );
+
+  const handleAddWidget = useCallback((widgetId) => {
+    setLayoutItems(prev => [...prev, {
+      id: `widget-${widgetId}`,
+      type: 'widget',
+      widgetId,
+      order: prev.length
+    }]);
     setHasChanges(true);
   }, []);
 
@@ -992,10 +1016,12 @@ const Dashboard = () => {
         <DashboardEditToolbar
           onAddTitle={handleAddTitle}
           onAddSeparator={handleAddSeparator}
+          onAddWidget={handleAddWidget}
           onSave={handleSaveLayout}
           onCancel={exitEditMode}
           onReset={handleResetLayout}
           hasChanges={hasChanges}
+          missingWidgets={missingWidgets}
         />
       )}
 

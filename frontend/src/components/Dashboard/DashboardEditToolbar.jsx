@@ -20,16 +20,19 @@ import {
   Save,
   X,
   RotateCcw,
-  GripVertical
+  GripVertical,
+  Plus
 } from 'lucide-react';
 
 const DashboardEditToolbar = ({ 
   onAddTitle, 
   onAddSeparator, 
+  onAddWidget,
   onSave, 
   onCancel, 
   onReset,
-  hasChanges 
+  hasChanges,
+  missingWidgets
 }) => {
   const [titleConfig, setTitleConfig] = useState({
     text: '',
@@ -43,8 +46,8 @@ const DashboardEditToolbar = ({
     { value: 'text-base', label: 'Normal' },
     { value: 'text-lg', label: 'Moyen' },
     { value: 'text-xl', label: 'Grand' },
-    { value: 'text-2xl', label: 'Très grand' },
-    { value: 'text-3xl', label: 'Énorme' }
+    { value: 'text-2xl', label: 'Tres grand' },
+    { value: 'text-3xl', label: 'Enorme' }
   ];
 
   const alignments = [
@@ -67,13 +70,42 @@ const DashboardEditToolbar = ({
   return (
     <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50">
       <div className="bg-white rounded-xl shadow-2xl border border-gray-200 p-3 flex items-center gap-3">
-        {/* Indicateur mode édition */}
+        {/* Indicateur mode edition */}
         <div className="flex items-center gap-2 px-3 py-1 bg-blue-100 rounded-lg">
           <GripVertical className="h-4 w-4 text-blue-600" />
-          <span className="text-sm font-medium text-blue-700">Mode Édition</span>
+          <span className="text-sm font-medium text-blue-700">Mode Edition</span>
         </div>
 
         <div className="h-8 w-px bg-gray-300" />
+
+        {/* Ajouter un widget */}
+        {missingWidgets && missingWidgets.length > 0 && (
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className="flex items-center gap-2" data-testid="add-widget-btn">
+                <Plus className="h-4 w-4" />
+                Widget
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-64" side="top">
+              <div className="space-y-2">
+                <h4 className="font-medium text-sm mb-3">Ajouter un widget</h4>
+                <div className="max-h-48 overflow-y-auto space-y-1">
+                  {missingWidgets.map(w => (
+                    <button
+                      key={w.id}
+                      onClick={() => onAddWidget(w.id)}
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 hover:text-blue-700 rounded-md transition-colors"
+                      data-testid={`add-widget-${w.id}`}
+                    >
+                      {w.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
+        )}
 
         {/* Ajouter un titre */}
         <Popover>
@@ -150,9 +182,9 @@ const DashboardEditToolbar = ({
                 </div>
               </div>
 
-              {/* Prévisualisation */}
+              {/* Previsualisation */}
               <div className="p-3 bg-gray-50 rounded-lg">
-                <p className="text-xs text-gray-500 mb-2">Aperçu :</p>
+                <p className="text-xs text-gray-500 mb-2">Apercu :</p>
                 <p 
                   className={`${titleConfig.fontSize} font-semibold`}
                   style={{ 
@@ -175,7 +207,7 @@ const DashboardEditToolbar = ({
           </PopoverContent>
         </Popover>
 
-        {/* Ajouter un séparateur */}
+        {/* Ajouter un separateur */}
         <Button 
           variant="outline" 
           size="sm" 
@@ -183,12 +215,12 @@ const DashboardEditToolbar = ({
           onClick={() => onAddSeparator({ id: `separator-${Date.now()}`, type: 'separator' })}
         >
           <Minus className="h-4 w-4" />
-          Séparateur
+          Separateur
         </Button>
 
         <div className="h-8 w-px bg-gray-300" />
 
-        {/* Réinitialiser */}
+        {/* Reinitialiser */}
         <Button 
           variant="ghost" 
           size="sm" 
@@ -196,7 +228,7 @@ const DashboardEditToolbar = ({
           onClick={onReset}
         >
           <RotateCcw className="h-4 w-4" />
-          Réinitialiser
+          Reinitialiser
         </Button>
 
         <div className="h-8 w-px bg-gray-300" />
