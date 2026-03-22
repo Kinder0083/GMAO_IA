@@ -74,7 +74,7 @@ const ShortcutEditDialog = ({ shortcut, open, onClose, onSave }) => {
   const sizeConfig = ICON_SIZES[config.iconSize] || ICON_SIZES.medium;
   const IconComp = LucideIcons[shortcut?.icon];
   const previewIcon = config.customIconUrl
-    ? <img src={config.customIconUrl} alt="" className="object-contain rounded" style={{ width: sizeConfig.icon, height: sizeConfig.icon }} />
+    ? <img src={config.customIconUrl} alt="" className="object-cover rounded" style={{ width: sizeConfig.icon, height: sizeConfig.icon }} />
     : IconComp
       ? <IconComp size={sizeConfig.icon} className="text-blue-600" />
       : <LucideIcons.ExternalLink size={sizeConfig.icon} className="text-gray-500" />;
@@ -165,15 +165,17 @@ const ShortcutEditDialog = ({ shortcut, open, onClose, onSave }) => {
           {/* Preview */}
           <div className="p-4 bg-gray-50 rounded-lg flex flex-col items-center gap-1">
             <p className="text-xs text-gray-400 mb-2">Apercu :</p>
-            {config.labelPosition === 'above' && (
-              <span className={`${sizeConfig.text} text-gray-700 font-medium`}>{config.name || shortcut?.name}</span>
-            )}
-            <div className="flex items-center justify-center" style={{ width: sizeConfig.container, height: sizeConfig.container }}>
-              {previewIcon}
+            <div className="flex flex-col items-center" style={{ width: sizeConfig.card }}>
+              {config.labelPosition === 'above' && (
+                <span className={`${sizeConfig.text} text-gray-700 font-medium text-center py-0.5`}>{config.name || shortcut?.name}</span>
+              )}
+              <div className="flex items-center justify-center" style={{ width: sizeConfig.card, height: sizeConfig.card }}>
+                {previewIcon}
+              </div>
+              {config.labelPosition === 'below' && (
+                <span className={`${sizeConfig.text} text-gray-700 font-medium text-center py-0.5`}>{config.name || shortcut?.name}</span>
+              )}
             </div>
-            {config.labelPosition === 'below' && (
-              <span className={`${sizeConfig.text} text-gray-700 font-medium`}>{config.name || shortcut?.name}</span>
-            )}
           </div>
         </div>
         <DialogFooter>
