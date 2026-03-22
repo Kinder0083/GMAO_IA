@@ -47,10 +47,11 @@ export const PreferencesProvider = ({ children }) => {
         headers: { Authorization: `Bearer ${token}` }
       });
 
-      setPreferences(response.data);
-      applyPreferences(response.data);
-      // Sauvegarder en cache local pour le mode hors ligne
-      try { localStorage.setItem('cached_preferences', JSON.stringify(response.data)); } catch {}
+      const rawData = response.data;
+      const prefs = rawData?.preferences || rawData || {};
+      setPreferences(prefs);
+      applyPreferences(prefs);
+      try { localStorage.setItem('cached_preferences', JSON.stringify(prefs)); } catch {}
     } catch (error) {
       console.error('Erreur lors du chargement des préférences:', error);
       // Fallback : charger depuis le cache local (mode hors ligne)
@@ -78,10 +79,11 @@ export const PreferencesProvider = ({ children }) => {
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
-      setPreferences(response.data);
-      applyPreferences(response.data);
-      try { localStorage.setItem('cached_preferences', JSON.stringify(response.data)); } catch {}
-      return response.data;
+      const prefs = response.data?.preferences || response.data || {};
+      setPreferences(prefs);
+      applyPreferences(prefs);
+      try { localStorage.setItem('cached_preferences', JSON.stringify(prefs)); } catch {}
+      return prefs;
     } catch (error) {
       console.error('Erreur lors de la mise à jour des préférences:', error);
       throw error;

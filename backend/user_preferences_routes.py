@@ -111,6 +111,38 @@ async def update_user_preference(
         logger.error(f"Error updating user preference: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.put("/", status_code=200)
+@router.put("", status_code=200)
+async def put_user_preferences(
+    updates: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    """Mettre a jour plusieurs preferences (merge) et retourner les preferences completes."""
+    try:
+        user_id = current_user.get("id")
+        existing = await db.user_preferences.find_one({"user_id": user_id})
+
+        if existing:
+            current_prefs = existing.get("preferences", {})
+            current_prefs.update(updates)
+            await db.user_preferences.update_one(
+                {"user_id": user_id},
+                {"$set": {"preferences": current_prefs, "updated_at": datetime.now(timezone.utc).isoformat()}}
+            )
+        else:
+            current_prefs = updates
+            await db.user_preferences.insert_one({
+                "user_id": user_id,
+                "preferences": current_prefs,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "updated_at": datetime.now(timezone.utc).isoformat()
+            })
+
+        return current_prefs
+    except Exception as e:
+        logger.error(f"Error in put_user_preferences: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.put("/bulk")
 async def update_bulk_preferences(
     bulk: BulkPreferenceUpdate,

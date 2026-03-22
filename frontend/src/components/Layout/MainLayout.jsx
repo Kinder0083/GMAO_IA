@@ -2,7 +2,7 @@
  * MainLayout - Composant principal de mise en page
  * Refactorisé pour utiliser des hooks modulaires
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { LayoutDashboard } from 'lucide-react';
 import { TooltipProvider } from '../ui/tooltip';
@@ -16,6 +16,7 @@ import ContextualHelpButton from '../Common/ContextualHelpButton';
 import ConsignePopup from '../Common/ConsignePopup';
 import Header from './Header';
 import Sidebar from './Sidebar';
+import GlobalContextMenu from '../Dashboard/GlobalContextMenu';
 import { iconMap } from './menuConfig';
 import { usePermissions } from '../../hooks/usePermissions';
 import { useOverdueItems } from '../../hooks/useOverdueItems';
@@ -27,7 +28,7 @@ import { useHeaderWebSocket } from '../../hooks/useHeaderWebSocket';
 import { usePreferences } from '../../contexts/PreferencesContext';
 
 const MainLayout = () => {
-  const { preferences } = usePreferences();
+  const { preferences, updatePreferences } = usePreferences();
   const isMobile = () => window.innerWidth < 768;
   const [sidebarOpen, setSidebarOpen] = useState(!isMobile());
   const [mobileView, setMobileView] = useState(isMobile());
@@ -238,6 +239,18 @@ const MainLayout = () => {
     }
   };
 
+  const handleCreateShortcut = useCallback(async (shortcut) => {
+    try {
+      const currentLayout = preferences?.dashboard_layout?.items || [];
+      const newItems = [...currentLayout, { ...shortcut, order: currentLayout.length }];
+      await updatePreferences({
+        dashboard_layout: { items: newItems }
+      });
+    } catch (error) {
+      console.error('Erreur creation raccourci:', error);
+    }
+  }, [preferences, updatePreferences]);
+
   return (
     <TooltipProvider delayDuration={300}>
     <div className="min-h-screen bg-gray-50">
@@ -322,6 +335,7 @@ const MainLayout = () => {
       <UpdateWarningOverlay />
       <ContextualHelpButton />
       <ConsignePopup />
+      <GlobalContextMenu onCreateShortcut={handleCreateShortcut} />
     </div>
     </TooltipProvider>
   );

@@ -37,6 +37,8 @@ import api, { demandesArretAPI, dashboardAPI } from '../services/api';
 import { useToast } from '../hooks/use-toast';
 import DashboardEditToolbar from '../components/Dashboard/DashboardEditToolbar';
 import MaintenanceStatusPendingAlert from '../components/Dashboard/MaintenanceStatusPendingAlert';
+import SortableShortcut from '../components/Dashboard/SortableShortcut';
+import ShortcutEditDialog from '../components/Dashboard/ShortcutEditDialog';
 
 // Composant Widget Sortable
 const SortableWidget = ({ item, isEditMode, stat, colorClasses, onDelete }) => {
@@ -223,6 +225,9 @@ const Dashboard = () => {
   const [reportsStats, setReportsStats] = useState({ pending: 0, total: 0, avgDays: 0 });
   const [widgetData, setWidgetData] = useState(null);
   const [diKpi, setDiKpi] = useState(null);
+
+  // État pour l'édition des raccourcis
+  const [editingShortcut, setEditingShortcut] = useState(null);
 
   // Utiliser le hook temps réel WebSocket pour le dashboard
   const { 
@@ -411,6 +416,13 @@ const Dashboard = () => {
     setLayoutItems(defaultLayout);
     setHasChanges(true);
   }, [enabledWidgets]);
+
+  const handleSaveShortcutEdit = useCallback((updatedShortcut) => {
+    setLayoutItems(prev => prev.map(item =>
+      item.id === updatedShortcut.id ? { ...item, ...updatedShortcut } : item
+    ));
+    setHasChanges(true);
+  }, []);
 
   // Gestion du drag and drop avec dnd-kit
   const handleDragStart = (event) => {
@@ -761,6 +773,17 @@ const Dashboard = () => {
                     />
                   );
                 }
+                if (item.type === 'shortcut') {
+                  return (
+                    <SortableShortcut
+                      key={item.id}
+                      item={item}
+                      isEditMode={isEditMode}
+                      onDelete={handleDeleteElement}
+                      onEdit={(s) => setEditingShortcut(s)}
+                    />
+                  );
+                }
                 return null;
               })}
             </div>
@@ -804,6 +827,13 @@ const Dashboard = () => {
                     return (
                       <div className="py-4 bg-white border-2 border-blue-400 rounded">
                         <hr className="border-gray-300 border-dashed" />
+                      </div>
+                    );
+                  }
+                  if (item.type === 'shortcut') {
+                    return (
+                      <div className="border-2 border-blue-400 rounded-lg p-3 bg-white flex flex-col items-center gap-1">
+                        <span className="text-sm font-medium">{item.name}</span>
                       </div>
                     );
                   }
@@ -904,6 +934,16 @@ const Dashboard = () => {
           onCancel={exitEditMode}
           onReset={handleResetLayout}
           hasChanges={hasChanges}
+        />
+      )}
+
+      {/* Dialog édition raccourci */}
+      {editingShortcut && (
+        <ShortcutEditDialog
+          shortcut={editingShortcut}
+          open={!!editingShortcut}
+          onClose={() => setEditingShortcut(null)}
+          onSave={handleSaveShortcutEdit}
         />
       )}
     </div>
