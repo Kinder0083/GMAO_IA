@@ -177,12 +177,12 @@ function SurveillanceAIHistory() {
 
       {/* Dialog détail */}
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
-        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col" data-testid="history-detail-dialog">
+        <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col overflow-hidden" data-testid="history-detail-dialog">
           <DialogHeader>
             <DialogTitle>Détail de l'analyse</DialogTitle>
           </DialogHeader>
           {detailData && (
-            <ScrollArea className="flex-1 pr-2">
+            <ScrollArea className="flex-1 min-h-0 pr-2">
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <div><span className="text-gray-500">Fichier :</span> <strong>{detailData.filename}</strong></div>
