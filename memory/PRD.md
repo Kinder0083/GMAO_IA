@@ -56,6 +56,14 @@ Application GMAO (Gestion de Maintenance Assistée par Ordinateur) complète pou
 └── MaintenanceStatusPendingAlert.jsx
 ```
 
+### Session 22 mars 2026 (suite - fork)
+- **Fix P0: Admins absents des listes d'assignation** - Tests: iteration_155.json - 100%
+  - Cause racine: filtre MongoDB `deleted_at` trop restrictif pour données legacy
+  - Ancien filtre: `{"deleted_at": None}` ou `{"$exists": False}` ne couvrait pas `""`, `false`, `0`
+  - Nouveau filtre global: `NOT_DELETED = {"deleted_at": {"$in": [None, "", False, 0]}}` dans `routes/shared.py`
+  - Appliqué dans: `users.py`, `service_manager.py`, `work_orders.py`, `equipments.py`, `intervention_requests.py`, `improvements.py`, `reports.py`, `server.py`
+  - Fallback `_id → id` dans `serialize_doc` + `service_manager.py` pour utilisateurs sans champ `id`
+
 ## Schéma DB Clé
 - `work_orders`: `{_id, id, numero, statut, att_materiel_info, att_decision_info, ...}`
 - `counters`: `{_id: "work_order_numero", seq: <dernier_numero>}`
@@ -67,4 +75,4 @@ Application GMAO (Gestion de Maintenance Assistée par Ordinateur) complète pou
 
 ## Backlog
 - P2: Tester le script `MAJ_FSAO.sh`
-- Aucune autre tâche explicitement demandée
+- Aucune autre tâche explicitement demandée (en attente des consignes utilisateur)
