@@ -14,6 +14,7 @@ Application GMAO (Gestion de Maintenance Assistée par Ordinateur) complète pou
 /app/backend/
 ├── server.py (setup principal, routers, startup events)
 ├── models.py (modèles Pydantic)
+├── user_preferences_routes.py (GET/PUT/POST preferences)
 └── routes/
     ├── shared.py (db, serialize_doc, helpers, get_next_work_order_numero)
     ├── work_orders.py
@@ -32,23 +33,33 @@ Application GMAO (Gestion de Maintenance Assistée par Ordinateur) complète pou
 - Export PDF en masse des OT avec mode sélection
 
 ### Session Actuelle (22 mars 2026)
-- **Fix: Statuts OT "Att Matériel" et "Att Décision"** - Complet et testé
-  - Modèle `WorkOrder` response: ajout `att_materiel_info`, `att_decision_info`
-  - Route PUT: correction `is_status_only`
-  - Tests: iteration_153.json - 100%
+- **Fix: Statuts OT "Att Matériel" et "Att Décision"** - Tests: iteration_153.json - 100%
+- **Fix: Numéros OT en doublon** - Compteur atomique MongoDB
+- **Fix: Notifications cloche (Header)** - Compteurs séparés att_materiel / att_decision
+- **Fix: Scroll Dialog Historique IA** - overflow-hidden + min-h-0
+- **Feature: Raccourcis Dashboard** - Tests: iteration_154.json - 100%
+  - Menu contextuel global (CTRL + clic droit) disponible partout
+  - Création raccourci page courante (auto-détection nom + icône)
+  - Création raccourci d'adresse (URL, chemin réseau)
+  - Affichage style Windows sur le dashboard (icône + nom)
+  - Mode Modifier : drag & drop, édition (taille, icône custom, position label), suppression
+  - Backend: ajout route PUT /api/user-preferences
+  - Fix: PreferencesContext structure aplatie
 
-- **Fix: Numéros OT en doublon** - Complet et testé
-  - Compteur atomique MongoDB (`counters.work_order_numero` + `findOneAndUpdate` + `$inc`)
-  - Corrigé dans 4 fichiers
-
-- **Fix: Notifications cloche (Header)** - Complet et testé
-  - Backend: `/api/bell-counts` retourne `att_materiel` et `att_decision` séparément
-  - Frontend: Header affiche "OT Att Materiel" et "OT Att Decision" (conditionnel si > 0)
-  - Navigation filtre vers le bon statut (`ATT_MATERIEL` ou `ATT_DECISION`)
+## Composants Dashboard
+```
+/app/frontend/src/components/Dashboard/
+├── GlobalContextMenu.jsx (Menu CTRL+clic droit)
+├── SortableShortcut.jsx (Rendu raccourci style Windows)
+├── ShortcutEditDialog.jsx (Dialog édition raccourci)
+├── DashboardEditToolbar.jsx (Barre d'outils mode édition)
+└── MaintenanceStatusPendingAlert.jsx
+```
 
 ## Schéma DB Clé
-- `work_orders`: `{_id, id, numero, statut, att_materiel_info, att_decision_info, titre, ...}`
+- `work_orders`: `{_id, id, numero, statut, att_materiel_info, att_decision_info, ...}`
 - `counters`: `{_id: "work_order_numero", seq: <dernier_numero>}`
+- `user_preferences`: `{user_id, preferences: {dashboard_layout: {items: [...]}, ...}}`
 - `equipments`: `{_id, id, nom, parent_id, ...}`
 
 ## Credentials de Test
