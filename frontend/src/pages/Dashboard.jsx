@@ -679,7 +679,11 @@ const Dashboard = () => {
     });
   }, [layoutItems, enabledWidgets, getStatConfig]);
 
-  const hasActiveWidgets = visibleItems.some(item => item.type === 'widget');
+  // Séparer raccourcis et autres éléments
+  const shortcutItems = visibleItems.filter(item => item.type === 'shortcut');
+  const otherItems = visibleItems.filter(item => item.type !== 'shortcut');
+  const hasActiveWidgets = otherItems.some(item => item.type === 'widget');
+  const hasShortcuts = shortcutItems.length > 0;
 
   if (loading) {
     return (
@@ -727,7 +731,7 @@ const Dashboard = () => {
       )}
 
       {/* Grille de widgets avec drag-and-drop */}
-      {(hasActiveWidgets || isEditMode) && (
+      {(hasActiveWidgets || hasShortcuts || isEditMode) && (
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
@@ -738,8 +742,24 @@ const Dashboard = () => {
             items={visibleItems.map(item => item.id)}
             strategy={rectSortingStrategy}
           >
+            {/* Zone raccourcis */}
+            {(hasShortcuts || isEditMode) && (
+              <div data-testid="dashboard-shortcuts" className="flex flex-wrap gap-3 items-end mb-6">
+                {shortcutItems.map((item) => (
+                  <SortableShortcut
+                    key={item.id}
+                    item={item}
+                    isEditMode={isEditMode}
+                    onDelete={handleDeleteElement}
+                    onEdit={(s) => setEditingShortcut(s)}
+                  />
+                ))}
+              </div>
+            )}
+
+            {/* Zone widgets */}
             <div data-testid="dashboard-stats" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {visibleItems.map((item) => {
+              {otherItems.map((item) => {
                 if (item.type === 'widget') {
                   const stat = getStatConfig(item.widgetId);
                   return (
@@ -770,17 +790,6 @@ const Dashboard = () => {
                       item={item}
                       isEditMode={isEditMode}
                       onDelete={handleDeleteElement}
-                    />
-                  );
-                }
-                if (item.type === 'shortcut') {
-                  return (
-                    <SortableShortcut
-                      key={item.id}
-                      item={item}
-                      isEditMode={isEditMode}
-                      onDelete={handleDeleteElement}
-                      onEdit={(s) => setEditingShortcut(s)}
                     />
                   );
                 }
