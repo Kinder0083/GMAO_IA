@@ -16,7 +16,7 @@ from models import (
     MessageResponse, SuccessResponse
 )
 from dependencies import get_current_user, get_current_admin_user, require_permission
-from routes.shared import db, audit_service, serialize_doc, find_user_flexible
+from routes.shared import db, audit_service, serialize_doc, find_user_flexible, NOT_DELETED
 
 EntityType_Audit = EntityType
 logger = logging.getLogger(__name__)
@@ -44,7 +44,7 @@ async def get_users(current_user: dict = Depends(get_current_user)):
                 detail="Vous n'avez pas la permission de voir les utilisateurs"
             )
     
-    users = await db.users.find({"deleted_at": None}).to_list(1000)
+    users = await db.users.find(NOT_DELETED).to_list(1000)
     result = []
     for user in users:
         doc = serialize_doc(user)

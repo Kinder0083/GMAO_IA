@@ -13,6 +13,10 @@ db = None
 audit_service = None
 realtime_manager = None
 
+# Filtre MongoDB robuste pour les documents non supprimés.
+# Couvre tous les cas legacy : champ absent, null, "", false, 0
+NOT_DELETED = {"deleted_at": {"$in": [None, "", False, 0]}}
+
 
 def init_shared(database, audit_svc, rt_manager=None):
     """Initialise les références partagées. Appelé une fois depuis server.py."""

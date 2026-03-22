@@ -10,7 +10,7 @@ import logging
 from models import ActionType, EntityType
 from dependencies import get_current_user, require_permission
 from openapi_config import STANDARD_ERRORS
-from routes.shared import db, audit_service, serialize_doc
+from routes.shared import db, audit_service, serialize_doc, NOT_DELETED
 
 EntityType_Audit = EntityType
 logger = logging.getLogger(__name__)
@@ -97,7 +97,7 @@ async def get_service_manager_stats(current_user: dict = Depends(get_current_use
     eq_panne = await db.equipments.count_documents({**query, "status": "EN_PANNE"})
     
     # Statistiques des demandes d'intervention (exclure les supprimees)
-    di_en_attente = await db.intervention_requests.count_documents({**query, "status": "EN_ATTENTE", "deleted_at": {"$exists": False}})
+    di_en_attente = await db.intervention_requests.count_documents({**query, "status": "EN_ATTENTE", **NOT_DELETED})
     
     # Membres de l'équipe
     team_count = await db.users.count_documents(query) if service_filter else 0
@@ -142,7 +142,7 @@ async def get_assignment_targets(current_user: dict = Depends(get_current_user))
         member_count = await db.users.count_documents({
             "service": svc_regex,
             "actif": {"$ne": False},
-            "deleted_at": None
+            **NOT_DELETED
         })
         poles.append({
             "id": f"service:{svc}",
@@ -153,13 +153,14 @@ async def get_assignment_targets(current_user: dict = Depends(get_current_user))
 
     # Récupérer les utilisateurs actifs triés par nom
     # On inclut tous les utilisateurs sauf ceux explicitement désactivés
+    # On garde _id en fallback si le champ 'id' n'existe pas
     users_cursor = db.users.find(
-        {"actif": {"$ne": False}, "deleted_at": None},
-        {"_id": 0, "id": 1, "nom": 1, "prenom": 1, "role": 1, "email": 1}
+        {"actif": {"$ne": False}, **NOT_DELETED},
+        {"nom": 1, "prenom": 1, "role": 1, "email": 1, "id": 1}
     ).sort([("nom", 1), ("prenom", 1)])
     users = []
     async for u in users_cursor:
-        user_id = u.get("id", "")
+        user_id = u.get("id") or str(u.get("_id", ""))
         if not user_id:
             continue
         users.append({

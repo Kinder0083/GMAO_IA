@@ -31,7 +31,7 @@ from routes.shared import (
     db, audit_service, serialize_doc,
     find_work_order_flexible, find_user_flexible,
     get_user_by_id, get_location_by_id, get_equipment_by_id,
-    get_next_work_order_numero
+    get_next_work_order_numero, NOT_DELETED
 )
 
 logger = logging.getLogger(__name__)
@@ -54,7 +54,7 @@ async def notify_service_assignment(wo_dict: dict, service_name: str, current_us
         members = await db.users.find({
             "service": service_regex,
             "$or": [{"actif": True}, {"statut": "actif"}],
-            "deleted_at": {"$exists": False}
+            **NOT_DELETED
         }, {"_id": 0, "id": 1}).to_list(length=200)
 
         notified = 0
@@ -92,7 +92,7 @@ async def get_work_orders(
     current_user: dict = Depends(require_permission("workOrders", "view"))
 ):
     """Liste tous les ordres de travail avec filtrage par date"""
-    query = {"deleted_at": {"$exists": False}}
+    query = {**NOT_DELETED}
     date_field = "dateCreation" if date_type == "creation" else "dateLimite"
 
     if date_debut and date_fin:

@@ -21,7 +21,7 @@ from models import (
 )
 from pydantic import BaseModel
 from dependencies import get_current_user, get_current_admin_user, require_permission
-from routes.shared import db, audit_service, serialize_doc, find_user_flexible, get_next_work_order_numero
+from routes.shared import db, audit_service, serialize_doc, find_user_flexible, get_next_work_order_numero, NOT_DELETED
 
 EntityType_Audit = EntityType
 logger = logging.getLogger(__name__)
@@ -125,7 +125,7 @@ def _clean_ir_attachments(req):
 async def get_all_intervention_requests(current_user: dict = Depends(require_permission("interventionRequests", "view"))):
     """Récupérer toutes les demandes d'intervention"""
     try:
-        query = {"deleted_at": {"$exists": False}}
+        query = {**NOT_DELETED}
         
         # Collecter les work_order_ids pour vérifier les OT supprimés en un seul appel
         all_reqs = []
@@ -192,7 +192,7 @@ async def get_all_intervention_requests(current_user: dict = Depends(require_per
 async def get_intervention_requests_kpi(current_user: dict = Depends(require_permission("interventionRequests", "view"))):
     """KPI des demandes d'intervention : temps de reponse, taux de conversion, etc."""
     try:
-        all_irs = await db.intervention_requests.find({"deleted_at": {"$exists": False}}, {"_id": 0}).to_list(5000)
+        all_irs = await db.intervention_requests.find({**NOT_DELETED}, {"_id": 0}).to_list(5000)
         total = len(all_irs)
         if total == 0:
             return {

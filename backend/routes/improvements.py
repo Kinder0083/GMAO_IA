@@ -21,7 +21,7 @@ from models import (
     ImprovementRequestUpdate, ImprovementRequestStatusUpdate
 )
 from dependencies import get_current_user, get_current_admin_user, require_permission
-from routes.shared import db, audit_service, serialize_doc, find_user_flexible
+from routes.shared import db, audit_service, serialize_doc, find_user_flexible, NOT_DELETED
 
 EntityType_Audit = EntityType
 logger = logging.getLogger(__name__)
@@ -154,7 +154,7 @@ async def create_improvement_request(
 async def get_all_improvement_requests(current_user: dict = Depends(require_permission("improvementRequests", "view"))):
     """Récupérer toutes les demandes d'amélioration"""
     try:
-        query = {"deleted_at": {"$exists": False}}
+        query = {**NOT_DELETED}
             
         
         requests = []

@@ -6,7 +6,7 @@ import pytest
 import requests
 import os
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://pending-reason-track.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://cmms-assignee-fix.preview.emergentagent.com').rstrip('/')
 
 class TestSetup:
     """Setup fixtures for all tests"""

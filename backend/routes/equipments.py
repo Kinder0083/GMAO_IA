@@ -13,7 +13,7 @@ from models import (
     MessageResponse, ActionType, EntityType
 )
 from dependencies import get_current_user, require_permission
-from routes.shared import db, audit_service, serialize_doc, get_equipment_by_id, get_location_by_id
+from routes.shared import db, audit_service, serialize_doc, get_equipment_by_id, get_location_by_id, NOT_DELETED
 
 EntityType_Audit = EntityType
 logger = logging.getLogger(__name__)
@@ -48,7 +48,7 @@ async def get_equipments(
     utilisateur determinent l'acces. Accessible a tous les utilisateurs 
     authentifies pour permettre la selection d'equipements dans les OT.
     """
-    query = {"deleted_at": {"$exists": False}}
+    query = {**NOT_DELETED}
     
     if parents_only:
         query["$or"] = [{"parent_id": None}, {"parent_id": {"$exists": False}}]

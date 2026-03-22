@@ -11,7 +11,7 @@ import logging
 
 from models import ActionType, EntityType
 from dependencies import get_current_user, require_permission
-from routes.shared import db, audit_service, serialize_doc, find_user_flexible
+from routes.shared import db, audit_service, serialize_doc, find_user_flexible, NOT_DELETED
 
 EntityType_Audit = EntityType
 logger = logging.getLogger(__name__)
@@ -41,7 +41,7 @@ async def get_analytics(
     else:  # MOIS par défaut
         start_date = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
-    base_filter = {"deleted_at": {"$exists": False}}
+    base_filter = {**NOT_DELETED}
     period_filter = {**base_filter, "dateCreation": {"$gte": start_date}}
 
     # Work orders stats filtrés par période
@@ -337,7 +337,7 @@ async def get_user_time_tracking(
             return None
         
         wo_discovery_match = {
-            "deleted_at": {"$exists": False},
+            **NOT_DELETED,
             "time_entries": {
                 "$elemMatch": {
                     "timestamp": {"$gte": date_start, "$lte": date_end}
@@ -386,7 +386,7 @@ async def get_user_time_tracking(
             wo_categories = [cat for cat in selected_categories if cat != "AMELIORATIONS"]
             if wo_categories:
                 wo_match = {
-                    "deleted_at": {"$exists": False},
+                    **NOT_DELETED,
                     "categorie": {"$in": wo_categories},
                     "time_entries": {
                         "$elemMatch": {
