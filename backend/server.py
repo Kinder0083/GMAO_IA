@@ -478,13 +478,13 @@ async def get_bell_counts(current_user: dict = Depends(get_current_user)):
     # 1. OT en attente matériel
     wo_att_materiel = await db.work_orders.count_documents({
         "statut": {"$in": ["ATT_MATERIEL", "EN_ATTENTE"]},
-        "deleted_at": {"$exists": False}
+        "deleted_at": None
     })
 
     # 2. OT en attente décision
     wo_att_decision = await db.work_orders.count_documents({
         "statut": "ATT_DECISION",
-        "deleted_at": {"$exists": False}
+        "deleted_at": None
     })
 
     # 3. Améliorations en attente (statut EN_ATTENTE uniquement)
@@ -528,7 +528,7 @@ async def _compute_time_widgets(database, now):
         pipeline = [
             {"$match": {
                 "statut": "TERMINE",
-                "deleted_at": {"$exists": False},
+                "deleted_at": None,
                 "tempsEstime": {"$gt": 0},
                 "tempsReel": {"$gt": 0},
                 "dateTermine": {"$gte": cutoff}
@@ -552,7 +552,7 @@ async def _compute_time_widgets(database, now):
     pipeline_open = [
         {"$match": {
             "statut": {"$nin": ["TERMINE", "ANNULE"]},
-            "deleted_at": {"$exists": False},
+            "deleted_at": None,
             "tempsEstime": {"$gt": 0}
         }},
         {"$group": {
@@ -574,7 +574,7 @@ async def _compute_time_widgets(database, now):
     resp_ids = set(r.get("user_id") for r in maint_responsables if r.get("user_id"))
 
     all_maint_users = await database.users.find(
-        {"service": maint_regex, "actif": {"$ne": False}, "deleted_at": {"$exists": False}},
+        {"service": maint_regex, "actif": {"$ne": False}, "deleted_at": None},
         {"_id": 0, "id": 1}
     ).to_list(500)
     techs = [u for u in all_maint_users if u.get("id") and u["id"] not in resp_ids]

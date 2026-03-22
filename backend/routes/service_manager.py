@@ -142,7 +142,7 @@ async def get_assignment_targets(current_user: dict = Depends(get_current_user))
         member_count = await db.users.count_documents({
             "service": svc_regex,
             "actif": {"$ne": False},
-            "deleted_at": {"$exists": False}
+            "deleted_at": None
         })
         poles.append({
             "id": f"service:{svc}",
@@ -154,7 +154,7 @@ async def get_assignment_targets(current_user: dict = Depends(get_current_user))
     # Récupérer les utilisateurs actifs triés par nom
     # On inclut tous les utilisateurs sauf ceux explicitement désactivés
     users_cursor = db.users.find(
-        {"actif": {"$ne": False}, "deleted_at": {"$exists": False}},
+        {"actif": {"$ne": False}, "deleted_at": None},
         {"_id": 0, "id": 1, "nom": 1, "prenom": 1, "role": 1, "email": 1}
     ).sort([("nom", 1), ("prenom", 1)])
     users = []
