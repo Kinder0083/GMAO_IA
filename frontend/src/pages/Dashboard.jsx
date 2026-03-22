@@ -28,13 +28,17 @@ import {
   AlertTriangle,
   Pencil,
   GripVertical,
-  Trash2
+  Trash2,
+  Clock,
+  Timer,
+  Info
 } from 'lucide-react';
 import { useDashboard } from '../hooks/useDashboard';
 import { usePermissions } from '../hooks/usePermissions';
+import { useToast } from '../hooks/use-toast';
 import { usePreferences } from '../contexts/PreferencesContext';
 import api, { demandesArretAPI, dashboardAPI } from '../services/api';
-import { useToast } from '../hooks/use-toast';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../components/ui/tooltip';
 import DashboardEditToolbar from '../components/Dashboard/DashboardEditToolbar';
 import MaintenanceStatusPendingAlert from '../components/Dashboard/MaintenanceStatusPendingAlert';
 import SortableShortcut from '../components/Dashboard/SortableShortcut';
@@ -85,7 +89,21 @@ const SortableWidget = ({ item, isEditMode, stat, colorClasses, onDelete }) => {
         <CardContent className="pt-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-500">{stat.title}</p>
+              <div className="flex items-center gap-1.5">
+                <p className="text-sm font-medium text-gray-500">{stat.title}</p>
+                {stat.tooltip && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Info className="h-3.5 w-3.5 text-gray-400 cursor-help flex-shrink-0" />
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-xs text-xs">
+                        <p>{stat.tooltip}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
+              </div>
               <p className="text-3xl font-bold mt-1">{stat.value}</p>
               <p className="text-xs text-gray-400 mt-1">{stat.trend}</p>
             </div>
@@ -295,7 +313,7 @@ const Dashboard = () => {
     if (preferences && preferences.dashboard_widgets !== undefined && preferences.dashboard_widgets !== null) {
       const current = preferences.dashboard_widgets;
       // Auto-inject new DI widgets if not present
-      const newWidgets = ['di_en_attente', 'di_temps_reponse'];
+      const newWidgets = ['di_en_attente', 'di_temps_reponse', 'ecart_temps', 'charge_maintenance'];
       const missing = newWidgets.filter(w => !current.includes(w));
       if (missing.length > 0) {
         return [...current, ...missing];
@@ -310,6 +328,8 @@ const Dashboard = () => {
       'demandes_arret_pending',
       'di_en_attente',
       'di_temps_reponse',
+      'ecart_temps',
+      'charge_maintenance',
       'equipment_status_overview',
       'global_summary'
     ];
@@ -651,6 +671,39 @@ const Dashboard = () => {
           icon: CheckCircle2,
           color: 'green',
           trend: `${totalEquip} equipement(s)`
+        };
+      },
+      'ecart_temps': () => {
+        if (!canView('workOrders')) return null;
+        const devMonth = widgetData?.time_deviation_month;
+        const devYear = widgetData?.time_deviation_year;
+        const countMonth = widgetData?.time_deviation_month_count || 0;
+        const countYear = widgetData?.time_deviation_year_count || 0;
+        const val = devMonth != null ? `${devMonth > 0 ? '+' : ''}${devMonth}%` : '-';
+        const yearText = devYear != null ? `Annee glissante : ${devYear > 0 ? '+' : ''}${devYear}% (${countYear} OT)` : 'Aucun OT sur l\'annee';
+        const monthColor = devMonth == null ? 'blue' : devMonth > 15 ? 'red' : devMonth > 0 ? 'orange' : 'green';
+        return {
+          title: 'Ecart Temps Est./Reel',
+          value: val,
+          icon: Timer,
+          color: monthColor,
+          trend: yearText,
+          tooltip: 'Pourcentage d\'ecart entre le temps estime et le temps reel sur les OT termines. Positif = depassement. Valeur principale : mois glissant (30j). En bas : annee glissante (365j).'
+        };
+      },
+      'charge_maintenance': () => {
+        if (!canView('workOrders')) return null;
+        const totalH = widgetData?.estimated_hours_open || 0;
+        const nbOT = widgetData?.estimated_hours_open_count || 0;
+        const nbTechs = widgetData?.maintenance_techs_count || 0;
+        const perTech = nbTechs > 0 ? (totalH / nbTechs).toFixed(1) : '-';
+        return {
+          title: 'Charge OT restante',
+          value: `${totalH}h`,
+          icon: Clock,
+          color: totalH > 50 ? 'red' : totalH > 20 ? 'orange' : 'green',
+          trend: nbTechs > 0 ? `${perTech}h / tech. (${nbTechs} tech., ${nbOT} OT)` : `${nbOT} OT en cours`,
+          tooltip: 'Total des heures estimees sur les OT non termines. En bas : repartition theorique par technicien du service maintenance (hors responsable de service).'
         };
       }
     };

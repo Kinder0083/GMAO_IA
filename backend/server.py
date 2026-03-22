@@ -507,6 +507,82 @@ async def get_bell_counts(current_user: dict = Depends(get_current_user)):
     }
 
 
+async def _compute_time_widgets(database, now):
+    """Calcule les données pour les widgets ecart temps et charge maintenance."""
+    import re
+    from datetime import timedelta
+
+    result = {
+        "time_deviation_month": None,
+        "time_deviation_year": None,
+        "time_deviation_month_count": 0,
+        "time_deviation_year_count": 0,
+        "estimated_hours_open": 0,
+        "estimated_hours_open_count": 0,
+        "maintenance_techs_count": 0,
+    }
+
+    # --- Widget 1: Ecart temps estimé/réel (OT terminés) ---
+    for label, days in [("month", 30), ("year", 365)]:
+        cutoff = now - timedelta(days=days)
+        pipeline = [
+            {"$match": {
+                "statut": "TERMINE",
+                "deleted_at": {"$exists": False},
+                "tempsEstime": {"$gt": 0},
+                "tempsReel": {"$gt": 0},
+                "dateTermine": {"$gte": cutoff}
+            }},
+            {"$group": {
+                "_id": None,
+                "total_estime": {"$sum": "$tempsEstime"},
+                "total_reel": {"$sum": "$tempsReel"},
+                "count": {"$sum": 1}
+            }}
+        ]
+        agg = await database.work_orders.aggregate(pipeline).to_list(1)
+        if agg and agg[0]["total_estime"] > 0:
+            estime = agg[0]["total_estime"]
+            reel = agg[0]["total_reel"]
+            deviation = round(((reel - estime) / estime) * 100, 1)
+            result[f"time_deviation_{label}"] = deviation
+            result[f"time_deviation_{label}_count"] = agg[0]["count"]
+
+    # --- Widget 2: Heures estimées restantes (OT non terminés) ---
+    pipeline_open = [
+        {"$match": {
+            "statut": {"$nin": ["TERMINE", "ANNULE"]},
+            "deleted_at": {"$exists": False},
+            "tempsEstime": {"$gt": 0}
+        }},
+        {"$group": {
+            "_id": None,
+            "total_hours": {"$sum": "$tempsEstime"},
+            "count": {"$sum": 1}
+        }}
+    ]
+    agg_open = await database.work_orders.aggregate(pipeline_open).to_list(1)
+    if agg_open:
+        result["estimated_hours_open"] = round(agg_open[0]["total_hours"], 1)
+        result["estimated_hours_open_count"] = agg_open[0]["count"]
+
+    # Techniciens maintenance (hors responsables de service)
+    maint_regex = re.compile(r"^maintenance$", re.IGNORECASE)
+    maint_responsables = await database.service_responsables.find(
+        {"service": maint_regex}, {"_id": 0, "user_id": 1}
+    ).to_list(50)
+    resp_ids = set(r.get("user_id") for r in maint_responsables if r.get("user_id"))
+
+    all_maint_users = await database.users.find(
+        {"service": maint_regex, "actif": {"$ne": False}, "deleted_at": {"$exists": False}},
+        {"_id": 0, "id": 1}
+    ).to_list(500)
+    techs = [u for u in all_maint_users if u.get("id") and u["id"] not in resp_ids]
+    result["maintenance_techs_count"] = len(techs)
+
+    return result
+
+
 @api_router.get("/dashboard/widget-data", tags=["Dashboard"])
 async def get_dashboard_widget_data(current_user: dict = Depends(get_current_user)):
     """Retourne les donnees pour les widgets du dashboard principal."""
@@ -568,7 +644,8 @@ async def get_dashboard_widget_data(current_user: dict = Depends(get_current_use
             "total_incidents": total_incidents,
             "upcoming_maintenance_7d": upcoming_maintenance,
             "overdue_mprev": overdue_mprev,
-            "recent_status_changes_7d": recent_changes
+            "recent_status_changes_7d": recent_changes,
+            **(await _compute_time_widgets(db, now))
         }
     except Exception as e:
         logger.error(f"Erreur dashboard widget-data: {e}")
