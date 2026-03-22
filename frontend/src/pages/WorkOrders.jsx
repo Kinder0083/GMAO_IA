@@ -749,21 +749,6 @@ const WorkOrders = () => {
       <Card>
         <CardContent className="pt-6">
           <div className="flex flex-wrap gap-4 items-center">
-            {/* Type de tri date */}
-            <div className="flex items-center gap-2">
-              <Button
-                variant={dateType === 'creation' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setDateType(dateType === 'creation' ? 'echeance' : 'creation')}
-                className="gap-2"
-              >
-                <ArrowUpDown size={16} />
-                {dateType === 'creation' ? 'Créé le' : 'Échéance'}
-              </Button>
-            </div>
-
-            <div className="h-6 w-px bg-gray-300"></div>
-
             {/* Filtres prédéfinis */}
             <div className="flex gap-2">
               <Button
