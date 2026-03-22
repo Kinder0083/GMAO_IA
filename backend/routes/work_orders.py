@@ -103,6 +103,20 @@ async def get_work_orders(
 
     work_orders = await db.work_orders.find(query).to_list(1000)
 
+    # Tri robuste : gère dateCreation mixte (datetime et string) — récent en premier
+    def _sort_key(wo):
+        dc = wo.get("dateCreation")
+        if isinstance(dc, datetime):
+            return dc
+        if isinstance(dc, str):
+            try:
+                return datetime.fromisoformat(dc)
+            except Exception:
+                pass
+        return datetime.min
+
+    work_orders.sort(key=_sort_key, reverse=True)
+
     VALID_STATUTS = {"OUVERT", "EN_COURS", "ATT_MATERIEL", "ATT_DECISION", "TERMINE", "EN_ATTENTE"}
     STATUT_MAP = {"en_attente": "ATT_MATERIEL", "att_materiel": "ATT_MATERIEL", "att_decision": "ATT_DECISION", "en_cours": "EN_COURS", "ouvert": "OUVERT", "termine": "TERMINE"}
     VALID_PRIORITES = {"URGENTE", "HAUTE", "MOYENNE", "NORMALE", "BASSE", "AUCUNE"}
