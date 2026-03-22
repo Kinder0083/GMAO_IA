@@ -522,7 +522,8 @@ const WorkOrderFormDialog = ({ open, onOpenChange, workOrder, prefillData, onSuc
                 <SelectContent>
                   <SelectItem value="OUVERT">Ouvert</SelectItem>
                   <SelectItem value="EN_COURS">En cours</SelectItem>
-                  <SelectItem value="EN_ATTENTE">En attente</SelectItem>
+                  <SelectItem value="ATT_MATERIEL">Att Materiel</SelectItem>
+                  <SelectItem value="ATT_DECISION">Att Decision</SelectItem>
                   <SelectItem value="TERMINE">Terminé</SelectItem>
                 </SelectContent>
               </Select>

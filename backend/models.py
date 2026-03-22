@@ -528,7 +528,8 @@ def get_default_permissions_by_role(role: str) -> UserPermissions:
 class WorkOrderStatus(str, Enum):
     OUVERT = "OUVERT"
     EN_COURS = "EN_COURS"
-    EN_ATTENTE = "EN_ATTENTE"
+    ATT_MATERIEL = "ATT_MATERIEL"
+    ATT_DECISION = "ATT_DECISION"
     TERMINE = "TERMINE"
 
 class Priority(str, Enum):
@@ -887,7 +888,9 @@ class WorkOrderUpdate(BaseModel):
     dateLimite: Optional[datetime] = None
     tempsEstime: Optional[float] = None
     tempsReel: Optional[float] = None
-    service: Optional[str] = None  # Service associé pour le filtrage par responsable
+    service: Optional[str] = None
+    att_materiel_info: Optional[str] = None
+    att_decision_info: Optional[str] = None
 
 
 class AddTimeSpent(BaseModel):
@@ -914,6 +917,8 @@ class WorkOrder(WorkOrderBase):
     time_entries: List[dict] = []
     parts_used: List[PartUsed] = []  # Pièces utilisées
     createdByName: Optional[str] = None
+    att_materiel_info: Optional[str] = None
+    att_decision_info: Optional[str] = None
 
     class Config:
         from_attributes = True

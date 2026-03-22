@@ -91,7 +91,7 @@ const WorkOrderDialog = ({ open, onOpenChange, workOrder, onSuccess }) => {
     doc.setFontSize(9);
     doc.setFont(undefined, 'normal');
     doc.setTextColor(120);
-    const statusMap = { OUVERT: 'Ouvert', EN_COURS: 'En cours', EN_ATTENTE: 'En attente', TERMINE: 'Termine' };
+    const statusMap = { OUVERT: 'Ouvert', EN_COURS: 'En cours', ATT_MATERIEL: 'Att Materiel', ATT_DECISION: 'Att Decision', EN_ATTENTE: 'Att Materiel', TERMINE: 'Termine' };
     const prioMap = { HAUTE: 'Haute', MOYENNE: 'Moyenne', BASSE: 'Basse', AUCUNE: 'Normale' };
     doc.text(`Statut: ${statusMap[workOrder.statut] || workOrder.statut}  |  Priorite: ${prioMap[workOrder.priorite] || workOrder.priorite}`, margin + 24, y + 14);
     // Ligne horizontale
@@ -707,7 +707,7 @@ const WorkOrderDialog = ({ open, onOpenChange, workOrder, onSuccess }) => {
     }
   };
 
-  const handleStatusChange = async (newStatus, hours = 0, minutes = 0) => {
+  const handleStatusChange = async (newStatus, hours = 0, minutes = 0, extraData = {}) => {
     try {
       // Soumettre les pièces utilisées si présentes (AVANT le changement de statut)
       if (partsUsed.length > 0) {
@@ -757,8 +757,9 @@ const WorkOrderDialog = ({ open, onOpenChange, workOrder, onSuccess }) => {
         await workOrdersAPI.addTimeSpent(workOrder.id, hours, minutes);
       }
 
-      // Mettre à jour le statut
-      await workOrdersAPI.update(workOrder.id, { statut: newStatus });
+      // Mettre à jour le statut + infos extra (att_materiel_info, att_decision_info)
+      const updateData = { statut: newStatus, ...extraData };
+      await workOrdersAPI.update(workOrder.id, updateData);
       
       toast({
         title: 'Succès',
@@ -832,7 +833,9 @@ const WorkOrderDialog = ({ open, onOpenChange, workOrder, onSuccess }) => {
     const badges = {
       'OUVERT': { variant: 'secondary', label: 'Ouvert' },
       'EN_COURS': { variant: 'default', label: 'En cours' },
-      'EN_ATTENTE': { variant: 'outline', label: 'En attente' },
+      'EN_ATTENTE': { variant: 'outline', label: 'Att Materiel' },
+    'ATT_MATERIEL': { variant: 'outline', label: 'Att Materiel' },
+    'ATT_DECISION': { variant: 'outline', label: 'Att Decision' },
       'TERMINE': { variant: 'success', label: 'Terminé' }
     };
     const badge = badges[statut] || badges['OUVERT'];

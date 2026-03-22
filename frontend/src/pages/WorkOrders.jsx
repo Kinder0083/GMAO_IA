@@ -295,19 +295,49 @@ const WorkOrders = () => {
     return matchesSearch && matchesStatus && matchesOverdue;
   });
 
-  const getStatusBadge = (statut) => {
+  const getStatusBadge = (statut, wo = null) => {
     const badges = {
       'OUVERT': { bg: 'bg-gray-100', text: 'text-gray-700', label: 'Ouvert' },
       'EN_COURS': { bg: 'bg-blue-100', text: 'text-blue-700', label: 'En cours' },
-      'EN_ATTENTE': { bg: 'bg-yellow-100', text: 'text-yellow-700', label: 'En attente' },
-      'TERMINE': { bg: 'bg-green-100', text: 'text-green-700', label: 'Terminé' }
+      'EN_ATTENTE': { bg: 'bg-yellow-100', text: 'text-yellow-700', label: 'Att Materiel' },
+      'ATT_MATERIEL': { bg: 'bg-yellow-100', text: 'text-yellow-700', label: 'Att Materiel' },
+      'ATT_DECISION': { bg: 'bg-orange-100', text: 'text-orange-700', label: 'Att Decision' },
+      'TERMINE': { bg: 'bg-green-100', text: 'text-green-700', label: 'Termine' }
     };
     const badge = badges[statut] || badges['OUVERT'];
-    return (
+
+    // Tooltip pour ATT_MATERIEL et ATT_DECISION
+    let tooltipText = null;
+    if (wo) {
+      if ((statut === 'ATT_MATERIEL' || statut === 'EN_ATTENTE') && wo.att_materiel_info) {
+        tooltipText = wo.att_materiel_info;
+      } else if (statut === 'ATT_DECISION' && wo.att_decision_info) {
+        tooltipText = wo.att_decision_info;
+      }
+    }
+
+    const badgeElement = (
       <span className={`px-3 py-1 rounded-full text-xs font-medium ${badge.bg} ${badge.text}`}>
         {badge.label}
       </span>
     );
+
+    if (tooltipText) {
+      return (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="cursor-help">{badgeElement}</span>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p className="text-sm">{tooltipText}</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      );
+    }
+
+    return badgeElement;
   };
 
   const getPriorityBadge = (priorite) => {
@@ -346,8 +376,9 @@ const WorkOrders = () => {
     { value: 'ALL', label: 'Tous' },
     { value: 'OUVERT', label: 'Ouvert' },
     { value: 'EN_COURS', label: 'En cours' },
-    { value: 'EN_ATTENTE', label: 'En attente' },
-    { value: 'TERMINE', label: 'Terminé' }
+    { value: 'ATT_MATERIEL', label: 'Att Materiel' },
+    { value: 'ATT_DECISION', label: 'Att Decision' },
+    { value: 'TERMINE', label: 'Termine' }
   ];
 
   // ==================== MODE SELECTION & EXPORT PDF GROUPE ====================
@@ -417,7 +448,7 @@ const WorkOrders = () => {
     doc.setFontSize(9);
     doc.setFont(undefined, 'normal');
     doc.setTextColor(120);
-    const statusMap = { OUVERT: 'Ouvert', EN_COURS: 'En cours', EN_ATTENTE: 'En attente', TERMINE: 'Termine' };
+    const statusMap = { OUVERT: 'Ouvert', EN_COURS: 'En cours', ATT_MATERIEL: 'Att Materiel', ATT_DECISION: 'Att Decision', EN_ATTENTE: 'Att Materiel', TERMINE: 'Termine' };
     const prioMap = { HAUTE: 'Haute', MOYENNE: 'Moyenne', BASSE: 'Basse', AUCUNE: 'Normale' };
     doc.text(`Statut: ${statusMap[wo.statut] || wo.statut}  |  Priorite: ${prioMap[wo.priorite] || wo.priorite}`, margin + 24, y + 14);
     y += 22;
@@ -915,7 +946,7 @@ const WorkOrders = () => {
                           <LOTOBadge lotoInfo={lotoByLinked[wo.id]} />
                         </div>
                       </td>
-                      <td className="py-3 px-4">{getStatusBadge(wo.statut)}</td>
+                      <td className="py-3 px-4">{getStatusBadge(wo.statut, wo)}</td>
                       <td className="py-3 px-4 text-sm text-gray-900 font-medium">{wo.titre}</td>
                       <td className="py-3 px-4">{getPriorityBadge(wo.priorite)}</td>
                       <td className="py-3 px-4">

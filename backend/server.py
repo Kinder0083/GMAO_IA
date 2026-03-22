@@ -475,9 +475,9 @@ async def get_bell_counts(current_user: dict = Depends(get_current_user)):
     """Compteurs pour les badges de la cloche du header."""
     now = datetime.utcnow()
 
-    # 1. Ordres de travail en attente (statut EN_ATTENTE uniquement)
+    # 1. Ordres de travail en attente (statut ATT_MATERIEL, ATT_DECISION ou ancien EN_ATTENTE)
     wo_count = await db.work_orders.count_documents({
-        "statut": "EN_ATTENTE"
+        "statut": {"$in": ["ATT_MATERIEL", "ATT_DECISION", "EN_ATTENTE"]}
     })
 
     # 2. Améliorations en attente (statut EN_ATTENTE uniquement)
@@ -1140,6 +1140,19 @@ async def check_llm_versions_job():
     except Exception as e:
         logger.error(f"Erreur vérification versions LLM: {e}")
 
+
+@app.on_event("startup")
+async def migrate_en_attente_status():
+    """Migrer les anciens statuts EN_ATTENTE vers ATT_MATERIEL"""
+    try:
+        result = await db.work_orders.update_many(
+            {"statut": "EN_ATTENTE"},
+            {"$set": {"statut": "ATT_MATERIEL"}}
+        )
+        if result.modified_count > 0:
+            logger.info(f"Migration: {result.modified_count} OT EN_ATTENTE -> ATT_MATERIEL")
+    except Exception as e:
+        logger.warning(f"Erreur migration statuts: {e}")
 
 @app.on_event("startup")
 async def start_mes_report_scheduler():

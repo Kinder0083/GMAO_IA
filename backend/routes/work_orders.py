@@ -102,8 +102,8 @@ async def get_work_orders(
 
     work_orders = await db.work_orders.find(query).to_list(1000)
 
-    VALID_STATUTS = {"OUVERT", "EN_COURS", "EN_ATTENTE", "TERMINE"}
-    STATUT_MAP = {"en_attente": "EN_ATTENTE", "en_cours": "EN_COURS", "ouvert": "OUVERT", "termine": "TERMINE"}
+    VALID_STATUTS = {"OUVERT", "EN_COURS", "ATT_MATERIEL", "ATT_DECISION", "TERMINE", "EN_ATTENTE"}
+    STATUT_MAP = {"en_attente": "ATT_MATERIEL", "att_materiel": "ATT_MATERIEL", "att_decision": "ATT_DECISION", "en_cours": "EN_COURS", "ouvert": "OUVERT", "termine": "TERMINE"}
     VALID_PRIORITES = {"URGENTE", "HAUTE", "MOYENNE", "NORMALE", "BASSE", "AUCUNE"}
 
     for wo in work_orders:
@@ -111,7 +111,7 @@ async def get_work_orders(
 
         raw_statut = wo.get("statut", "")
         if raw_statut and raw_statut not in VALID_STATUTS:
-            wo["statut"] = STATUT_MAP.get(raw_statut.lower(), raw_statut.upper() if raw_statut.upper() in VALID_STATUTS else "EN_ATTENTE")
+            wo["statut"] = STATUT_MAP.get(raw_statut.lower(), raw_statut.upper() if raw_statut.upper() in VALID_STATUTS else "ATT_MATERIEL")
         raw_prio = wo.get("priorite", "")
         if raw_prio and raw_prio.upper() in VALID_PRIORITES and raw_prio not in VALID_PRIORITES:
             wo["priorite"] = raw_prio.upper()
@@ -159,14 +159,14 @@ async def get_work_orders(
         wo.setdefault("id", str(wo.get("_id", "")))
         wo.setdefault("titre", wo.get("title", "Sans titre"))
         wo.setdefault("description", wo.get("desc", ""))
-        wo.setdefault("statut", wo.get("status", "EN_ATTENTE"))
+        wo.setdefault("statut", wo.get("status", "OUVERT"))
         wo.setdefault("priorite", wo.get("priority", "AUCUNE"))
         wo.setdefault("dateCreation", wo.get("date_creation", datetime.utcnow()))
         wo.setdefault("createdBy", wo.get("created_by", "inconnu"))
         if isinstance(wo.get("priorite"), str):
             wo["priorite"] = wo["priorite"].upper()
         if isinstance(wo.get("statut"), str) and wo["statut"] not in VALID_STATUTS:
-            wo["statut"] = STATUT_MAP.get(wo["statut"].lower(), "EN_ATTENTE")
+            wo["statut"] = STATUT_MAP.get(wo["statut"].lower(), wo["statut"].upper())
         try:
             result.append(WorkOrder(**wo))
         except Exception as e:
@@ -191,11 +191,11 @@ async def get_work_order(wo_id: str, current_user: dict = Depends(require_permis
 
         wo = serialize_doc(wo)
 
-        VALID_STATUTS = {"OUVERT", "EN_COURS", "EN_ATTENTE", "TERMINE"}
-        STATUT_MAP = {"en_attente": "EN_ATTENTE", "en_cours": "EN_COURS", "ouvert": "OUVERT", "termine": "TERMINE"}
+        VALID_STATUTS = {"OUVERT", "EN_COURS", "ATT_MATERIEL", "ATT_DECISION", "TERMINE", "EN_ATTENTE"}
+        STATUT_MAP = {"en_attente": "ATT_MATERIEL", "att_materiel": "ATT_MATERIEL", "att_decision": "ATT_DECISION", "en_cours": "EN_COURS", "ouvert": "OUVERT", "termine": "TERMINE"}
         raw_statut = wo.get("statut", "")
         if raw_statut and raw_statut not in VALID_STATUTS:
-            wo["statut"] = STATUT_MAP.get(raw_statut.lower(), raw_statut.upper() if raw_statut.upper() in VALID_STATUTS else "EN_ATTENTE")
+            wo["statut"] = STATUT_MAP.get(raw_statut.lower(), raw_statut.upper() if raw_statut.upper() in VALID_STATUTS else "ATT_MATERIEL")
 
         if wo.get("assigne_a_id"):
             wo["assigneA"] = await get_user_by_id(wo["assigne_a_id"])
@@ -322,7 +322,7 @@ async def update_work_order(wo_id: str, wo_update: WorkOrderUpdate, current_user
         created_by = existing_wo.get("createdBy")
 
         update_fields = set(wo_update.model_dump(exclude_unset=True).keys())
-        is_status_only = update_fields == {'statut'}
+        is_status_only = update_fields <= {'statut', 'att_materiel_info', 'att_decision_info'}
 
         if user_role == "ADMIN":
             can_full_edit = True
@@ -376,11 +376,11 @@ async def update_work_order(wo_id: str, wo_update: WorkOrderUpdate, current_user
         wo = await db.work_orders.find_one(wo_filter)
         wo = serialize_doc(wo)
 
-        VALID_STATUTS = {"OUVERT", "EN_COURS", "EN_ATTENTE", "TERMINE"}
-        STATUT_MAP = {"en_attente": "EN_ATTENTE", "en_cours": "EN_COURS", "ouvert": "OUVERT", "termine": "TERMINE"}
+        VALID_STATUTS = {"OUVERT", "EN_COURS", "ATT_MATERIEL", "ATT_DECISION", "TERMINE", "EN_ATTENTE"}
+        STATUT_MAP = {"en_attente": "ATT_MATERIEL", "att_materiel": "ATT_MATERIEL", "att_decision": "ATT_DECISION", "en_cours": "EN_COURS", "ouvert": "OUVERT", "termine": "TERMINE"}
         raw_statut = wo.get("statut", "")
         if raw_statut and raw_statut not in VALID_STATUTS:
-            wo["statut"] = STATUT_MAP.get(raw_statut.lower(), raw_statut.upper() if raw_statut.upper() in VALID_STATUTS else "EN_ATTENTE")
+            wo["statut"] = STATUT_MAP.get(raw_statut.lower(), raw_statut.upper() if raw_statut.upper() in VALID_STATUTS else "ATT_MATERIEL")
         if "numero" not in wo or not wo["numero"]:
             wo["numero"] = "N/A"
 
