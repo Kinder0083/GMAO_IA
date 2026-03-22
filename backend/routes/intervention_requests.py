@@ -21,7 +21,7 @@ from models import (
 )
 from pydantic import BaseModel
 from dependencies import get_current_user, get_current_admin_user, require_permission
-from routes.shared import db, audit_service, serialize_doc, find_user_flexible
+from routes.shared import db, audit_service, serialize_doc, find_user_flexible, get_next_work_order_numero
 
 EntityType_Audit = EntityType
 logger = logging.getLogger(__name__)
@@ -660,9 +660,8 @@ async def convert_to_work_order(
         # Créer l'ordre de travail
         work_order_id = str(uuid.uuid4())
         
-        # Générer le numéro d'ordre (comme pour les créations normales)
-        count = await db.work_orders.count_documents({})
-        numero = str(5800 + count + 1)
+        # Générer le numéro d'ordre (compteur atomique)
+        numero = await get_next_work_order_numero()
         
         # Utiliser la date limite fournie ou celle de la demande
         date_limite_ordre = None

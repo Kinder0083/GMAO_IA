@@ -124,6 +124,18 @@ def _get_realtime_manager():
     return realtime_manager
 
 
+async def get_next_work_order_numero():
+    """Génère le prochain numéro d'OT via un compteur atomique MongoDB.
+    Utilise findOneAndUpdate avec $inc pour garantir l'unicité même en cas de requêtes simultanées."""
+    result = await db.counters.find_one_and_update(
+        {"_id": "work_order_numero"},
+        {"$inc": {"seq": 1}},
+        upsert=True,
+        return_document=True
+    )
+    return str(result["seq"])
+
+
 async def get_equipment_by_id(equipment_id: str):
     """Get equipment details by ID"""
     try:

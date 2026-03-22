@@ -1883,9 +1883,9 @@ async def _create_curative_work_order(
     """Crée un bon de travail curatif pour une non-conformité détectée."""
     try:
         from bson import ObjectId as BsonObjectId
+        from routes.shared import get_next_work_order_numero
         
-        wo_count = await db.work_orders.count_documents({})
-        wo_numero = str(5800 + wo_count + 1)
+        wo_numero = await get_next_work_order_numero()
         
         wo_dict = {
             "_id": BsonObjectId(),

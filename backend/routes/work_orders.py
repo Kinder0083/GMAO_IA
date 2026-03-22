@@ -30,7 +30,8 @@ from openapi_config import STANDARD_ERRORS
 from routes.shared import (
     db, audit_service, serialize_doc,
     find_work_order_flexible, find_user_flexible,
-    get_user_by_id, get_location_by_id, get_equipment_by_id
+    get_user_by_id, get_location_by_id, get_equipment_by_id,
+    get_next_work_order_numero
 )
 
 logger = logging.getLogger(__name__)
@@ -228,8 +229,7 @@ async def get_work_order(wo_id: str, current_user: dict = Depends(require_permis
     summary="Creer un ordre de travail")
 async def create_work_order(wo_create: WorkOrderCreate, current_user: dict = Depends(require_permission("workOrders", "edit"))):
     """Créer un nouvel ordre de travail"""
-    count = await db.work_orders.count_documents({})
-    numero = str(5800 + count + 1)
+    numero = await get_next_work_order_numero()
 
     wo_dict = wo_create.model_dump()
     wo_dict["numero"] = numero

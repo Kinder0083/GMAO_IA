@@ -782,9 +782,9 @@ async def create_work_orders_from_analysis(
         
         created = []
         for wo_data in suggested_wos:
-            # Générer numéro séquentiel
-            count = await db.work_orders.count_documents({})
-            numero = str(5800 + count + 1)
+            # Générer numéro séquentiel (compteur atomique)
+            from routes.shared import get_next_work_order_numero
+            numero = await get_next_work_order_numero()
             
             priorite = priority_map.get(wo_data.get("priorite", "NORMALE"), "NORMALE")
             

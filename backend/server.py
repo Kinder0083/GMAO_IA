@@ -1155,6 +1155,25 @@ async def migrate_en_attente_status():
         logger.warning(f"Erreur migration statuts: {e}")
 
 @app.on_event("startup")
+async def init_work_order_counter():
+    """Initialise le compteur atomique de numéros d'OT avec le max existant."""
+    try:
+        pipeline = [
+            {"$addFields": {"numero_int": {"$toInt": "$numero"}}},
+            {"$group": {"_id": None, "max_numero": {"$max": "$numero_int"}}}
+        ]
+        result = await db.work_orders.aggregate(pipeline).to_list(1)
+        max_numero = result[0]["max_numero"] if result and result[0].get("max_numero") else 5800
+        await db.counters.update_one(
+            {"_id": "work_order_numero"},
+            {"$max": {"seq": max_numero}},
+            upsert=True
+        )
+        logger.info(f"Compteur OT initialisé: dernier numéro = {max_numero}")
+    except Exception as e:
+        logger.warning(f"Erreur initialisation compteur OT: {e}")
+
+@app.on_event("startup")
 async def start_mes_report_scheduler():
     try:
         await init_mes_report_scheduler(db, _mes_svc_ref, email_service_module)
