@@ -1,31 +1,50 @@
-# FSAO Iris - GMAO (Gestion de la Maintenance Assistée par Ordinateur)
+# GMAO FSAO Iris - PRD
 
-## Problème original
-Application CMMS/GMAO complète pour la gestion de la maintenance industrielle, développée avec React/FastAPI/MongoDB.
+## Problème Original
+Application GMAO (Gestion de Maintenance Assistée par Ordinateur) complète pour la gestion d'équipements, d'ordres de travail, de maintenance préventive, d'inventaire, etc.
 
-## Architecture technique
-- **Frontend** : React, Tailwind CSS, Shadcn UI, jsPDF
-- **Backend** : FastAPI (Python) - Architecture modulaire (22+ modules core + 51 externes)
-- **Base de données** : MongoDB (Motor async)
-- **Temps réel** : WebSockets (realtime_manager)
+## Architecture
+- **Frontend**: React + Tailwind + Shadcn UI (port 3000)
+- **Backend**: FastAPI + Motor (MongoDB async) (port 8001)
+- **DB**: MongoDB (gmao_iris)
+- **Intégrations**: OpenAI/Emergent LLM Key, Web Push PWA (VAPID)
 
-## Tâches complétées
-- [x] Edition/Suppression temps et commentaires OT (Admin only) + audit
-- [x] Filtres de période page Rapports & Analytiques
-- [x] Refactoring massif server.py (13000 -> 1740 lignes)
-- [x] Section Architecture Backend dans Santé Système
-- [x] Correction dropdown Equipement OT/DI (parent/sous-equipement)
-- [x] Export PDF et Impression OT individuels (dans le dialog)
-- [x] **Export PDF et Impression groupés** :
-  - Boutons "Export PDF" + icône imprimante dans le header de la page OT
-  - Mode sélection avec checkboxes sur chaque OT
-  - Barre flottante : "Tout sélectionner" / "Tout désélectionner" / "Annuler" / "Valider"
-  - Génération d'un seul PDF avec tous les OT sélectionnés (un par page)
-  - Chaque OT : logo FSAO + numéro, titre, description, dates, commentaires, pièces jointes, photos
+## Structure Backend Modulaire
+```
+/app/backend/
+├── server.py (setup principal, routers)
+├── models.py (modèles Pydantic)
+└── routes/
+    ├── shared.py (db, serialize_doc, helpers)
+    ├── work_orders.py
+    ├── equipments.py
+    └── notification_health.py
+```
+
+## Fonctionnalités Implémentées
+
+### Session Précédente
+- Refactoring backend modulaire (12+ fichiers)
+- Page Santé Système avec métriques architecture
+- Dropdown Équipement parent/enfant (OT & DI)
+- Export PDF individuel des OT (jsPDF)
+- Export PDF en masse des OT avec mode sélection
+
+### Session Actuelle (22 mars 2026)
+- **Fix: Statuts OT "Att Matériel" et "Att Décision"** - Complet et testé
+  - Modèle `WorkOrder` response: ajout `att_materiel_info`, `att_decision_info`
+  - Route PUT: correction `is_status_only` pour autoriser les champs info avec le statut
+  - Frontend: `StatusChangeDialog.jsx` avec champs conditionnels
+  - Frontend: Tooltips sur badges de statut dans la liste OT
+  - Tests: iteration_153.json - 100% backend et frontend
+
+## Schéma DB Clé
+- `work_orders`: `{_id, id, numero, statut (OUVERT|EN_COURS|ATT_MATERIEL|ATT_DECISION|TERMINE), att_materiel_info, att_decision_info, titre, description, ...}`
+- `equipments`: `{_id, id, nom, parent_id, ...}`
+
+## Credentials de Test
+- Admin: `buenogy@gmail.com` / `TestAdmin2026!`
 
 ## Backlog
-- **(P3)** Tester le script de mise à jour `MAJ_FSAO.sh`
-- En attente des consignes utilisateur
-
-## Credentials de test
-- Admin: buenogy@gmail.com / TestAdmin2026!
+- P2: Tester le script `MAJ_FSAO.sh`
+- Aucune autre tâche explicitement demandée
