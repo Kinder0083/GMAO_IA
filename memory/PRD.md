@@ -59,10 +59,17 @@ Application GMAO (Gestion de Maintenance Assistée par Ordinateur) complète pou
 ### Session 22 mars 2026 (suite - fork)
 - **Fix P0: Admins absents des listes d'assignation** - Tests: iteration_155.json - 100%
   - Cause racine: filtre MongoDB `deleted_at` trop restrictif pour données legacy
-  - Ancien filtre: `{"deleted_at": None}` ou `{"$exists": False}` ne couvrait pas `""`, `false`, `0`
   - Nouveau filtre global: `NOT_DELETED = {"deleted_at": {"$in": [None, "", False, 0]}}` dans `routes/shared.py`
   - Appliqué dans: `users.py`, `service_manager.py`, `work_orders.py`, `equipments.py`, `intervention_requests.py`, `improvements.py`, `reports.py`, `server.py`
-  - Fallback `_id → id` dans `serialize_doc` + `service_manager.py` pour utilisateurs sans champ `id`
+- **Fix tri OT** : tri descendant (récent → ancien) avec gestion types mixtes datetime/string
+- **Mise à jour README.md** v1.10.0 → v1.11.0 : documentation complète des nouvelles fonctionnalités
+
+### Session 23 mars 2026
+- **Édition temps passé : date de pointage + permissions étendues** - Tests: iteration_156.json - 100%
+  - Ajout champ date de pointage éditable dans le formulaire inline des time_entries
+  - Backend: `TimeEntryUpdate` accepte `timestamp` optionnel, sauvegarde en base
+  - Permission étendue: `require_permission("workOrders", "delete")` au lieu de `get_current_admin_user`
+  - Frontend: `canManageTimeEntries = isAdmin() || (canEdit('workOrders') && canDelete('workOrders'))`
 
 ## Schéma DB Clé
 - `work_orders`: `{_id, id, numero, statut, att_materiel_info, att_decision_info, ...}`
