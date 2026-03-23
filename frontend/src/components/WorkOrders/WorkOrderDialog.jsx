@@ -13,7 +13,9 @@ import { Textarea } from '../ui/textarea';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Calendar, Clock, User, MapPin, Wrench, FileText, MessageSquare, Send, Plus, Package, X, Pencil, Trash2, Check, Printer, Download } from 'lucide-react';
+import { Calendar as CalendarIcon, Clock, User, MapPin, Wrench, FileText, MessageSquare, Send, Plus, Package, X, Pencil, Trash2, Check, Printer, Download, CalendarDays } from 'lucide-react';
+import { Calendar as CalendarPicker } from '../ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import AttachmentsList from './AttachmentsList';
 import AttachmentUploader from './AttachmentUploader';
 import StatusChangeDialog from './StatusChangeDialog';
@@ -949,7 +951,7 @@ const WorkOrderDialog = ({ open, onOpenChange, workOrder, onSuccess }) => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Créé le */}
             <div className="flex items-start gap-3 md:col-span-2">
-              <Calendar size={18} className="text-blue-600 mt-1" />
+              <CalendarIcon size={18} className="text-blue-600 mt-1" />
               <div>
                 <p className="text-sm text-gray-600">Créé le</p>
                 <p className="font-medium text-gray-900">
@@ -960,7 +962,7 @@ const WorkOrderDialog = ({ open, onOpenChange, workOrder, onSuccess }) => {
 
             {/* Date limite */}
             <div className="flex items-start gap-3">
-              <Calendar size={18} className="text-red-600 mt-1" />
+              <CalendarIcon size={18} className="text-red-600 mt-1" />
               <div>
                 <p className="text-sm text-gray-600">Date limite</p>
                 <p className="font-medium text-gray-900">{workOrder.dateLimite}</p>
@@ -1304,13 +1306,33 @@ const WorkOrderDialog = ({ open, onOpenChange, workOrder, onSuccess }) => {
                   <div key={entry.id} className="flex items-center justify-between text-sm bg-white rounded px-3 py-1.5 shadow-sm">
                     {editingTimeId === entry.id ? (
                       <div className="flex items-center gap-2 flex-1">
-                        <input
-                          data-testid={`edit-time-date-${entry.id}`}
-                          type="date"
-                          value={editingTimeDate}
-                          onChange={(e) => setEditingTimeDate(e.target.value)}
-                          className="h-7 text-sm border rounded px-2 bg-white"
-                        />
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <button
+                              data-testid={`edit-time-date-${entry.id}`}
+                              type="button"
+                              className="h-7 text-sm border rounded px-2 bg-white flex items-center gap-1 hover:bg-gray-50 min-w-[130px]"
+                            >
+                              <CalendarDays size={13} className="text-gray-500" />
+                              {editingTimeDate || 'Choisir date'}
+                            </button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start" side="bottom" sideOffset={4}>
+                            <CalendarPicker
+                              mode="single"
+                              selected={editingTimeDate ? new Date(editingTimeDate + 'T12:00:00') : undefined}
+                              onSelect={(date) => {
+                                if (date) {
+                                  const y = date.getFullYear();
+                                  const m = String(date.getMonth() + 1).padStart(2, '0');
+                                  const d = String(date.getDate()).padStart(2, '0');
+                                  setEditingTimeDate(`${y}-${m}-${d}`);
+                                }
+                              }}
+                              initialFocus
+                            />
+                          </PopoverContent>
+                        </Popover>
                         <Input
                           data-testid={`edit-time-input-${entry.id}`}
                           type="text"
