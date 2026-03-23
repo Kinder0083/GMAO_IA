@@ -1,7 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 /**
  * Hook personnalisé pour gérer les permissions de l'utilisateur connecté
+ * IMPORTANT : toutes les fonctions retournées sont stabilisées via useCallback
+ * pour éviter les re-renders infinis dans les composants qui les utilisent
+ * comme dépendances de useEffect/useMemo/useCallback.
  */
 export const usePermissions = () => {
   const [permissions, setPermissions] = useState(null);
@@ -23,11 +26,9 @@ export const usePermissions = () => {
 
   /**
    * Vérifie si l'utilisateur a une permission spécifique
-   * @param {string} module - Nom du module (ex: 'workOrders', 'assets')
-   * @param {string} permissionType - Type de permission ('view', 'edit', 'delete')
-   * @returns {boolean} true si l'utilisateur a la permission
+   * Stabilisé avec useCallback pour éviter les re-renders inutiles
    */
-  const hasPermission = (module, permissionType) => {
+  const hasPermission = useCallback((module, permissionType) => {
     // Les admins ont toujours toutes les permissions
     if (userRole === 'ADMIN') {
       return true;
@@ -38,27 +39,28 @@ export const usePermissions = () => {
     }
 
     return permissions[module][permissionType] === true;
-  };
+  }, [userRole, permissions]);
 
   /**
    * Vérifie si l'utilisateur peut voir un module
    */
-  const canView = (module) => hasPermission(module, 'view');
+  const canView = useCallback((module) => hasPermission(module, 'view'), [hasPermission]);
 
   /**
    * Vérifie si l'utilisateur peut modifier un module
    */
-  const canEdit = (module) => hasPermission(module, 'edit');
+  const canEdit = useCallback((module) => hasPermission(module, 'edit'), [hasPermission]);
 
   /**
    * Vérifie si l'utilisateur peut supprimer dans un module
    */
-  const canDelete = (module) => hasPermission(module, 'delete');
+  const canDelete = useCallback((module) => hasPermission(module, 'delete'), [hasPermission]);
 
   /**
    * Vérifie si l'utilisateur est admin
+   * Stabilisé avec useCallback — ne change que quand userRole change
    */
-  const isAdmin = () => userRole === 'ADMIN';
+  const isAdmin = useCallback(() => userRole === 'ADMIN', [userRole]);
 
   return {
     permissions,

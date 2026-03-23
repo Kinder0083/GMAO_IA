@@ -87,6 +87,17 @@ Application GMAO (Gestion de Maintenance Assistée par Ordinateur) complète pou
 ## Credentials de Test
 - Admin: `buenogy@gmail.com` / `TestAdmin2026!`
 
+### Session 24 mars 2026 (fork)
+- **Fix P0: Écran blanc (crash React) à la connexion d'un technicien avec consignes en attente**
+  - **Bug 1 (ConsignePopup.jsx)**: `currentConsigne` dans les dépendances `useCallback` → `loadPendingConsignes` recréée à chaque changement de consigne → `useEffect` ré-exécuté → boucle API. Corrigé via `useRef` pour lire l'état courant sans dépendance.
+  - **Bug 2 (usePermissions.js - ROOT CAUSE)**: `isAdmin`, `canView`, `canEdit`, `canDelete` créées inline à chaque render → nouvelle référence à chaque render → `visibleWidgets` (useMemo dans Dashboard.jsx) recalculé à chaque render → `useEffect([preferences, visibleWidgets])` se déclenchait à chaque render → `setLayoutItems(nouveau_tableau)` → re-render → boucle infinie ("Maximum update depth exceeded"). Corrigé en stabilisant toutes les fonctions avec `useCallback` dans `usePermissions.js`.
+  - Résultat: 0 "Maximum update depth exceeded" en console, popup de consigne s'affiche et s'acquitte correctement.
+
+## Credentials de Test
+- Admin: `buenogy@gmail.com` / `TestAdmin2026!`
+- Technicien local: `axel@gmail.com` / `TestTech2026!`
+
 ## Backlog
 - P2: Tester le script `MAJ_FSAO.sh`
-- Aucune autre tâche explicitement demandée (en attente des consignes utilisateur)
+- Refactorisation DB: normaliser les types UUID/ObjectId et String/Datetime dans toutes les collections (prévention régressions futures)
+- En attente des prochaines consignes utilisateur

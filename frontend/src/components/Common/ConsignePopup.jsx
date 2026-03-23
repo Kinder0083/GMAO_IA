@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { AlertTriangle, User, Clock, CheckCircle } from 'lucide-react';
 import { Button } from '../ui/button';
 import { useToast } from '../../hooks/use-toast';
@@ -13,11 +13,19 @@ const ConsignePopup = () => {
   const [currentConsigne, setCurrentConsigne] = useState(null);
   const [acknowledging, setAcknowledging] = useState(false);
   const { toast } = useToast();
-  
+
+  // Utiliser useRef pour lire la valeur courante sans créer de dépendances dans useCallback
+  const currentConsigneRef = useRef(null);
+  useEffect(() => {
+    currentConsigneRef.current = currentConsigne;
+  }, [currentConsigne]);
+
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const userId = user.id;
 
   // Charger les consignes non lues au démarrage
+  // IMPORTANT : currentConsigne est intentionnellement absent des dépendances
+  // pour éviter la boucle infinie useCallback → useEffect → setState → re-render
   const loadPendingConsignes = useCallback(async () => {
     if (!userId) return;
     
@@ -25,15 +33,15 @@ const ConsignePopup = () => {
       const response = await api.get('/consignes/pending');
       if (response.data && response.data.length > 0) {
         setConsignes(response.data);
-        // Afficher la première consigne non lue
-        if (!currentConsigne) {
+        // Utiliser la ref pour éviter le stale closure
+        if (!currentConsigneRef.current) {
           setCurrentConsigne(response.data[0]);
         }
       }
     } catch (error) {
       console.error('Erreur chargement consignes:', error);
     }
-  }, [userId, currentConsigne]);
+  }, [userId]); // userId seulement — pas currentConsigne
 
   // Écouter les nouvelles consignes via WebSocket
   useEffect(() => {
@@ -66,8 +74,8 @@ const ConsignePopup = () => {
           console.log('📩 Nouvelle consigne reçue:', data.consigne);
           setConsignes(prev => [...prev, data.consigne]);
           
-          // Si pas de consigne affichée, afficher celle-ci
-          if (!currentConsigne) {
+          // Utiliser la ref pour lire l'état courant sans dépendance
+          if (!currentConsigneRef.current) {
             setCurrentConsigne(data.consigne);
           }
           
