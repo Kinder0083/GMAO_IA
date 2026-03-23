@@ -722,8 +722,88 @@ ALARM_LABELS = {
     "contexte_facteurs": "Facteurs contexte institutionnel",
 }
 
+# Mapping des phases ALARM (id -> titre)
+ALARM_PHASE_LABELS = {
+    "materiel_produit": "Materiel et Produit",
+    "individu": "Individu (L'acteur)",
+    "tache": "Tache (Mode operatoire)",
+    "equipe": "Equipe (Communication)",
+    "environnement": "Environnement de travail",
+    "organisation": "Organisation et Management",
+    "institutionnel": "Institutionnel (Contexte)",
+}
 
-def _build_pdf_html(analysis: dict, selected_action_indices: list = None) -> str:
+ALARM_SERVICE_LABELS = {
+    "production": "Production",
+    "maintenance": "Maintenance",
+    "logistique": "Logistique",
+}
+
+
+def _format_item_id(item_id: str) -> str:
+    """Convertit un ID d'item ALARM en label lisible (ex: 'produit_non_conforme' -> 'Produit non conforme')"""
+    return item_id.replace("_", " ").capitalize()
+
+
+async def _build_alarm_grille_html(alarm_grille: dict) -> str:
+    """Genere le HTML pour la grille ALARM a partir des cases cochees"""
+    if not alarm_grille:
+        return ""
+
+    # Charger les items personnalises depuis la DB pour resoudre les labels
+    item_labels = {}
+    try:
+        config = await db.global_settings.find_one({"key": "accident_alarm_items"}, {"_id": 0})
+        if config and config.get("value", {}).get("phases"):
+            for phase in config["value"]["phases"]:
+                for service in phase.get("services", []):
+                    for item in service.get("items", []):
+                        if item.get("id") and item.get("label"):
+                            item_labels[item["id"]] = item["label"]
+    except Exception:
+        pass
+
+    html = ""
+    for phase_id, phase_data in alarm_grille.items():
+        if not isinstance(phase_data, dict):
+            continue
+
+        phase_label = ALARM_PHASE_LABELS.get(phase_id, phase_id.replace("_", " ").capitalize())
+        phase_has_items = False
+        phase_html = ""
+
+        for service_id in ["production", "maintenance", "logistique"]:
+            service_data = phase_data.get(service_id, {})
+            if not isinstance(service_data, dict):
+                continue
+            checked = service_data.get("checked", [])
+            observations = service_data.get("observations", "")
+            if not checked and not observations:
+                continue
+
+            phase_has_items = True
+            service_label = ALARM_SERVICE_LABELS.get(service_id, service_id.capitalize())
+
+            items_text = ""
+            if checked:
+                item_names = [item_labels.get(iid, _format_item_id(iid)) for iid in checked]
+                items_text = ", ".join(item_names)
+            if observations:
+                if items_text:
+                    items_text += f" — <em>Obs: {observations}</em>"
+                else:
+                    items_text = f"<em>Obs: {observations}</em>"
+
+            phase_html += f"<tr><td style='padding-left:30px;'>{service_label}</td><td>{items_text}</td></tr>"
+
+        if phase_has_items:
+            html += f"<tr><td class='label' colspan='2' style='background:#fef2f2;'>{phase_label}</td></tr>"
+            html += phase_html
+
+    return html
+
+
+async def _build_pdf_html(analysis: dict, selected_action_indices: list = None) -> str:
     """Genere le HTML du rapport PDF pour une analyse d'accident"""
     titre = analysis.get("titre", "Analyse")
     date_acc = analysis.get("date_accident", "N/A")
@@ -759,14 +839,18 @@ def _build_pdf_html(analysis: dict, selected_action_indices: list = None) -> str
             items = ", ".join(c.get("cause", str(c)) if isinstance(c, dict) else str(c) for c in causes)
             ishikawa_html += f"<tr><td class='label'>{label}</td><td>{items}</td></tr>"
 
-    # ALARM
-    alarm = analysis.get("alarm", {})
-    alarm_html = ""
-    for key, label in ALARM_LABELS.items():
-        factors = alarm.get(key, [])
-        if factors:
-            items = ", ".join(f.get("facteur", str(f)) if isinstance(f, dict) else str(f) for f in factors)
-            alarm_html += f"<tr><td class='label'>{label}</td><td>{items}</td></tr>"
+    # ALARM - Lire alarm_grille (cases cochees par l'utilisateur)
+    alarm_grille = analysis.get("alarm_grille", {})
+    alarm_grille_html = await _build_alarm_grille_html(alarm_grille)
+
+    # Fallback : anciennes données alarm (facteurs IA)
+    if not alarm_grille_html:
+        alarm = analysis.get("alarm", {})
+        for key, label in ALARM_LABELS.items():
+            factors = alarm.get(key, [])
+            if factors:
+                items = ", ".join(f.get("facteur", str(f)) if isinstance(f, dict) else str(f) for f in factors)
+                alarm_grille_html += f"<tr><td class='label'>{label}</td><td>{items}</td></tr>"
 
     # Actions correctives (filtrées si indices fournis)
     all_actions = analysis.get("actions_correctives", [])
@@ -870,7 +954,7 @@ def _build_pdf_html(analysis: dict, selected_action_indices: list = None) -> str
 {"<table><tr><th>Categorie</th><th>Causes identifiees</th></tr>" + ishikawa_html + "</table>" if ishikawa_html else "<p style='color:#999;'>Non renseigne</p>"}
 
 <h2>4. Grille ALARM</h2>
-{"<table><tr><th>Categorie</th><th>Facteurs identifies</th></tr>" + alarm_html + "</table>" if alarm_html else "<p style='color:#999;'>Non renseigne</p>"}
+{"<table><tr><th>Phase / Service</th><th>Facteurs identifies</th></tr>" + alarm_grille_html + "</table>" if alarm_grille_html else "<p style='color:#999;'>Non renseigne</p>"}
 
 <h2>5. Actions correctives et preventives retenues</h2>
 {"<table><tr><th>#</th><th>Action</th><th>Description</th><th>Priorite</th><th>Type</th><th>Source</th></tr>" + actions_html + "</table>" if actions_html else "<p style='color:#999;'>Aucune action</p>"}
@@ -915,7 +999,7 @@ async def generate_analysis_pdf(
         except ValueError:
             pass
 
-    html = _build_pdf_html(doc, selected)
+    html = await _build_pdf_html(doc, selected)
     return HTMLResponse(content=html)
 
 
