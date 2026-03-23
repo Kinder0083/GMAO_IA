@@ -128,9 +128,17 @@ const ConsignePopup = () => {
       });
     } catch (error) {
       console.error('Erreur acquittement consigne:', error);
+      // En cas d'erreur, retirer quand même la consigne de l'affichage pour éviter le blocage
+      const remaining = consignes.filter(c => c.id !== currentConsigne.id);
+      setConsignes(remaining);
+      if (remaining.length > 0) {
+        setCurrentConsigne(remaining[0]);
+      } else {
+        setCurrentConsigne(null);
+      }
       toast({
         title: 'Erreur',
-        description: 'Impossible d\'acquitter la consigne',
+        description: 'Impossible d\'acquitter la consigne. Elle sera reproposée ultérieurement.',
         variant: 'destructive'
       });
     } finally {

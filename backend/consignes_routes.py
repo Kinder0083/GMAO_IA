@@ -346,15 +346,24 @@ async def acknowledge_consigne(
         user_id = current_user.get("id")
         user_name = f"{current_user.get('prenom', '')} {current_user.get('nom', '')}".strip()
         
-        # Récupérer la consigne
+        # Récupérer la consigne (recherche flexible par recipient_id)
         try:
             consigne_oid = ObjectId(consigne_id)
-        except:
+        except Exception:
             raise HTTPException(status_code=400, detail="ID consigne invalide")
-        
+
+        # Construire la liste des IDs possibles pour le recipient
+        possible_ids = [user_id]
+        try:
+            user_doc = await db.users.find_one({"_id": ObjectId(user_id)})
+            if user_doc and user_doc.get("id") and user_doc["id"] != user_id:
+                possible_ids.append(user_doc["id"])
+        except Exception:
+            pass
+
         consigne = await db.consignes.find_one({
             "_id": consigne_oid,
-            "recipient_id": user_id
+            "recipient_id": {"$in": possible_ids}
         })
         
         if not consigne:
