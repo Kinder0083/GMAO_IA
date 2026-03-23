@@ -66,10 +66,17 @@ Application GMAO (Gestion de Maintenance Assistée par Ordinateur) complète pou
 
 ### Session 23 mars 2026
 - **Édition temps passé : date de pointage + permissions étendues** - Tests: iteration_156.json - 100%
-  - Ajout champ date de pointage éditable dans le formulaire inline des time_entries
-  - Backend: `TimeEntryUpdate` accepte `timestamp` optionnel, sauvegarde en base
+  - Ajout champ date de pointage éditable (CalendarPicker shadcn, navigation libre entre mois)
+  - Backend: `TimeEntryUpdate` accepte `timestamp` optionnel, **sauvegardé en datetime** (pas string) pour compatibilité rapports
   - Permission étendue: `require_permission("workOrders", "delete")` au lieu de `get_current_admin_user`
   - Frontend: `canManageTimeEntries = isAdmin() || (canEdit('workOrders') && canDelete('workOrders'))`
+- **Fix date pointage dans rapports** : timestamps sauvegardés en `datetime` Python (pas string ISO) pour compatibilité `$gte/$lte` MongoDB
+- **Tri OT** : filtre par défaut "Ouvert" au lieu de "Tous"
+- **Permissions visibilité widgets dashboard** - Tests: iteration_157.json - 100%
+  - Bouton bouclier (Shield) sur chaque widget en mode édition admin
+  - Dialog avec liste d'utilisateurs + cases à cocher (admins cochés/grisés, non-admins modifiables)
+  - Collection `widget_permissions` : `{widget_id, allowed_user_ids}`
+  - Non-admins ne voient que les widgets autorisés
 
 ## Schéma DB Clé
 - `work_orders`: `{_id, id, numero, statut, att_materiel_info, att_decision_info, ...}`
