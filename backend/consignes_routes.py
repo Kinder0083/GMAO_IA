@@ -111,12 +111,15 @@ async def send_consigne(
         
         logger.info(f"📤 Envoi consigne de '{sender_name}' à '{recipient_name}'")
         
+        # Normaliser le recipient_id pour matcher get_current_user (str(_id))
+        normalized_recipient_id = str(recipient["_id"]) if "_id" in recipient else data.recipient_id
+
         # Créer la consigne
         consigne = {
             "sender_id": current_user.get("id"),
             "sender_name": sender_name,
             "sender_email": current_user.get("email"),
-            "recipient_id": data.recipient_id,
+            "recipient_id": normalized_recipient_id,
             "recipient_name": recipient_name,
             "recipient_email": recipient.get("email"),
             "message": data.message,
@@ -133,27 +136,29 @@ async def send_consigne(
         logger.info(f"✅ Consigne créée avec ID: {consigne_id}")
         
         # Vérifier si l'utilisateur est en ligne via le WebSocket Manager du Chat
-        recipient_online = chat_ws_manager.is_user_online(data.recipient_id)
+        recipient_online = chat_ws_manager.is_user_online(normalized_recipient_id) or chat_ws_manager.is_user_online(data.recipient_id)
         logger.debug(f"   - Destinataire en ligne (WebSocket check): {recipient_online}")
         
         # Notifier via WebSocket consigne si connecté à ce canal
         websocket_sent = False
-        if data.recipient_id in consigne_connections:
-            try:
-                ws = consigne_connections[data.recipient_id]
-                await ws.send_json({
-                    "type": "new_consigne",
-                    "consigne": {
-                        "id": consigne_id,
-                        "sender_name": sender_name,
-                        "message": data.message,
-                        "created_at": consigne["created_at"]
-                    }
-                })
-                logger.info(f"✅ Consigne envoyée via WebSocket consigne à {recipient_name}")
-                websocket_sent = True
-            except Exception as e:
-                logger.error(f"❌ Erreur envoi WebSocket consigne: {e}")
+        for rid in [normalized_recipient_id, data.recipient_id]:
+            if rid in consigne_connections:
+                try:
+                    ws = consigne_connections[rid]
+                    await ws.send_json({
+                        "type": "new_consigne",
+                        "consigne": {
+                            "id": consigne_id,
+                            "sender_name": sender_name,
+                            "message": data.message,
+                            "created_at": consigne["created_at"]
+                        }
+                    })
+                    logger.info(f"✅ Consigne envoyée via WebSocket consigne à {recipient_name}")
+                    websocket_sent = True
+                    break
+                except Exception as e:
+                    logger.error(f"❌ Erreur envoi WebSocket consigne: {e}")
         
         # Envoyer les messages MQTT (même si utilisateur hors ligne)
         mqtt_sent = False
@@ -289,9 +294,15 @@ async def get_pending_consignes(
         
         user_id = current_user.get("id")
         logger.debug(f"📋 Récupération consignes en attente pour user: {user_id}")
-        
+
+        # Chercher aussi par l'ID custom de l'utilisateur (pour les consignes legacy)
+        user_doc = await db.users.find_one({"_id": ObjectId(user_id)}) if user_id else None
+        possible_ids = [user_id]
+        if user_doc and user_doc.get("id") and user_doc["id"] != user_id:
+            possible_ids.append(user_doc["id"])
+
         consignes = await db.consignes.find({
-            "recipient_id": user_id,
+            "recipient_id": {"$in": possible_ids},
             "acknowledged": False
         }).sort("created_at", 1).to_list(100)
         
@@ -652,7 +663,7 @@ async def send_consigne_group(
         
         # Créer une consigne pour chaque utilisateur
         for recipient in recipients:
-            recipient_id = recipient.get("id") or str(recipient["_id"])
+            recipient_id = str(recipient["_id"])
             recipient_name = f"{recipient.get('prenom', '')} {recipient.get('nom', '')}".strip()
             
             # Créer la consigne
