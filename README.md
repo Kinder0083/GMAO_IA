@@ -2,7 +2,7 @@
 
 Application de Fonctionnement des Services Assistee par Ordinateur (FSAO) complete et auto-hebergee.
 
-**Version :** 1.10.0
+**Version :** 1.11.0
 **Concepteur :** Greg
 **Derniere mise a jour :** Mars 2026
 
@@ -83,7 +83,11 @@ FSAO Iris integre des fonctionnalites d'IA generative (Gemini Pro) pour automati
 
 ### Ordres de travail
 - Creation, assignation, suivi et historique complet
+- **Tri par date** : les OT sont affiches du plus recent au plus ancien (tri robuste gerant les formats de date mixtes)
 - Gestion des priorites, statuts et temps (estime vs reel)
+- **Statuts avances** : OUVERT, EN_COURS, EN_ATTENTE, ATT_MATERIEL (attente materiel), ATT_DECISION (attente decision), TERMINE. Les statuts ATT_MATERIEL et ATT_DECISION permettent de renseigner des informations complementaires (materiel attendu, decision en attente) qui sont sauvegardees et affichees dans le detail de l'OT
+- **Assignation a un utilisateur ou un service** : le selecteur d'assignation (AssigneeSelector) affiche les services (poles) avec le nombre de membres, puis les utilisateurs tries alphabetiquement. Tous les profils (administrateurs, techniciens, etc.) sont proposes grace a un filtre MongoDB robuste compatible avec les bases legacy
+- **Numerotation unique** : compteur atomique MongoDB (`find_one_and_update` avec `$inc`) garantissant l'unicite des numeros d'OT meme en cas de creation simultanee ou apres suppression
 - Pieces jointes multiples (photos, videos, documents jusqu'a 25 Mo)
 - **Glisser-deposer (drag & drop)** : zone de depot visuelle avec feedback (bordure en pointilles, surbrillance bleue au survol) pour ajouter des fichiers par simple glisser-deposer depuis le bureau, en plus des boutons "Parcourir" et "Appareil photo"
 - **Miniatures des pieces jointes** : affichage des miniatures d'images directement dans les formulaires de creation, modification et visualisation des ordres de travail. Les images protegees sont chargees via des blob URLs authentifies
@@ -145,10 +149,10 @@ FSAO Iris integre des fonctionnalites d'IA generative (Gemini Pro) pour automati
 
 ### Navigation intelligente depuis le header (deep-linking)
 - **Cloche multi-badges** : L'icone cloche du header affiche 3 badges colores independants :
-  - **Rouge** : nombre d'ordres de travail en attente (statut EN_ATTENTE)
+  - **Rouge** : nombre d'ordres de travail en attente materiel (statut ATT_MATERIEL, EN_ATTENTE) + en attente decision (ATT_DECISION)
   - **Violet** : nombre d'ameliorations en attente
   - **Vert** : nombre de maintenances preventives echues (date depassee)
-  - Cliquer sur la cloche ouvre un menu deroulant avec acces direct a chaque categorie, avec le filtre pre-applique
+  - Cliquer sur la cloche ouvre un menu deroulant detaillant les compteurs "Att. Materiel" et "Att. Decision" separement, avec acces direct a chaque categorie et filtre pre-applique
 - **Clic sur les badges du header** : redirige vers la page correspondante avec des filtres pre-appliques
   - Icone echeances (calendrier) → page correspondante filtree sur les elements en retard
   - Icone surveillance (oeil) → plan de surveillance filtre sur les controles en retard
@@ -174,8 +178,12 @@ FSAO Iris integre des fonctionnalites d'IA generative (Gemini Pro) pour automati
 ### Rapports et analytics
 - Tableaux de bord en temps reel
 - Dashboard personnalisable avec widgets custom
+- **Raccourcis bureau style Windows** : Creation de raccourcis vers n'importe quelle page ou URL externe via `CTRL + Clic Droit` (menu contextuel global). Trois tailles disponibles (petit, moyen, grand), personnalisation de l'icone et du label, tri par glisser-deposer en mode edition. Les raccourcis sont affiches en haut du dashboard, separes visuellement des widgets
+- **Mode edition du dashboard** : bouton "Modifier" pour reorganiser les widgets et raccourcis par drag & drop. Un bouton **"+ Widget"** permet de restaurer les widgets precedemment supprimes
+- **Widget Ecart Temps Estime/Reel** : affiche le pourcentage d'ecart entre le temps estime et le temps reel des OT termines, sur le mois glissant et l'annee glissante
+- **Widget Charge OT Restante** : affiche le total des heures estimees pour les OT ouverts, avec le nombre de techniciens maintenance concernes
 - **Dashboard Service par onglets** : 9 onglets independants (ADV, LOGISTIQUE, PRODUCTION, QHSE, MAINTENANCE, LABO, INDUS, DIRECTION, AUTRE), chacun avec ses propres widgets personnalises, preference d'onglet sauvegardee par utilisateur
-- **Widgets connectes aux donnees reelles** : endpoint `/api/dashboard/widget-data` fournissant 10 metriques en temps reel (OT en cours, taux completion, MTTR, stock alerte, etc.)
+- **Widgets connectes aux donnees reelles** : endpoint `/api/dashboard/widget-data` fournissant 12+ metriques en temps reel (OT en cours, taux completion, MTTR, stock alerte, ecart temps estime/reel sur mois et annee glissants, charge OT ouverts, techniciens maintenance, etc.)
 - **Widgets personnalises avec sources Excel** : upload de fichier Excel local (.xlsx, .xls, .csv) ou connexion a un serveur Samba/reseau
 - **Pre-visualisation interactive Excel** : apres upload, grille type tableur avec lettres de colonnes (A, B, C...) et numeros de lignes, modes de selection Cellule/Colonne pour remplir automatiquement les references, onglets pour fichiers multi-feuilles
 - **Constructeur visuel de formules** : interface drag-and-click remplacant la saisie manuelle, avec chips cliquables pour les sources ($Source1, $Source2), boutons operateurs (+, -, *, /, %), palette de fonctions par categorie (Math: SUM/AVG/MIN/MAX/ROUND, Logique: IF/IFERROR, Pourcentage: PERCENTAGE/GROWTH_RATE), apercu avec coloration syntaxique et evaluation en temps reel (debounce 600ms)
@@ -252,10 +260,21 @@ FSAO Iris integre des fonctionnalites d'IA generative (Gemini Pro) pour automati
 ```
 fsao-iris/
 ├── backend/                    # API FastAPI (Python 3.11+)
-│   ├── server.py               # Point d'entree principal (~9000 lignes)
+│   ├── server.py               # Point d'entree principal, widgets, startup events
 │   ├── models.py               # Modeles Pydantic
 │   ├── auth.py                 # Authentification JWT + bcrypt
 │   ├── dependencies.py         # Dependances FastAPI (auth guards)
+│   ├── routes/                 # Routes modulaires extraites
+│   │   ├── shared.py           # Utilitaires partages (db, serialize_doc, NOT_DELETED, compteurs atomiques)
+│   │   ├── work_orders.py      # CRUD OT (tri, statuts, assignation)
+│   │   ├── users.py            # CRUD utilisateurs, permissions
+│   │   ├── equipments.py       # Equipements (hierarchie)
+│   │   ├── intervention_requests.py # DI (conversion OT)
+│   │   ├── improvements.py     # Ameliorations
+│   │   ├── reports.py          # Rapports et analytics
+│   │   ├── service_manager.py  # Cibles d'assignation, stats service
+│   │   └── notification_health.py # Sante des notifications
+│   ├── user_preferences_routes.py # Dashboard layouts et raccourcis
 │   ├── *_routes.py             # 35+ modules de routes API
 │   ├── custom_widgets_routes.py # Widgets personnalises (templates, upload Excel, preview, formules)
 │   ├── formula_engine.py       # Moteur de formules (SUM, AVG, IF, PERCENTAGE, etc.)
@@ -282,6 +301,14 @@ fsao-iris/
 │   │   │   ├── ui/             # Shadcn/UI
 │   │   │   ├── chat/           # Chat temps reel
 │   │   │   ├── Common/         # Composants communs (AIChatWidget, adriaCommandHandlers)
+│   │   │   ├── Dashboard/      # Raccourcis, menu contextuel, barre d'edition
+│   │   │   │   ├── GlobalContextMenu.jsx   # Menu CTRL+Clic Droit (creation raccourcis)
+│   │   │   │   ├── SortableShortcut.jsx    # Rendu raccourci style Windows (S/M/L)
+│   │   │   │   ├── ShortcutEditDialog.jsx  # Dialog edition raccourci
+│   │   │   │   └── DashboardEditToolbar.jsx # Barre d'outils mode edition + bouton "+ Widget"
+│   │   │   ├── WorkOrders/     # Formulaires et dialogs OT
+│   │   │   │   └── WorkOrderFormDialog.jsx # Creation/edition OT avec AssigneeSelector
+│   │   │   ├── AssigneeSelector.jsx # Selecteur d'assignation (services + utilisateurs)
 │   │   │   └── Surveillance/   # Plan de surveillance (ManualMatchDialog, SurveillanceAIExtract)
 │   │   └── hooks/              # Hooks React personnalises
 │   ├── public/                 # Assets statiques
@@ -558,7 +585,9 @@ Pour utiliser Google Drive comme destination de sauvegarde :
 | POST | `/api/push-notifications/register` | Enregistrer un token push (mobile) |
 | DELETE | `/api/push-notifications/unregister` | Desactiver un token push |
 | POST | `/api/push-notifications/test` | Envoyer une notification push de test |
-| GET | `/api/dashboard/widget-data` | Donnees temps reel pour les widgets du dashboard principal |
+| GET | `/api/dashboard/widget-data` | Donnees temps reel pour les widgets du dashboard (ecart temps, charge OT, techniciens) |
+| GET | `/api/assignment-targets` | Cibles d'assignation : services (poles) puis utilisateurs actifs tries alphabetiquement |
+| GET/PUT | `/api/user-preferences` | Preferences utilisateur (layout dashboard, raccourcis, onglet actif) |
 | GET | `/api/custom-widgets?service={name}` | Widgets personnalises filtres par service |
 | GET | `/api/custom-widgets/tpl/list` | Templates de widgets predefinis |
 | POST | `/api/custom-widgets/tpl/{id}/create` | Creer un widget depuis un template |
@@ -770,6 +799,9 @@ Si les notifications push ne fonctionnent pas :
 | `uploaded_excel_files` | Fichiers Excel uploades pour les widgets |
 | `notifications` | Notifications in-app (inclut alertes IA critiques) |
 | `device_tokens` | Tokens push pour notifications mobiles (Expo) |
+| `user_preferences` | Preferences utilisateur (layout dashboard, raccourcis, onglets) |
+| `counters` | Compteurs atomiques (numeros d'OT, DI, etc.) pour garantir l'unicite |
+| `service_responsables` | Responsables de services (pour les poles d'assignation) |
 | ... | Et 40+ autres collections |
 
 ---
@@ -809,4 +841,4 @@ Ce projet est sous licence Proprietaire.
 ---
 
 **Developpe par Greg**
-**Version 1.10.0 - Mars 2026**
+**Version 1.11.0 - Mars 2026**
