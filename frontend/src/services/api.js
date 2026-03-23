@@ -235,8 +235,8 @@ export const workOrdersAPI = {
   },
   
   // Admin: Edit/Delete time entries
-  updateTimeEntry: (workOrderId, entryId, hours) =>
-    api.put(`/work-orders/${workOrderId}/time-entries/${entryId}`, { hours }),
+  updateTimeEntry: (workOrderId, entryId, hours, timestamp) =>
+    api.put(`/work-orders/${workOrderId}/time-entries/${entryId}`, { hours, ...(timestamp ? { timestamp } : {}) }),
   deleteTimeEntry: (workOrderId, entryId) =>
     api.delete(`/work-orders/${workOrderId}/time-entries/${entryId}`),
 

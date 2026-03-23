@@ -899,6 +899,7 @@ class AddTimeSpent(BaseModel):
 
 class TimeEntryUpdate(BaseModel):
     hours: float
+    timestamp: Optional[str] = None
 
 class CommentUpdate(BaseModel):
     text: str

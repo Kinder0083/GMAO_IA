@@ -946,13 +946,13 @@ async def get_work_order_comments(
 # ==================== ADMIN: EDIT/DELETE TIME ENTRIES & COMMENTS ====================
 
 @router.put("/work-orders/{work_order_id}/time-entries/{entry_id}",
-    summary="Modifier une entree de temps (admin)")
+    summary="Modifier une entree de temps")
 async def update_time_entry(
     work_order_id: str, entry_id: str,
     update_data: TimeEntryUpdate,
-    current_user: dict = Depends(get_current_admin_user)
+    current_user: dict = Depends(require_permission("workOrders", "delete"))
 ):
-    """Modifier une entrée de temps d'un OT (admin uniquement)"""
+    """Modifier une entrée de temps d'un OT (edit+delete workOrders ou admin)"""
     try:
         work_order = await find_work_order_flexible(work_order_id)
         if not work_order:
@@ -972,9 +972,19 @@ async def update_time_entry(
         current_total = work_order.get("tempsReel", 0) or 0
         new_total = max(0, current_total + diff)
 
+        update_set = {"time_entries.$.hours": new_hours, "tempsReel": new_total}
+        details_parts = [f"temps: {old_hours:.2f}h -> {new_hours:.2f}h"]
+
+        if update_data.timestamp:
+            update_set["time_entries.$.timestamp"] = update_data.timestamp
+            old_ts = old_entry.get("timestamp", "?")
+            if isinstance(old_ts, str):
+                old_ts = old_ts[:10]
+            details_parts.append(f"date: {old_ts} -> {update_data.timestamp[:10]}")
+
         await db.work_orders.update_one(
             {"_id": wo_oid, "time_entries.id": entry_id},
-            {"$set": {"time_entries.$.hours": new_hours, "tempsReel": new_total}}
+            {"$set": update_set}
         )
 
         await audit_service.log_action(
@@ -985,7 +995,7 @@ async def update_time_entry(
             entity_type=EntityType_Audit.WORK_ORDER,
             entity_id=work_order_id,
             entity_name=work_order.get("titre", ""),
-            details=f"Modification temps: {old_hours:.2f}h -> {new_hours:.2f}h (entrée de {old_entry.get('user_name', '?')})"
+            details=f"Modification {', '.join(details_parts)} (entrée de {old_entry.get('user_name', '?')})"
         )
 
         return {"message": "Entrée de temps modifiée", "new_total": new_total}
@@ -998,12 +1008,12 @@ async def update_time_entry(
 
 
 @router.delete("/work-orders/{work_order_id}/time-entries/{entry_id}",
-    summary="Supprimer une entree de temps (admin)")
+    summary="Supprimer une entree de temps")
 async def delete_time_entry(
     work_order_id: str, entry_id: str,
-    current_user: dict = Depends(get_current_admin_user)
+    current_user: dict = Depends(require_permission("workOrders", "delete"))
 ):
-    """Supprimer une entrée de temps d'un OT (admin uniquement)"""
+    """Supprimer une entrée de temps d'un OT (edit+delete workOrders ou admin)"""
     try:
         work_order = await find_work_order_flexible(work_order_id)
         if not work_order:

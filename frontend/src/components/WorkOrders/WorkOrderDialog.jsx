@@ -27,7 +27,8 @@ import jsPDF from 'jspdf';
 
 const WorkOrderDialog = ({ open, onOpenChange, workOrder, onSuccess }) => {
   const { toast } = useToast();
-  const { canEdit, isAdmin } = usePermissions();
+  const { canEdit, canDelete, isAdmin } = usePermissions();
+  const canManageTimeEntries = isAdmin() || (canEdit('workOrders') && canDelete('workOrders'));
   const [refreshAttachments, setRefreshAttachments] = useState(0);
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState('');
@@ -44,9 +45,10 @@ const WorkOrderDialog = ({ open, onOpenChange, workOrder, onSuccess }) => {
   const [inventoryItems, setInventoryItems] = useState([]);
   const [equipmentsList, setEquipmentsList] = useState([]);
 
-  // États pour l'édition admin des temps et commentaires
+  // États pour l'édition des temps et commentaires
   const [editingTimeId, setEditingTimeId] = useState(null);
   const [editingTimeValue, setEditingTimeValue] = useState('');
+  const [editingTimeDate, setEditingTimeDate] = useState('');
   const [editingCommentId, setEditingCommentId] = useState(null);
   const [editingCommentText, setEditingCommentText] = useState('');
   const [generatingPDF, setGeneratingPDF] = useState(false);
@@ -456,13 +458,24 @@ const WorkOrderDialog = ({ open, onOpenChange, workOrder, onSuccess }) => {
     ));
   };
 
-  // === Fonctions Admin : édition/suppression des temps ===
+  // === Fonctions : édition/suppression des temps ===
   const handleEditTimeEntry = (entry) => {
     setEditingTimeId(entry.id);
-    // Convertir les heures décimales en format lisible
     const h = Math.floor(entry.hours);
     const m = Math.round((entry.hours - h) * 60);
     setEditingTimeValue(`${h}h${m.toString().padStart(2, '0')}`);
+    // Extraire la date de pointage (format YYYY-MM-DD pour l'input date)
+    const ts = entry.timestamp || '';
+    if (ts) {
+      const d = new Date(ts);
+      if (!isNaN(d.getTime())) {
+        setEditingTimeDate(d.toISOString().slice(0, 10));
+      } else {
+        setEditingTimeDate('');
+      }
+    } else {
+      setEditingTimeDate('');
+    }
   };
 
   const handleSaveTimeEntry = async () => {
@@ -473,9 +486,11 @@ const WorkOrderDialog = ({ open, onOpenChange, workOrder, onSuccess }) => {
     }
     try {
       const newHours = parsed.hours + parsed.minutes / 60;
-      await workOrdersAPI.updateTimeEntry(workOrder.id, editingTimeId, newHours);
-      toast({ title: 'Succès', description: 'Temps modifié' });
+      const timestamp = editingTimeDate ? new Date(editingTimeDate + 'T12:00:00').toISOString() : undefined;
+      await workOrdersAPI.updateTimeEntry(workOrder.id, editingTimeId, newHours, timestamp);
+      toast({ title: 'Succès', description: 'Entrée de temps modifiée' });
       setEditingTimeId(null);
+      setEditingTimeDate('');
       if (onSuccess) onSuccess();
     } catch (error) {
       toast({ title: 'Erreur', description: 'Impossible de modifier le temps', variant: 'destructive' });
@@ -1289,12 +1304,19 @@ const WorkOrderDialog = ({ open, onOpenChange, workOrder, onSuccess }) => {
                   <div key={entry.id} className="flex items-center justify-between text-sm bg-white rounded px-3 py-1.5 shadow-sm">
                     {editingTimeId === entry.id ? (
                       <div className="flex items-center gap-2 flex-1">
+                        <input
+                          data-testid={`edit-time-date-${entry.id}`}
+                          type="date"
+                          value={editingTimeDate}
+                          onChange={(e) => setEditingTimeDate(e.target.value)}
+                          className="h-7 text-sm border rounded px-2 bg-white"
+                        />
                         <Input
                           data-testid={`edit-time-input-${entry.id}`}
                           type="text"
                           value={editingTimeValue}
                           onChange={(e) => setEditingTimeValue(e.target.value)}
-                          className="max-w-[120px] h-7 text-sm"
+                          className="max-w-[100px] h-7 text-sm"
                           placeholder="Ex: 1h30"
                         />
                         <button
@@ -1306,7 +1328,7 @@ const WorkOrderDialog = ({ open, onOpenChange, workOrder, onSuccess }) => {
                           <Check size={14} />
                         </button>
                         <button
-                          onClick={() => setEditingTimeId(null)}
+                          onClick={() => { setEditingTimeId(null); setEditingTimeDate(''); }}
                           className="p-1 text-gray-400 hover:bg-gray-100 rounded"
                           title="Annuler"
                         >
@@ -1320,7 +1342,7 @@ const WorkOrderDialog = ({ open, onOpenChange, workOrder, onSuccess }) => {
                           {' — '}{entry.user_name}
                           <span className="text-xs text-gray-400 ml-2">{formatDate(entry.timestamp)}</span>
                         </span>
-                        {isAdmin() && (
+                        {canManageTimeEntries && (
                           <div className="flex items-center gap-0.5 ml-2">
                             <button
                               data-testid={`edit-time-${entry.id}`}
