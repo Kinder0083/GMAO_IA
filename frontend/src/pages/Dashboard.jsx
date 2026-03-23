@@ -31,7 +31,8 @@ import {
   Trash2,
   Clock,
   Timer,
-  Info
+  Info,
+  Shield
 } from 'lucide-react';
 import { useDashboard } from '../hooks/useDashboard';
 import { usePermissions } from '../hooks/usePermissions';
@@ -43,9 +44,10 @@ import DashboardEditToolbar from '../components/Dashboard/DashboardEditToolbar';
 import MaintenanceStatusPendingAlert from '../components/Dashboard/MaintenanceStatusPendingAlert';
 import SortableShortcut from '../components/Dashboard/SortableShortcut';
 import ShortcutEditDialog from '../components/Dashboard/ShortcutEditDialog';
+import WidgetPermissionsDialog from '../components/Dashboard/WidgetPermissionsDialog';
 
 // Composant Widget Sortable
-const SortableWidget = ({ item, isEditMode, stat, colorClasses, onDelete }) => {
+const SortableWidget = ({ item, isEditMode, stat, colorClasses, onDelete, onPermissions, isAdmin }) => {
   const {
     attributes,
     listeners,
@@ -76,6 +78,18 @@ const SortableWidget = ({ item, isEditMode, stat, colorClasses, onDelete }) => {
             >
               <GripVertical className="h-4 w-4 text-gray-500" />
             </div>
+            {isAdmin && (
+              <Button
+                variant="outline"
+                size="icon"
+                className="absolute -top-2 -right-10 h-7 w-7 bg-white shadow-sm text-blue-600 hover:bg-blue-50 opacity-0 group-hover:opacity-100 transition-opacity z-20"
+                onClick={(e) => { e.stopPropagation(); onPermissions && onPermissions(item.widgetId); }}
+                title="Permissions de visibilité"
+                data-testid={`widget-permissions-btn-${item.widgetId}`}
+              >
+                <Shield className="h-3 w-3" />
+              </Button>
+            )}
             <Button
               variant="outline"
               size="icon"
@@ -227,7 +241,7 @@ const SortableSeparator = ({ item, isEditMode, onDelete }) => {
 };
 
 const Dashboard = () => {
-  const { canView } = usePermissions();
+  const { canView, isAdmin } = usePermissions();
   const { preferences, updatePreferences } = usePreferences();
   const { toast } = useToast();
   
@@ -243,6 +257,11 @@ const Dashboard = () => {
   const [reportsStats, setReportsStats] = useState({ pending: 0, total: 0, avgDays: 0 });
   const [widgetData, setWidgetData] = useState(null);
   const [diKpi, setDiKpi] = useState(null);
+
+  // Widget permissions
+  const [widgetPermissions, setWidgetPermissions] = useState({});
+  const [permDialogOpen, setPermDialogOpen] = useState(false);
+  const [permDialogWidgetId, setPermDialogWidgetId] = useState(null);
 
   // État pour l'édition des raccourcis
   const [editingShortcut, setEditingShortcut] = useState(null);
@@ -306,6 +325,17 @@ const Dashboard = () => {
       }
     };
     loadDiKpi();
+
+    // Charger les permissions des widgets
+    const loadWidgetPermissions = async () => {
+      try {
+        const res = await api.get('/user-preferences/widget-permissions/all');
+        setWidgetPermissions(res.data.permissions || {});
+      } catch (err) {
+        console.error('Erreur chargement permissions widgets:', err);
+      }
+    };
+    loadWidgetPermissions();
   }, []);
 
   // Déterminer quels widgets afficher
@@ -335,6 +365,19 @@ const Dashboard = () => {
     ];
   }, [preferences]);
 
+  // Filtrer les widgets selon les permissions pour les non-admins
+  const visibleWidgets = useMemo(() => {
+    if (isAdmin()) return enabledWidgets;
+    const userId = JSON.parse(localStorage.getItem('user') || '{}').id;
+    if (!userId) return [];
+    return enabledWidgets.filter(wId => {
+      const allowed = widgetPermissions[wId];
+      // Si pas de permissions définies pour ce widget, seuls les admins le voient
+      if (!allowed) return false;
+      return allowed.includes(userId);
+    });
+  }, [enabledWidgets, widgetPermissions, isAdmin]);
+
   // Initialiser le layout avec les éléments par défaut (widgets + éléments personnalisés)
   // IMPORTANT: Toujours reconcilier le layout sauvegarde avec les widgets actuellement actives
   useEffect(() => {
@@ -346,7 +389,7 @@ const Dashboard = () => {
       setOriginalLayout(savedItems);
     } else {
       // Layout par défaut : tous les widgets activés
-      const defaultLayout = enabledWidgets.map((widgetId, index) => ({
+      const defaultLayout = visibleWidgets.map((widgetId, index) => ({
         id: `widget-${widgetId}`,
         type: 'widget',
         widgetId: widgetId,
@@ -355,7 +398,7 @@ const Dashboard = () => {
       setLayoutItems(defaultLayout);
       setOriginalLayout(defaultLayout);
     }
-  }, [preferences, enabledWidgets]);
+  }, [preferences, visibleWidgets]);
 
   // Fonctions de gestion du mode édition
   const enterEditMode = useCallback(() => {
@@ -412,7 +455,7 @@ const Dashboard = () => {
   const handleResetLayout = useCallback(() => {
     // Garder les raccourcis existants, remettre tous les widgets
     const shortcuts = layoutItems.filter(i => i.type === 'shortcut');
-    const defaultWidgets = enabledWidgets.map((widgetId, index) => ({
+    const defaultWidgets = visibleWidgets.map((widgetId, index) => ({
       id: `widget-${widgetId}`,
       type: 'widget',
       widgetId: widgetId,
@@ -420,7 +463,7 @@ const Dashboard = () => {
     }));
     setLayoutItems([...shortcuts, ...defaultWidgets]);
     setHasChanges(true);
-  }, [enabledWidgets, layoutItems]);
+  }, [visibleWidgets, layoutItems]);
 
   const handleSaveShortcutEdit = useCallback((updatedShortcut) => {
     setLayoutItems(prev => prev.map(item =>
@@ -452,10 +495,10 @@ const Dashboard = () => {
 
   // Widgets disponibles mais absents du layout
   const missingWidgets = useMemo(() =>
-    enabledWidgets
+    visibleWidgets
       .filter(wId => !presentWidgetIds.includes(wId))
       .map(wId => ({ id: wId, label: WIDGET_LABELS[wId] || wId })),
-    [enabledWidgets, presentWidgetIds]
+    [visibleWidgets, presentWidgetIds]
   );
 
   const handleAddWidget = useCallback((widgetId) => {
@@ -748,13 +791,13 @@ const Dashboard = () => {
   const visibleItems = useMemo(() => {
     return layoutItems.filter(item => {
       if (item.type === 'widget') {
-        if (!enabledWidgets.includes(item.widgetId)) return false;
+        if (!visibleWidgets.includes(item.widgetId)) return false;
         const stat = getStatConfig(item.widgetId);
         return stat !== null;
       }
       return true;
     });
-  }, [layoutItems, enabledWidgets, getStatConfig]);
+  }, [layoutItems, visibleWidgets, getStatConfig]);
 
   // Séparer raccourcis et autres éléments
   const shortcutItems = visibleItems.filter(item => item.type === 'shortcut');
@@ -847,6 +890,8 @@ const Dashboard = () => {
                       stat={stat}
                       colorClasses={colorClasses}
                       onDelete={handleDeleteElement}
+                      isAdmin={isAdmin()}
+                      onPermissions={(wId) => { setPermDialogWidgetId(wId); setPermDialogOpen(true); }}
                     />
                   );
                 }
@@ -932,7 +977,7 @@ const Dashboard = () => {
       )}
 
       {/* Section Ordres de travail récents */}
-      {canView('workOrders') && enabledWidgets.includes('work_orders_active') && (
+      {canView('workOrders') && visibleWidgets.includes('work_orders_active') && (
         <Card className={isEditMode ? 'border-2 border-dashed border-gray-200' : ''}>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -968,7 +1013,7 @@ const Dashboard = () => {
       )}
 
       {/* Section État des équipements */}
-      {canView('assets') && enabledWidgets.includes('equipment_maintenance') && (
+      {canView('assets') && visibleWidgets.includes('equipment_maintenance') && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -1034,6 +1079,16 @@ const Dashboard = () => {
           onSave={handleSaveShortcutEdit}
         />
       )}
+
+      {/* Dialog permissions widget */}
+      <WidgetPermissionsDialog
+        open={permDialogOpen}
+        onOpenChange={setPermDialogOpen}
+        widgetId={permDialogWidgetId}
+        widgetLabel={permDialogWidgetId ? (WIDGET_LABELS[permDialogWidgetId] || permDialogWidgetId) : ''}
+        currentAllowed={permDialogWidgetId ? (widgetPermissions[permDialogWidgetId] || []) : []}
+        onSaved={(wId, ids) => setWidgetPermissions(prev => ({ ...prev, [wId]: ids }))}
+      />
     </div>
   );
 };
