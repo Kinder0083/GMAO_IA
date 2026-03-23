@@ -976,11 +976,18 @@ async def update_time_entry(
         details_parts = [f"temps: {old_hours:.2f}h -> {new_hours:.2f}h"]
 
         if update_data.timestamp:
-            update_set["time_entries.$.timestamp"] = update_data.timestamp
+            # Convertir en datetime pour compatibilité avec les requêtes $gte/$lte des rapports
+            try:
+                new_ts = datetime.fromisoformat(update_data.timestamp.replace('Z', '+00:00').replace('+00:00', ''))
+            except Exception:
+                new_ts = datetime.fromisoformat(update_data.timestamp[:19])
+            update_set["time_entries.$.timestamp"] = new_ts
             old_ts = old_entry.get("timestamp", "?")
-            if isinstance(old_ts, str):
+            if isinstance(old_ts, datetime):
+                old_ts = old_ts.strftime("%d/%m/%Y")
+            elif isinstance(old_ts, str):
                 old_ts = old_ts[:10]
-            details_parts.append(f"date: {old_ts} -> {update_data.timestamp[:10]}")
+            details_parts.append(f"date: {old_ts} -> {new_ts.strftime('%d/%m/%Y')}")
 
         await db.work_orders.update_one(
             {"_id": wo_oid, "time_entries.id": entry_id},
