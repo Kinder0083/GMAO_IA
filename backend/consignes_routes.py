@@ -14,6 +14,7 @@ import asyncio
 from dependencies import get_current_user
 # Import du websocket manager pour vérifier le statut en ligne
 from websocket_manager import manager as chat_ws_manager
+from routes.shared import find_user_flexible
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -96,17 +97,11 @@ async def send_consigne(
             logger.error("❌ Base de données non initialisée!")
             raise HTTPException(status_code=500, detail="Base de données non initialisée")
         
-        # Récupérer les infos du destinataire
+        # Récupérer les infos du destinataire (supporte ObjectId ET UUID)
         logger.debug(f"   - Recherche du destinataire: {data.recipient_id}")
-        try:
-            recipient_oid = ObjectId(data.recipient_id)
-        except Exception as e:
-            logger.error(f"❌ ID destinataire invalide: {data.recipient_id} - {e}")
-            raise HTTPException(status_code=400, detail=f"ID destinataire invalide: {data.recipient_id}")
-        
-        recipient = await db.users.find_one({"_id": recipient_oid})
+        recipient = await find_user_flexible(data.recipient_id)
         if not recipient:
-            logger.error(f"❌ Destinataire non trouvé: {data.recipient_id}")
+            logger.error(f"Destinataire non trouvé: {data.recipient_id}")
             raise HTTPException(status_code=404, detail="Destinataire non trouvé")
         
         logger.debug(f"   - Destinataire trouvé: {recipient.get('email')}")
@@ -372,7 +367,7 @@ async def acknowledge_consigne(
         logger.debug("   - Consigne mise à jour en base")
         
         # Récupérer les infos utilisateur pour MQTT
-        user = await db.users.find_one({"_id": ObjectId(user_id)})
+        user = await find_user_flexible(user_id)
         mqtt_sent = False
         
         if user and mqtt_manager:
@@ -611,15 +606,23 @@ async def send_consigne_group(
         sender_id = current_user.get("id")
         
         # Construire la requête pour trouver les utilisateurs
+        # Exclure l'expéditeur par _id OU par champ id (supporte ObjectId et UUID)
+        exclude_sender = {"$and": [{"id": {"$ne": sender_id}}]}
+        try:
+            exclude_sender = {"$and": [
+                {"_id": {"$ne": ObjectId(sender_id)}},
+                {"id": {"$ne": sender_id}}
+            ]}
+        except Exception:
+            pass
+
         if data.service == "ALL":
-            # Tous les utilisateurs (sauf l'expéditeur)
-            query = {"_id": {"$ne": ObjectId(sender_id)}}
+            query = exclude_sender
             service_label = "Tous les services"
         else:
-            # Utilisateurs du service spécifié (sauf l'expéditeur)
             query = {
                 "service": data.service,
-                "_id": {"$ne": ObjectId(sender_id)}
+                **exclude_sender
             }
             service_label = data.service
         
@@ -649,7 +652,7 @@ async def send_consigne_group(
         
         # Créer une consigne pour chaque utilisateur
         for recipient in recipients:
-            recipient_id = str(recipient["_id"])
+            recipient_id = recipient.get("id") or str(recipient["_id"])
             recipient_name = f"{recipient.get('prenom', '')} {recipient.get('nom', '')}".strip()
             
             # Créer la consigne
