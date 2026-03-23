@@ -82,7 +82,7 @@ const SortableWidget = ({ item, isEditMode, stat, colorClasses, onDelete, onPerm
               <Button
                 variant="outline"
                 size="icon"
-                className="absolute -top-2 -right-10 h-7 w-7 bg-white shadow-sm text-blue-600 hover:bg-blue-50 opacity-0 group-hover:opacity-100 transition-opacity z-20"
+                className="absolute -top-2 right-7 h-7 w-7 bg-white shadow-sm text-blue-600 hover:bg-blue-50 opacity-0 group-hover:opacity-100 transition-opacity z-20"
                 onClick={(e) => { e.stopPropagation(); onPermissions && onPermissions(item.widgetId); }}
                 title="Permissions de visibilité"
                 data-testid={`widget-permissions-btn-${item.widgetId}`}
