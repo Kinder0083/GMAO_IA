@@ -32,7 +32,7 @@ const WorkOrders = () => {
   const { canEdit, canDelete } = usePermissions();
   
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState('ALL');
+  const [filterStatus, setFilterStatus] = useState('OUVERT');
   const [filterOverdue, setFilterOverdue] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [formDialogOpen, setFormDialogOpen] = useState(false);
