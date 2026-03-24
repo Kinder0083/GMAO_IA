@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { AlertTriangle, User, Clock, CheckCircle } from 'lucide-react';
+import { AlertTriangle, User, Clock, CheckCircle, BellRing } from 'lucide-react';
 import { Button } from '../ui/button';
 import { useToast } from '../../hooks/use-toast';
 import api from '../../services/api';
+import { usePushNotifications } from '../../hooks/usePWA';
 
 /**
  * Popup globale pour afficher les consignes reçues
@@ -12,13 +13,41 @@ const ConsignePopup = () => {
   const [consignes, setConsignes] = useState([]);
   const [currentConsigne, setCurrentConsigne] = useState(null);
   const [acknowledging, setAcknowledging] = useState(false);
+  const [showPushBanner, setShowPushBanner] = useState(false);
+  const [pushSubscribing, setPushSubscribing] = useState(false);
   const { toast } = useToast();
+  const { isSupported, permission, isSubscribed, subscribe } = usePushNotifications();
 
   // Utiliser useRef pour lire la valeur courante sans créer de dépendances dans useCallback
   const currentConsigneRef = useRef(null);
   useEffect(() => {
     currentConsigneRef.current = currentConsigne;
   }, [currentConsigne]);
+
+  // Afficher la bannière push si les consignes apparaissent et que les notifs ne sont pas activées
+  useEffect(() => {
+    if (currentConsigne && isSupported && !isSubscribed && permission !== 'denied') {
+      setShowPushBanner(true);
+    }
+  }, [currentConsigne, isSupported, isSubscribed, permission]);
+
+  const handleEnablePush = async () => {
+    setPushSubscribing(true);
+    try {
+      const result = await subscribe();
+      if (result?.subscribed) {
+        setShowPushBanner(false);
+        toast({
+          title: 'Notifications activées',
+          description: 'Vous recevrez les consignes même quand l\'application est fermée.',
+        });
+      } else if (!result?.permissionGranted) {
+        setShowPushBanner(false); // Permission refusée - ne plus proposer
+      }
+    } finally {
+      setPushSubscribing(false);
+    }
+  };
 
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const userId = user.id;
@@ -231,6 +260,34 @@ const ConsignePopup = () => {
               </span>
             )}
           </Button>
+
+          {/* Bannière d'activation des notifications push */}
+          {showPushBanner && (
+            <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center gap-3">
+              <BellRing size={20} className="text-blue-600 shrink-0" />
+              <div className="flex-1 text-sm text-blue-700">
+                Recevoir les prochaines consignes même hors connexion ?
+              </div>
+              <div className="flex gap-2 shrink-0">
+                <button
+                  onClick={() => setShowPushBanner(false)}
+                  className="text-xs text-gray-400 hover:text-gray-600 px-2"
+                  data-testid="consigne-push-dismiss"
+                >
+                  Non
+                </button>
+                <Button
+                  size="sm"
+                  onClick={handleEnablePush}
+                  disabled={pushSubscribing}
+                  className="bg-blue-600 hover:bg-blue-700 text-xs h-7 px-3"
+                  data-testid="consigne-push-enable"
+                >
+                  {pushSubscribing ? '...' : 'Activer'}
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

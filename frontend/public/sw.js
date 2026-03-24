@@ -109,7 +109,8 @@ self.addEventListener('notificationclick', (event) => {
       targetUrl = '/equipments';
       break;
     case 'chat_message':
-      targetUrl = '/chat';
+    case 'new_consigne':
+      targetUrl = '/chat-live';
       break;
     default:
       targetUrl = '/';

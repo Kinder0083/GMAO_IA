@@ -2,6 +2,7 @@
 Routes des Notifications - CRUD, Web Push, Abonnements
 Extrait de server.py pour une meilleure maintenabilite.
 """
+import os
 from fastapi import APIRouter, Depends, HTTPException, Request
 from bson import ObjectId
 from datetime import datetime, timezone

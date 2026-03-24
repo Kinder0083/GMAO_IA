@@ -1,5 +1,5 @@
 """
-Routes pour la gestion des consignes avec notification MQTT
+Routes pour la gestion des consignes avec notification MQTT et Web Push
 """
 import logging
 from datetime import datetime, timezone
@@ -15,6 +15,8 @@ from dependencies import get_current_user
 # Import du websocket manager pour vérifier le statut en ligne
 from websocket_manager import manager as chat_ws_manager
 from routes.shared import find_user_flexible
+# Import web push pour les notifications même app fermée
+from web_push import send_web_push_to_user
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -242,6 +244,26 @@ async def send_consigne(
         else:
             logger.debug("   - MQTT Manager non disponible")
         
+        # Envoyer une notification Web Push (même si app fermée)
+        try:
+            push_result = await send_web_push_to_user(
+                db, normalized_recipient_id,
+                title=f"Consigne de {sender_name}",
+                body=data.message[:120] if len(data.message) > 120 else data.message,
+                data={
+                    "type": "new_consigne",
+                    "consigne_id": consigne_id,
+                    "sender_name": sender_name
+                },
+                tag=f"consigne-{consigne_id}"
+            )
+            if push_result.get("sent", 0) > 0:
+                logger.info(f"✅ Web Push envoyé à {recipient_name} ({push_result['sent']} appareil(s))")
+            else:
+                logger.debug(f"   - Web Push: aucun abonnement actif pour {recipient_name}")
+        except Exception as e:
+            logger.warning(f"⚠️ Erreur Web Push consigne: {e}")
+
         # Log dans le journal d'audit
         if audit_service:
             try:
