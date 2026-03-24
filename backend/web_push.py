@@ -138,8 +138,8 @@ async def notify_work_order_assigned_web(db, work_order: dict, assigned_user_id:
     titre = work_order.get("titre", "")
     await send_web_push_to_user(
         db, assigned_user_id,
-        title="Nouveau bon de travail assigne",
-        body=f"#{numero}: {titre}",
+        title="Nouveau bon de travail assigné",
+        body=f"#{numero} : {titre[:80]}",
         data={"type": "work_order_assigned", "work_order_id": str(work_order.get("id", work_order.get("_id", "")))},
         tag=f"wo-assigned-{numero}"
     )
@@ -148,18 +148,26 @@ async def notify_work_order_assigned_web(db, work_order: dict, assigned_user_id:
 async def notify_work_order_status_changed_web(db, work_order: dict, old_status: str, new_status: str, current_user_id: str):
     """Notification quand le statut d'un OT change."""
     numero = work_order.get("numero", "?")
+    titre = work_order.get("titre", "")
     user_ids = set()
+    # Champs possibles selon les versions du schéma
     if work_order.get("createdBy"):
         user_ids.add(str(work_order["createdBy"]))
+    if work_order.get("created_by") and work_order.get("created_by") != "inconnu":
+        user_ids.add(str(work_order["created_by"]))
+    if work_order.get("assigne_a_id"):
+        user_ids.add(str(work_order["assigne_a_id"]))
     if work_order.get("assignedTo"):
         user_ids.add(str(work_order["assignedTo"]))
     user_ids.discard(str(current_user_id))
+    user_ids.discard("inconnu")
+    user_ids.discard("")
 
     for uid in user_ids:
         await send_web_push_to_user(
             db, uid,
-            title="Statut BT modifie",
-            body=f"#{numero} -> {new_status}",
+            title="Statut bon de travail modifié",
+            body=f"#{numero} {titre[:40]} → {new_status}",
             data={"type": "work_order_status_changed", "work_order_id": str(work_order.get("id", work_order.get("_id", "")))},
             tag=f"wo-status-{numero}"
         )
@@ -168,15 +176,23 @@ async def notify_work_order_status_changed_web(db, work_order: dict, old_status:
 async def notify_equipment_alert_web(db, equipment: dict, alert_type: str = "PANNE"):
     """Notification quand un equipement tombe en panne."""
     nom = equipment.get("nom", "?")
-    # Notifier tous les admins et techniciens actifs
+    # Notifier tous les admins et techniciens actifs (statut ACTIF ou actif)
     user_ids = []
-    async for user in db.users.find({"statut": "actif", "role": {"$in": ["ADMIN", "TECHNICIEN"]}}, {"_id": 0, "id": 1}):
-        user_ids.append(str(user["id"]))
+    async for user in db.users.find(
+        {"statut": {"$in": ["ACTIF", "actif"]}, "role": {"$in": ["ADMIN", "TECHNICIEN"]}},
+        {"_id": 0, "id": 1}
+    ):
+        if user.get("id"):
+            user_ids.append(str(user["id"]))
+
+    if not user_ids:
+        logger.info(f"[WEB PUSH] Alerte équipement: aucun utilisateur actif trouvé")
+        return
 
     await send_web_push_to_users(
         db, user_ids,
-        title=f"[{alert_type}] Alerte equipement",
-        body=f"{nom}: L'equipement est hors service",
+        title=f"[{alert_type}] Alerte équipement",
+        body=f"{nom} : L'équipement est hors service",
         data={"type": "equipment_alert", "equipment_id": str(equipment.get("id", equipment.get("_id", "")))},
         tag=f"equip-alert-{equipment.get('id', '')}"
     )

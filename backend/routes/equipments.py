@@ -7,6 +7,7 @@ from bson import ObjectId
 from datetime import datetime, timezone
 from typing import List, Optional
 import logging
+import asyncio
 
 from models import (
     Equipment, EquipmentCreate, EquipmentUpdate, EquipmentStatus,
@@ -387,6 +388,16 @@ async def update_equipment(eq_id: str, eq_update: EquipmentUpdate, current_user:
                 details=f"Changement de statut: {old_statut} → {update_data['statut']}",
                 changes={"statut": {"old": old_statut, "new": update_data["statut"]}}
             )
+
+            # Notification push si equipement passe hors service
+            if update_data.get("statut") == "HORS_SERVICE" and old_statut != "HORS_SERVICE":
+                try:
+                    from web_push import notify_equipment_alert_web
+                    asyncio.create_task(
+                        notify_equipment_alert_web(db, {**existing_eq, **update_data}, "PANNE")
+                    )
+                except Exception as e:
+                    logger.warning(f"[PUSH] Erreur alerte équipement (update): {e}")
         
         await db.equipments.update_one(
             {"_id": ObjectId(eq_id)},
@@ -568,6 +579,7 @@ async def update_equipment_status(
             new_statut_value_check = statut.value if hasattr(statut, 'value') else statut
             if new_statut_value_check == "HORS_SERVICE" and old_statut != "HORS_SERVICE":
                 from notifications import notify_equipment_alert
+                from web_push import notify_equipment_alert_web
                 asyncio.create_task(
                     notify_equipment_alert(
                         db=db,
