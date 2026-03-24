@@ -93,7 +93,14 @@ Application GMAO (Gestion de Maintenance Assistée par Ordinateur) complète pou
   - **Bug 2 (usePermissions.js - ROOT CAUSE)**: `isAdmin`, `canView`, `canEdit`, `canDelete` créées inline à chaque render → nouvelle référence à chaque render → `visibleWidgets` (useMemo dans Dashboard.jsx) recalculé à chaque render → `useEffect([preferences, visibleWidgets])` se déclenchait à chaque render → `setLayoutItems(nouveau_tableau)` → re-render → boucle infinie ("Maximum update depth exceeded"). Corrigé en stabilisant toutes les fonctions avec `useCallback` dans `usePermissions.js`.
   - Résultat: 0 "Maximum update depth exceeded" en console, popup de consigne s'affiche et s'acquitte correctement.
 
-### Session 24 mars 2026 (suite 2) — Push OT + Équipements
+### Session 24 mars 2026 (suite 3) — DI : Sous-équipement + Emplacement automatique
+- **Feature: Dissociation équipement/sous-équipement dans les DI** - Tests: iteration_160.json - 11/11
+  - `InterventionRequestFormDialog.jsx`: restructuration layout (Équipement + Sous-équipement + Emplacement hors du grid Priorité/Date), suppression du guard `hasChildren` (toujours charger les enfants), Emplacement comme SELECT éditable avec label '(rempli automatiquement)', préservation `sous_equipement_id` en mode édition, reset emplacement quand équipement change
+  - `models.py`: ajout `sous_equipement_id` + `sous_equipement: Optional[Dict]` dans les 3 modèles `InterventionRequest`, `InterventionRequestCreate`, `InterventionRequestUpdate`
+  - `routes/intervention_requests.py`: ajout import `get_equipment_by_id` + `get_location_by_id` depuis `routes/shared.py`, résolution du sous-équipement à la création et à l'update, propagation `sous_equipement_id` + `sous_equipement` lors de la conversion DI → OT
+  - Comportement aligné avec les OT : l'équipement feuille (sous-équipement si sélectionné) devient l'équipement principal, emplacement auto-rempli depuis le parent
+
+
 - **Feature: Push notifications pour OT assignés + alertes équipements** - Tests: iteration_159.json - 20/20
   - `web_push.py`: fix `notify_work_order_status_changed_web` (champ `assigne_a_id` au lieu de `assignedTo`)
   - `web_push.py`: fix `notify_equipment_alert_web` (filtre statut `$in: ['ACTIF', 'actif']`, libellés français)
