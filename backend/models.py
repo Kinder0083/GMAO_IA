@@ -2527,6 +2527,14 @@ class UserPreferences(BaseModel):
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
+    @field_validator('created_at', 'updated_at', mode='before')
+    @classmethod
+    def coerce_datetime_to_str(cls, v):
+        """Accepte datetime ou str — convertit datetime en ISO string."""
+        if hasattr(v, 'isoformat'):
+            return v.isoformat()
+        return v
+
 class UserPreferencesCreate(BaseModel):
     user_id: str
     theme_mode: Optional[ThemeMode] = ThemeMode.LIGHT
