@@ -93,11 +93,24 @@ Application GMAO (Gestion de Maintenance Assistée par Ordinateur) complète pou
   - **Bug 2 (usePermissions.js - ROOT CAUSE)**: `isAdmin`, `canView`, `canEdit`, `canDelete` créées inline à chaque render → nouvelle référence à chaque render → `visibleWidgets` (useMemo dans Dashboard.jsx) recalculé à chaque render → `useEffect([preferences, visibleWidgets])` se déclenchait à chaque render → `setLayoutItems(nouveau_tableau)` → re-render → boucle infinie ("Maximum update depth exceeded"). Corrigé en stabilisant toutes les fonctions avec `useCallback` dans `usePermissions.js`.
   - Résultat: 0 "Maximum update depth exceeded" en console, popup de consigne s'affiche et s'acquitte correctement.
 
+### Session 24 mars 2026 (suite) — Notifications Push PWA Consignes
+- **Feature: Notifications Push PWA** - Tests: iteration_158.json - 100%
+  - `routes/notifications.py`: ajout `import os` manquant (fix endpoint `/api/web-push/vapid-key`)
+  - `consignes_routes.py`: `send_web_push_to_user()` après création consigne
+  - `sw.js`: clic notification `new_consigne` → naviguer vers `/chat-live`
+  - `ConsignePopup.jsx`: bannière "Activer les notifications" (BellRing + bouton Activer/Non)
+  - `Header.jsx`: bouton toggle Bell/BellOff avec tooltip, masqué si permission refusée
+
+## Schéma DB Clé
+- `work_orders`, `counters`, `user_preferences`, `equipments` (inchangés)
+- `web_push_subscriptions`: `{user_id, subscription: {endpoint, keys}, browser, is_active}`
+- `widget_permissions`: `{widget_id, allowed_user_ids: []}`
+
 ## Credentials de Test
 - Admin: `buenogy@gmail.com` / `TestAdmin2026!`
 - Technicien local: `axel@gmail.com` / `TestTech2026!`
 
 ## Backlog
 - P2: Tester le script `MAJ_FSAO.sh`
-- Refactorisation DB: normaliser les types UUID/ObjectId et String/Datetime dans toutes les collections (prévention régressions futures)
+- Refactorisation DB: normaliser les types UUID/ObjectId et String/Datetime dans toutes les collections
 - En attente des prochaines consignes utilisateur
