@@ -124,7 +124,14 @@ Application GMAO (Gestion de Maintenance Assistée par Ordinateur) complète pou
 - Admin: `buenogy@gmail.com` / `TestAdmin2026!`
 - Technicien local: `axel@gmail.com` / `TestTech2026!`
 
+### Session 25 mars 2026 (fork - normalisation DB)
+- **Migration DB complète** - Script `/app/backend/migrate_db.py` exécuté localement
+  - Phase 1 : 741 documents mis à jour (dates ISO string -> datetime) dans 50+ collections
+  - Phase 2 : 13 OTs normalisés (ObjectId-string -> UUID), 21 entrées audit_logs mises à jour
+  - Phase 3 : 43 documents (consignes, preventive_maintenances, checklist_templates, checklists) avec champ `id` ajouté
+  - Vérification : 23/23 work_orders en UUID, tous les champs dates en type datetime
+  - Script fourni à l'utilisateur pour la production Proxmox
+
 ## Backlog
 - P2: Tester le script `MAJ_FSAO.sh`
-- Refactorisation DB: normaliser les types UUID/ObjectId et String/Datetime dans toutes les collections
-- En attente des prochaines consignes utilisateur
+- EN ATTENTE consignes utilisateur
