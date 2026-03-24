@@ -1375,6 +1375,8 @@ class InterventionRequest(BaseModel):
     priorite: Priority
     equipement_id: Optional[str] = None
     equipement: Optional[Dict] = None
+    sous_equipement_id: Optional[str] = None
+    sous_equipement: Optional[Dict] = None
     emplacement_id: Optional[str] = None
     emplacement: Optional[Dict] = None
     date_limite_desiree: Optional[datetime] = None
@@ -1399,6 +1401,7 @@ class InterventionRequestCreate(BaseModel):
     description: str
     priorite: Priority = Priority.AUCUNE
     equipement_id: Optional[str] = None
+    sous_equipement_id: Optional[str] = None
     emplacement_id: Optional[str] = None
     date_limite_desiree: Optional[datetime] = None
 
@@ -1407,6 +1410,7 @@ class InterventionRequestUpdate(BaseModel):
     description: Optional[str] = None
     priorite: Optional[Priority] = None
     equipement_id: Optional[str] = None
+    sous_equipement_id: Optional[str] = None
     emplacement_id: Optional[str] = None
     date_limite_desiree: Optional[datetime] = None
 

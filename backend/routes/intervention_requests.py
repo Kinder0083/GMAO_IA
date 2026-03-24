@@ -21,7 +21,7 @@ from models import (
 )
 from pydantic import BaseModel
 from dependencies import get_current_user, get_current_admin_user, require_permission
-from routes.shared import db, audit_service, serialize_doc, find_user_flexible, get_next_work_order_numero, NOT_DELETED
+from routes.shared import db, audit_service, serialize_doc, find_user_flexible, get_next_work_order_numero, NOT_DELETED, get_equipment_by_id, get_location_by_id
 
 EntityType_Audit = EntityType
 logger = logging.getLogger(__name__)
@@ -67,6 +67,15 @@ async def create_intervention_request(
             eq_info = await get_equipment_by_id(request_data["equipement_id"])
             if eq_info:
                 request_data["equipement"] = eq_info
+        
+        # Récupérer les informations du sous-équipement si fourni
+        if request_data.get("sous_equipement_id"):
+            sub_eq_info = await get_equipment_by_id(request_data["sous_equipement_id"])
+            if sub_eq_info:
+                request_data["sous_equipement"] = sub_eq_info
+                # Auto-remplir l'emplacement depuis le sous-équipement s'il en a un
+                if sub_eq_info.get("emplacement_id") and not request_data.get("emplacement_id"):
+                    request_data["emplacement_id"] = sub_eq_info["emplacement_id"]
         
         # Récupérer les informations de l'emplacement si fourni
         if request_data.get("emplacement_id"):
@@ -315,6 +324,15 @@ async def update_intervention_request(
                 update_data["equipement"] = eq_info
         else:
             update_data["equipement"] = None
+    
+    # Mettre à jour le sous-équipement si nécessaire
+    if "sous_equipement_id" in update_data:
+        if update_data["sous_equipement_id"]:
+            sub_eq_info = await get_equipment_by_id(update_data["sous_equipement_id"])
+            if sub_eq_info:
+                update_data["sous_equipement"] = sub_eq_info
+        else:
+            update_data["sous_equipement"] = None
     
     # Mettre à jour l'emplacement si nécessaire
     if "emplacement_id" in update_data:
@@ -679,6 +697,8 @@ async def convert_to_work_order(
             "priorite": req["priorite"],
             "equipement_id": req.get("equipement_id"),
             "equipement": req.get("equipement"),
+            "sous_equipement_id": req.get("sous_equipement_id"),
+            "sous_equipement": req.get("sous_equipement"),
             "emplacement_id": req.get("emplacement_id"),
             "emplacement": req.get("emplacement"),
             "assigne_a_id": assignee_id,

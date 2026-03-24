@@ -53,7 +53,7 @@ const InterventionRequestFormDialog = ({ open, onOpenChange, request, onSuccess 
           description: request.description || '',
           priorite: request.priorite || 'AUCUNE',
           equipement_id: request.equipement?.id || '',
-          sous_equipement_id: '',
+          sous_equipement_id: request.sous_equipement?.id || request.sous_equipement_id || '',
           emplacement_id: request.emplacement?.id || '',
           date_limite_desiree: request.date_limite_desiree?.split('T')[0] || ''
         });
@@ -117,14 +117,12 @@ const InterventionRequestFormDialog = ({ open, onOpenChange, request, onSuccess 
     if (formData.equipement_id && equipments.length > 0) {
       const parentEq = equipments.find(eq => eq.id === formData.equipement_id);
       if (parentEq) {
+        // Auto-remplir l'emplacement depuis le parent (si pas encore défini)
         if (parentEq.emplacement_id && formData.emplacement_id !== parentEq.emplacement_id) {
           setFormData(prev => ({ ...prev, emplacement_id: parentEq.emplacement_id }));
         }
-        if (parentEq.hasChildren) {
-          loadChildren(parentEq.id);
-        } else {
-          setChildEquipments([]);
-        }
+        // Charger TOUJOURS les sous-équipements (sans vérifier hasChildren — robustesse)
+        loadChildren(parentEq.id);
       }
     } else if (!formData.equipement_id) {
       setChildEquipments([]);
@@ -397,7 +395,7 @@ const InterventionRequestFormDialog = ({ open, onOpenChange, request, onSuccess 
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="priorite">Priorite</Label>
+              <Label htmlFor="priorite">Priorité</Label>
               <Select value={formData.priorite} onValueChange={(value) => setFormData({ ...formData, priorite: value })}>
                 <SelectTrigger id="priorite" data-testid="intervention-priorite-select">
                   <SelectValue />
@@ -412,7 +410,7 @@ const InterventionRequestFormDialog = ({ open, onOpenChange, request, onSuccess 
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="date_limite_desiree">Date Limite Desiree</Label>
+              <Label htmlFor="date_limite_desiree">Date Limite Désirée</Label>
               <Input
                 id="date_limite_desiree"
                 data-testid="intervention-date-input"
@@ -421,61 +419,77 @@ const InterventionRequestFormDialog = ({ open, onOpenChange, request, onSuccess 
                 onChange={(e) => setFormData({ ...formData, date_limite_desiree: e.target.value })}
               />
             </div>
+          </div>
 
+          {/* Équipement — parent seulement */}
+          <div className="space-y-2">
+            <Label htmlFor="equipement">Équipement</Label>
+            <Select
+              value={formData.equipement_id || "none"}
+              onValueChange={(value) => setFormData({ ...formData, equipement_id: value === "none" ? "" : value, sous_equipement_id: '', emplacement_id: '' })}
+            >
+              <SelectTrigger id="equipement" data-testid="intervention-equipement-select">
+                <SelectValue placeholder="Sélectionner un équipement" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Aucun</SelectItem>
+                {parentEquipments.map(eq => (
+                  <SelectItem key={eq.id} value={eq.id}>{eq.nom}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Sous-équipement — affiché uniquement si l'équipement parent a des enfants */}
+          {loadingChildren && (
+            <div className="flex items-center gap-2 text-sm text-gray-500">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Chargement des sous-équipements...
+            </div>
+          )}
+          {!loadingChildren && formData.equipement_id && childEquipments.length > 0 && (
             <div className="space-y-2">
-              <Label htmlFor="equipement">Equipement</Label>
+              <Label htmlFor="sous_equipement">Sous-équipement</Label>
               <Select
-                value={formData.equipement_id || "none"}
-                onValueChange={(value) => setFormData({ ...formData, equipement_id: value === "none" ? "" : value, sous_equipement_id: '' })}
+                value={formData.sous_equipement_id || "none"}
+                onValueChange={(value) => setFormData({ ...formData, sous_equipement_id: value === "none" ? "" : value })}
               >
-                <SelectTrigger id="equipement" data-testid="intervention-equipement-select">
-                  <SelectValue placeholder="Selectionner un equipement" />
+                <SelectTrigger id="sous_equipement" data-testid="intervention-sous-equipement-select">
+                  <SelectValue placeholder="Sélectionner un sous-équipement" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Aucun</SelectItem>
-                  {parentEquipments.map(eq => (
+                  {childEquipments.map(eq => (
                     <SelectItem key={eq.id} value={eq.id}>{eq.nom}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-
-            {formData.equipement_id && childEquipments.length > 0 && (
-              <div className="space-y-2">
-                <Label htmlFor="sous_equipement">Sous-equipement</Label>
-                <Select
-                  value={formData.sous_equipement_id || "none"}
-                  onValueChange={(value) => setFormData({ ...formData, sous_equipement_id: value === "none" ? "" : value })}
-                >
-                  <SelectTrigger id="sous_equipement" data-testid="intervention-sous-equipement-select">
-                    <SelectValue placeholder="Selectionner un sous-equipement" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Aucun</SelectItem>
-                    {childEquipments.map(eq => (
-                      <SelectItem key={eq.id} value={eq.id}>{eq.nom}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            {loadingChildren && (
-              <div className="flex items-center gap-2 text-sm text-gray-500">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Chargement des sous-equipements...
-              </div>
-            )}
-          </div>
-
-          {formData.emplacement_id && (
-            <div className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
-              <p className="text-xs text-gray-500 mb-0.5">Emplacement (auto)</p>
-              <p className="text-sm font-medium text-gray-700" data-testid="intervention-emplacement-auto">
-                {locations.find(l => l.id === formData.emplacement_id)?.nom || formData.emplacement_id}
-              </p>
-            </div>
           )}
+
+          {/* Emplacement — SELECT éditable avec auto-remplissage depuis l'équipement */}
+          <div className="space-y-2">
+            <Label htmlFor="emplacement_id">
+              Emplacement
+              {formData.emplacement_id && formData.equipement_id && (
+                <span className="text-xs text-green-600 ml-2 font-normal">(rempli automatiquement)</span>
+              )}
+            </Label>
+            <Select
+              value={formData.emplacement_id || "none"}
+              onValueChange={(value) => setFormData({ ...formData, emplacement_id: value === "none" ? "" : value })}
+            >
+              <SelectTrigger id="emplacement_id" data-testid="intervention-emplacement-select">
+                <SelectValue placeholder="Sélectionner un emplacement" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Aucun</SelectItem>
+                {locations.map(loc => (
+                  <SelectItem key={loc.id} value={loc.id}>{loc.nom}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
           {/* Section Fichiers joints - identique aux OT avec miniatures */}
           <div className="space-y-2 pt-4 border-t">
