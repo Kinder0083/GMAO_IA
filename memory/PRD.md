@@ -93,7 +93,14 @@ Application GMAO (Gestion de Maintenance Assistée par Ordinateur) complète pou
   - **Bug 2 (usePermissions.js - ROOT CAUSE)**: `isAdmin`, `canView`, `canEdit`, `canDelete` créées inline à chaque render → nouvelle référence à chaque render → `visibleWidgets` (useMemo dans Dashboard.jsx) recalculé à chaque render → `useEffect([preferences, visibleWidgets])` se déclenchait à chaque render → `setLayoutItems(nouveau_tableau)` → re-render → boucle infinie ("Maximum update depth exceeded"). Corrigé en stabilisant toutes les fonctions avec `useCallback` dans `usePermissions.js`.
   - Résultat: 0 "Maximum update depth exceeded" en console, popup de consigne s'affiche et s'acquitte correctement.
 
-### Session 24 mars 2026 (suite) — Notifications Push PWA Consignes
+### Session 24 mars 2026 (suite 2) — Push OT + Équipements
+- **Feature: Push notifications pour OT assignés + alertes équipements** - Tests: iteration_159.json - 20/20
+  - `web_push.py`: fix `notify_work_order_status_changed_web` (champ `assigne_a_id` au lieu de `assignedTo`)
+  - `web_push.py`: fix `notify_equipment_alert_web` (filtre statut `$in: ['ACTIF', 'actif']`, libellés français)
+  - `routes/equipments.py`: ajout `import asyncio` + import inline `notify_equipment_alert_web` dans PATCH `/status` (existait) + dans PUT `/equipments` (ajouté)
+  - `web_push.py`: déactivation automatique subscriptions invalides (HTTP 0 + "Invalid" dans message, en plus de 404/410)
+  - Nettoyage: désactivation manuelle de 2 subscriptions p256dh invalides en DB (user 69924657cdcae11ec6b0776e)
+  - Tests: push déclenché pour 11 utilisateurs actifs lors d'une alerte équipement; OT assignation et changement statut vérifiés
 - **Feature: Notifications Push PWA** - Tests: iteration_158.json - 100%
   - `routes/notifications.py`: ajout `import os` manquant (fix endpoint `/api/web-push/vapid-key`)
   - `consignes_routes.py`: `send_web_push_to_user()` après création consigne

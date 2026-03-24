@@ -82,8 +82,9 @@ async def send_web_push_to_user(db, user_id: str, title: str, body: str, data: d
             # Desactiver les subscriptions invalides:
             # 404 = subscription introuvable
             # 410 = subscription expiree (Gone)
-            # NOTE: On ne desactive PAS sur 400 car cela peut etre transitoire
-            if resp_status in (404, 410):
+            # HTTP 0 = erreur locale (ex: Invalid p256dh key) — aussi non récupérable
+            should_deactivate = resp_status in (404, 410) or (resp_status == 0 and "Invalid" in error_msg)
+            if should_deactivate:
                 await db.web_push_subscriptions.update_one(
                     {"_id": sub["_id"]},
                     {"$set": {
@@ -92,7 +93,7 @@ async def send_web_push_to_user(db, user_id: str, title: str, body: str, data: d
                         "deactivation_reason": f"HTTP {resp_status}"
                     }}
                 )
-                logger.info(f"[WEB PUSH] Subscription desactivee (HTTP {resp_status})")
+                logger.info(f"[WEB PUSH] Subscription désactivée ({'HTTP ' + str(resp_status) if resp_status else 'erreur locale: ' + error_msg[:40]})")
 
             errors.append(error_msg[:200])
             # Log failure for health monitoring
