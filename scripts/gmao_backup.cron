@@ -1,0 +1,10 @@
+# ============================================================
+#  Cron GMAO Iris — Sauvegardes MongoDB automatiques
+#  Fichier à placer sur le serveur Proxmox :
+#    /etc/cron.d/gmao_backup
+#
+#  Après dépôt : chmod 644 /etc/cron.d/gmao_backup
+# ============================================================
+
+# Sauvegarde chaque nuit à 02h00
+0 2 * * * root bash /root/backup_mongo.sh
