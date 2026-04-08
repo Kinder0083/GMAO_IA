@@ -48,6 +48,13 @@ Application GMAO (Gestion de Maintenance Assistée par Ordinateur) complète pou
   - Création raccourci page courante (auto-détection nom + icône)
   - Création raccourci d'adresse (URL, chemin réseau)
   - Affichage style Windows sur le dashboard (icône + nom)
+
+### Session 08 avril 2026 (fork suivant)
+- **Feature: Modification du collaborateur d'une entrée de temps (OT)** - Tests: iteration_162.json - 100% (11/11 backend + frontend).
+  - `models.py`: `TimeEntryUpdate` → ajout `user_id: Optional[str] = None`
+  - `routes/work_orders.py`: `update_time_entry` → gestion changement collaborateur (find_user_flexible + update user_id + user_name + audit log "collaborateur: Ancien -> Nouveau")
+  - `services/api.js`: `updateTimeEntry` → passe `user_id` optionnel
+  - `WorkOrderDialog.jsx`: ligne d'édition inline → ajout `<Select>` dropdown liste utilisateurs actifs (data-testid=`edit-time-user-{entry_id}`)
   - Mode Modifier : drag & drop, édition (taille, icône custom, position label), suppression
   - Backend: ajout route PUT /api/user-preferences
   - Fix: PreferencesContext structure aplatie

@@ -1368,7 +1368,7 @@ const WorkOrderDialog = ({ open, onOpenChange, workOrder, onSuccess }) => {
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="unchanged">
-                              <span className="text-gray-400 italic">{entry.user_name || 'Inchangé'}</span>
+                              <span className="text-gray-400 italic">— Inchangé —</span>
                             </SelectItem>
                             {activeUsers.map(u => (
                               <SelectItem key={u.id} value={u.id}>
