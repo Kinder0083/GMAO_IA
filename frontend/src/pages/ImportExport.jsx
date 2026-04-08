@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Download, Save, RotateCcw, Settings } from 'lucide-react';
+import { Download, Save, RotateCcw, Settings, Database } from 'lucide-react';
 import { useToast } from '../hooks/use-toast';
 import ImportExportTab from './ImportExportTab';
 import BackupTab from './BackupTab';
 import RestoreTab from './RestoreTab';
 import GoogleDriveConfigTab from './GoogleDriveConfigTab';
+import MongoDBBackupTab from './MongoDBBackupTab';
 
 const ImportExport = () => {
   const { toast } = useToast();
@@ -27,6 +28,7 @@ const ImportExport = () => {
     { id: 'import-export', label: 'Import / Export', icon: Download },
     { id: 'backup', label: 'Sauvegardes Automatiques', icon: Save },
     { id: 'restore', label: 'Restauration', icon: RotateCcw },
+    { id: 'mongodb', label: 'MongoDB Natif', icon: Database },
     { id: 'configuration', label: 'Configuration', icon: Settings },
   ];
 
@@ -58,6 +60,7 @@ const ImportExport = () => {
       {activeTab === 'import-export' && <ImportExportTab />}
       {activeTab === 'backup' && <BackupTab />}
       {activeTab === 'restore' && <RestoreTab />}
+      {activeTab === 'mongodb' && <MongoDBBackupTab />}
       {activeTab === 'configuration' && <GoogleDriveConfigTab />}
     </div>
   );

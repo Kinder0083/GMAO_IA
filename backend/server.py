@@ -942,6 +942,10 @@ from accident_analysis_routes import router as accident_analysis_router, init_ac
 init_accident_analysis_routes(db, audit_service)
 api_router.include_router(accident_analysis_router)
 
+# Sauvegardes MongoDB natives (mongodump)
+from routes.mongodb_backup import router as mongodb_backup_router
+api_router.include_router(mongodb_backup_router)
+
 # check_notification_health_cron pour le scheduler
 from routes.notification_health import check_notification_health_cron
 

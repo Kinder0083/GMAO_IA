@@ -32,7 +32,9 @@ Application GMAO (Gestion de Maintenance Assistée par Ordinateur) complète pou
 - Export PDF individuel des OT (jsPDF)
 - Export PDF en masse des OT avec mode sélection
 
-### Session 08 avril 2026
+### Session 08 avril 2026 (suite)
+- **Feature: Onglet "MongoDB Natif"** dans Import/Export — interface complète de gestion des sauvegardes mongodump sans SSH : état système, sauvegarde manuelle, planification cron, liste/restauration/suppression des sauvegardes, journaux, guide LXC. Backend : `/app/backend/routes/mongodb_backup.py`. Frontend : `MongoDBBackupTab.jsx`.
+- Fichiers script cron générés automatiquement : `/etc/cron.d/gmao_mongodump` et `/root/backup_mongo_auto.sh`.
 - **Fix: Statut CONVERTIE manquant** - `improvements.py` : après conversion d'une DA en Amélioration, le statut passe maintenant à `CONVERTIE` (était resté à `VALIDEE`).
 - **Fix: Erreur MES tzinfo** - `mes_service.py` : coercion `str → datetime` pour `last_pulse_at` après migration DB. Erreur `AttributeError: 'str' has no attribute 'tzinfo'` résolue.
 - **Feature: Formulaire DA (Demandes d'Amélioration) — Équipement parent/enfant** - `ImprovementFormDialog.jsx` refonte complète: équipements parents seulement, sous-équipement conditionnel, auto-remplissage emplacement. Tests: iteration_161.json - 100%.
