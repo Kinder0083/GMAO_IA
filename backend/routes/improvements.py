@@ -746,7 +746,8 @@ async def convert_to_improvement(
                 "improvement_numero": numero,
                 "improvement_date_limite": date_limite_imp,
                 "converted_at": datetime.utcnow(),
-                "converted_by": current_user["id"]
+                "converted_by": current_user["id"],
+                "status": "CONVERTIE"
             }}
         )
         

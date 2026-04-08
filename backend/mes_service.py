@@ -462,6 +462,12 @@ class MESService:
         # Check stopped
         stopped_min = alerts_config.get("stopped_minutes", 0)
         last_p = machine.get("last_pulse_at")
+        # Correction migration DB : last_pulse_at peut être une chaîne ISO après migration
+        if last_p and isinstance(last_p, str):
+            try:
+                last_p = datetime.fromisoformat(last_p.replace('Z', '+00:00'))
+            except (ValueError, TypeError):
+                last_p = None
         if last_p and last_p.tzinfo is None:
             last_p = last_p.replace(tzinfo=timezone.utc)
         if stopped_min > 0 and last_p:
