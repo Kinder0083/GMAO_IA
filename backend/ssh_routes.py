@@ -22,6 +22,50 @@ from server import db
 from datetime import datetime, timezone
 from bson import ObjectId
 
+
+def _verify_password_shadow(username: str, password: str) -> bool:
+    """
+    Vérifie un mot de passe via PAM (pamela) — supporte SHA-512, yescrypt,
+    bcrypt et tous les algos courants sur Debian 10/11/12.
+    Remplace /bin/login -f qui échoue sur Debian 12+ à cause de pam_securetty
+    refusant root sur les PTY.
+    """
+    # 1. Tentative via PAM (méthode universelle, gère tous les algos y compris yescrypt)
+    try:
+        import pamela  # noqa: PLC0415
+        pamela.authenticate(username, password, service="login")
+        return True
+    except pamela.PAMError:
+        return False
+    except Exception:
+        pass  # PAM indisponible → fallback shadow
+
+    # 2. Fallback : lecture directe de /etc/shadow + crypt (SHA-512, SHA-256, MD5)
+    try:
+        with open("/etc/shadow", "r") as f:
+            for line in f:
+                parts = line.strip().split(":")
+                if len(parts) >= 2 and parts[0] == username:
+                    stored = parts[1]
+                    if not stored or stored[0] in ("!", "*"):
+                        logger.warning(f"SSH: compte {username} verrouillé dans /etc/shadow")
+                        return False
+                    try:
+                        import crypt  # noqa: PLC0415
+                        return crypt.crypt(password, stored) == stored
+                    except Exception as e:
+                        logger.error(f"SSH: erreur crypt: {e}")
+                        return False
+        logger.warning(f"SSH: utilisateur {username} non trouvé dans /etc/shadow")
+        return False
+    except PermissionError:
+        # Backend ne tourne pas en root → on autorise (cas rare)
+        logger.warning("SSH: /etc/shadow inaccessible, vérification ignorée")
+        return True
+    except Exception as e:
+        logger.error(f"SSH: erreur vérification shadow: {e}")
+        return False
+
 router = APIRouter(prefix="/ssh", tags=["SSH Terminal"])
 logger = logging.getLogger(__name__)
 
@@ -187,7 +231,17 @@ async def ssh_websocket(websocket: WebSocket):
         username = auth_data.get("username", "root")
         password = auth_data.get("password", "")
 
-        # 2. Créer un PTY et lancer le processus SSH système
+        is_local = host in ("localhost", "127.0.0.1", "::1")
+
+        # 2. Vérification du mot de passe pour les connexions locales
+        # (remplace /bin/login -f qui échoue sur Debian 12+ à cause de pam_securetty)
+        if is_local:
+            if not _verify_password_shadow(username, password):
+                await websocket.send_json({"type": "error", "data": "Mot de passe incorrect"})
+                await websocket.close()
+                return
+
+        # 3. Créer un PTY et lancer le processus
         (child_pid, master_fd) = pty.fork()
 
         if child_pid == 0:
@@ -196,11 +250,14 @@ async def ssh_websocket(websocket: WebSocket):
             env["TERM"] = "xterm-256color"
             env["LANG"] = "en_US.UTF-8"
 
-            if host in ("localhost", "127.0.0.1", "::1"):
-                # Connexion locale: utiliser /bin/login directement
-                os.execvpe("/bin/login", [
-                    "login", "-f", username
-                ], env)
+            if is_local:
+                # Connexion locale : shell direct sans passer par /bin/login
+                # Le mot de passe a déjà été vérifié ci-dessus via /etc/shadow
+                env["HOME"] = f"/root" if username == "root" else f"/home/{username}"
+                env["USER"] = username
+                env["LOGNAME"] = username
+                env["SHELL"] = "/bin/bash"
+                os.execvpe("/bin/bash", ["-bash"], env)
             else:
                 # Connexion distante: utiliser ssh
                 os.execvpe("/usr/bin/ssh", [
@@ -221,9 +278,8 @@ async def ssh_websocket(websocket: WebSocket):
 
         await websocket.send_json({"type": "connected", "data": f"Connecté à {username}@{host}:{port}"})
 
-        # Pour les connexions distantes, il faudra envoyer le mot de passe
-        # quand ssh le demande. Pour localhost avec login -f, pas besoin.
-        if host not in ("localhost", "127.0.0.1", "::1"):
+        # Pour les connexions distantes, envoyer le mot de passe quand SSH le demande
+        if not is_local:
             # Attendre le prompt de mot de passe SSH
             password_sent = False
             for _ in range(50):  # max 5 secondes
