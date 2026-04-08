@@ -900,6 +900,7 @@ class AddTimeSpent(BaseModel):
 class TimeEntryUpdate(BaseModel):
     hours: float
     timestamp: Optional[str] = None
+    user_id: Optional[str] = None  # Permet de changer le collaborateur assigné aux heures
 
 class CommentUpdate(BaseModel):
     text: str

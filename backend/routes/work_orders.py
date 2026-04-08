@@ -989,6 +989,17 @@ async def update_time_entry(
                 old_ts = old_ts[:10]
             details_parts.append(f"date: {old_ts} -> {new_ts.strftime('%d/%m/%Y')}")
 
+        # Changement de collaborateur
+        if update_data.user_id and update_data.user_id != old_entry.get("user_id"):
+            new_user = await find_user_flexible(update_data.user_id)
+            if not new_user:
+                raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+            new_user_name = f"{new_user.get('prenom', '')} {new_user.get('nom', '')}".strip()
+            old_user_name = old_entry.get("user_name", "?")
+            update_set["time_entries.$.user_id"] = update_data.user_id
+            update_set["time_entries.$.user_name"] = new_user_name
+            details_parts.append(f"collaborateur: {old_user_name} -> {new_user_name}")
+
         await db.work_orders.update_one(
             {"_id": wo_oid, "time_entries.id": entry_id},
             {"$set": update_set}

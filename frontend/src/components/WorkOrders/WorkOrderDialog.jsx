@@ -21,7 +21,7 @@ import AttachmentUploader from './AttachmentUploader';
 import StatusChangeDialog from './StatusChangeDialog';
 import AIDiagnosticPanel from './AIDiagnosticPanel';
 import AISummaryPanel from './AISummaryPanel';
-import { commentsAPI, workOrdersAPI, inventoryAPI, equipmentsAPI } from '../../services/api';
+import { commentsAPI, workOrdersAPI, inventoryAPI, equipmentsAPI, usersAPI } from '../../services/api';
 import { useToast } from '../../hooks/use-toast';
 import { usePermissions } from '../../hooks/usePermissions';
 import { formatTimeToHoursMinutes } from '../../utils/timeFormat';
@@ -51,6 +51,8 @@ const WorkOrderDialog = ({ open, onOpenChange, workOrder, onSuccess }) => {
   const [editingTimeId, setEditingTimeId] = useState(null);
   const [editingTimeValue, setEditingTimeValue] = useState('');
   const [editingTimeDate, setEditingTimeDate] = useState('');
+  const [editingTimeUserId, setEditingTimeUserId] = useState('');
+  const [activeUsers, setActiveUsers] = useState([]);
   const [editingCommentId, setEditingCommentId] = useState(null);
   const [editingCommentText, setEditingCommentText] = useState('');
   const [generatingPDF, setGeneratingPDF] = useState(false);
@@ -461,11 +463,12 @@ const WorkOrderDialog = ({ open, onOpenChange, workOrder, onSuccess }) => {
   };
 
   // === Fonctions : édition/suppression des temps ===
-  const handleEditTimeEntry = (entry) => {
+  const handleEditTimeEntry = async (entry) => {
     setEditingTimeId(entry.id);
     const h = Math.floor(entry.hours);
     const m = Math.round((entry.hours - h) * 60);
     setEditingTimeValue(`${h}h${m.toString().padStart(2, '0')}`);
+    setEditingTimeUserId(entry.user_id || '');
     // Extraire la date de pointage (format YYYY-MM-DD pour l'input date)
     const ts = entry.timestamp || '';
     if (ts) {
@@ -478,6 +481,16 @@ const WorkOrderDialog = ({ open, onOpenChange, workOrder, onSuccess }) => {
     } else {
       setEditingTimeDate('');
     }
+    // Charger la liste des utilisateurs actifs si pas encore chargée
+    if (activeUsers.length === 0) {
+      try {
+        const res = await usersAPI.getAll();
+        const users = (res.data || []).filter(u => u.statut === 'actif' || u.actif === true);
+        setActiveUsers(users);
+      } catch (e) {
+        // Silencieux — la liste restera vide
+      }
+    }
   };
 
   const handleSaveTimeEntry = async () => {
@@ -489,10 +502,11 @@ const WorkOrderDialog = ({ open, onOpenChange, workOrder, onSuccess }) => {
     try {
       const newHours = parsed.hours + parsed.minutes / 60;
       const timestamp = editingTimeDate ? new Date(editingTimeDate + 'T12:00:00').toISOString() : undefined;
-      await workOrdersAPI.updateTimeEntry(workOrder.id, editingTimeId, newHours, timestamp);
+      await workOrdersAPI.updateTimeEntry(workOrder.id, editingTimeId, newHours, timestamp, editingTimeUserId || undefined);
       toast({ title: 'Succès', description: 'Entrée de temps modifiée' });
       setEditingTimeId(null);
       setEditingTimeDate('');
+      setEditingTimeUserId('');
       if (onSuccess) onSuccess();
     } catch (error) {
       toast({ title: 'Erreur', description: 'Impossible de modifier le temps', variant: 'destructive' });
@@ -1341,6 +1355,28 @@ const WorkOrderDialog = ({ open, onOpenChange, workOrder, onSuccess }) => {
                           className="max-w-[100px] h-7 text-sm"
                           placeholder="Ex: 1h30"
                         />
+                        {/* Sélecteur de collaborateur */}
+                        <Select
+                          value={editingTimeUserId || 'unchanged'}
+                          onValueChange={(val) => setEditingTimeUserId(val === 'unchanged' ? '' : val)}
+                        >
+                          <SelectTrigger
+                            data-testid={`edit-time-user-${entry.id}`}
+                            className="h-7 text-sm min-w-[130px] max-w-[180px]"
+                          >
+                            <SelectValue placeholder="Collaborateur" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="unchanged">
+                              <span className="text-gray-400 italic">{entry.user_name || 'Inchangé'}</span>
+                            </SelectItem>
+                            {activeUsers.map(u => (
+                              <SelectItem key={u.id} value={u.id}>
+                                {u.prenom} {u.nom}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                         <button
                           data-testid={`save-time-${entry.id}`}
                           onClick={handleSaveTimeEntry}
@@ -1350,7 +1386,7 @@ const WorkOrderDialog = ({ open, onOpenChange, workOrder, onSuccess }) => {
                           <Check size={14} />
                         </button>
                         <button
-                          onClick={() => { setEditingTimeId(null); setEditingTimeDate(''); }}
+                          onClick={() => { setEditingTimeId(null); setEditingTimeDate(''); setEditingTimeUserId(''); }}
                           className="p-1 text-gray-400 hover:bg-gray-100 rounded"
                           title="Annuler"
                         >
