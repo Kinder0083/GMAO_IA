@@ -21,7 +21,7 @@ from models import (
     ImprovementRequestUpdate, ImprovementRequestStatusUpdate
 )
 from dependencies import get_current_user, get_current_admin_user, require_permission
-from routes.shared import db, audit_service, serialize_doc, find_user_flexible, NOT_DELETED
+from routes.shared import db, audit_service, serialize_doc, find_user_flexible, NOT_DELETED, get_location_by_id
 
 EntityType_Audit = EntityType
 logger = logging.getLogger(__name__)
