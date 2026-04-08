@@ -281,6 +281,7 @@ const InterventionRequests = () => {
                     <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Titre</th>
                     <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Priorité</th>
                     <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Équipement</th>
+                    <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Sous-équipement</th>
                     <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Date Limite Désirée</th>
                     <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Date Création</th>
                     <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Actions</th>
@@ -304,6 +305,9 @@ const InterventionRequests = () => {
                       <td className="py-3 px-4">{getPriorityBadge(req.priorite)}</td>
                       <td className="py-3 px-4 text-sm text-gray-600">
                         {req.equipement ? req.equipement.nom : '-'}
+                      </td>
+                      <td className="py-3 px-4 text-sm text-gray-500" data-testid={`di-sous-equip-${req.id}`}>
+                        {req.sous_equipement ? req.sous_equipement.nom : '-'}
                       </td>
                       <td className="py-3 px-4 text-sm">
                         <span className={isOverdue(req.date_limite_desiree, req.statut) ? 'text-red-600 font-medium' : 'text-gray-600'}>
