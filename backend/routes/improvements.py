@@ -1062,6 +1062,7 @@ async def get_improvements(
         
         improvements = []
         async for imp in db.improvements.find(query).sort("dateCreation", -1):
+            imp = serialize_doc(imp)
             if imp.get("assigne_a_id"):
                 imp["assigneA"] = await get_user_by_id(imp["assigne_a_id"])
             if imp.get("emplacement_id"):
