@@ -32,7 +32,11 @@ Application GMAO (Gestion de Maintenance Assistée par Ordinateur) complète pou
 - Export PDF individuel des OT (jsPDF)
 - Export PDF en masse des OT avec mode sélection
 
-### Session Actuelle (22 mars 2026)
+### Session 08 avril 2026
+- **Fix: Statut CONVERTIE manquant** - `improvements.py` : après conversion d'une DA en Amélioration, le statut passe maintenant à `CONVERTIE` (était resté à `VALIDEE`).
+- **Fix: Erreur MES tzinfo** - `mes_service.py` : coercion `str → datetime` pour `last_pulse_at` après migration DB. Erreur `AttributeError: 'str' has no attribute 'tzinfo'` résolue.
+- **Feature: Formulaire DA (Demandes d'Amélioration) — Équipement parent/enfant** - `ImprovementFormDialog.jsx` refonte complète: équipements parents seulement, sous-équipement conditionnel, auto-remplissage emplacement. Tests: iteration_161.json - 100%.
+- **Fix: Formulaire DI (Demandes d'Intervention) — Submit** - `InterventionRequestFormDialog.jsx` : envoi séparé `equipement_id` (parent) et `sous_equipement_id` (enfant). Mode édition corrigé pour détecter parent vs enfant via `parent_id`.
 - **Fix: Statuts OT "Att Matériel" et "Att Décision"** - Tests: iteration_153.json - 100%
 - **Fix: Numéros OT en doublon** - Compteur atomique MongoDB
 - **Fix: Notifications cloche (Header)** - Compteurs séparés att_materiel / att_decision
