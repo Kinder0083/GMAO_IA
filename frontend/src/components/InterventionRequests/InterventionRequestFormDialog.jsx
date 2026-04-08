@@ -48,12 +48,21 @@ const InterventionRequestFormDialog = ({ open, onOpenChange, request, onSuccess 
     if (open) {
       loadData();
       if (request) {
+        // Détecter si l'équipement stocké est un sous-équipement (a un parent_id)
+        const eqId = request.equipement?.id || request.equipement_id || '';
+        let parentEqId = eqId;
+        let sousEqId = request.sous_equipement?.id || request.sous_equipement_id || '';
+        // Compatibilité anciens enregistrements : si l'équipement a un parent_id c'est un sous-équipement
+        if (!sousEqId && request.equipement?.parent_id) {
+          parentEqId = request.equipement.parent_id;
+          sousEqId = eqId;
+        }
         setFormData({
           titre: request.titre || '',
           description: request.description || '',
           priorite: request.priorite || 'AUCUNE',
-          equipement_id: request.equipement?.id || '',
-          sous_equipement_id: request.sous_equipement?.id || request.sous_equipement_id || '',
+          equipement_id: parentEqId,
+          sous_equipement_id: sousEqId,
           emplacement_id: request.emplacement?.id || '',
           date_limite_desiree: request.date_limite_desiree?.split('T')[0] || ''
         });
@@ -274,13 +283,12 @@ const InterventionRequestFormDialog = ({ open, onOpenChange, request, onSuccess 
     setLoading(true);
 
     try {
-      const actualEquipementId = formData.sous_equipement_id || formData.equipement_id || null;
-
       const submitData = {
         titre: formData.titre,
         description: formData.description,
         priorite: formData.priorite,
-        equipement_id: actualEquipementId,
+        equipement_id: formData.equipement_id || null,
+        sous_equipement_id: formData.sous_equipement_id || null,
         emplacement_id: formData.emplacement_id || null,
         date_limite_desiree: formData.date_limite_desiree ? new Date(formData.date_limite_desiree).toISOString() : null
       };

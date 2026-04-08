@@ -12,7 +12,7 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Textarea } from '../ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Paperclip, Camera } from 'lucide-react';
+import { Paperclip, Camera, RefreshCw } from 'lucide-react';
 import { useToast } from '../../hooks/use-toast';
 import { improvementsAPI, equipmentsAPI, locationsAPI, usersAPI } from '../../services/api';
 import StatusChangeDialog from './StatusChangeDialog';
@@ -23,6 +23,8 @@ const ImprovementFormDialog = ({ open, onOpenChange, workOrder, onSuccess }) => 
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [equipments, setEquipments] = useState([]);
+  const [childEquipments, setChildEquipments] = useState([]);
+  const [loadingChildren, setLoadingChildren] = useState(false);
   const [locations, setLocations] = useState([]);
   const [users, setUsers] = useState([]);
   const [formData, setFormData] = useState({
@@ -31,6 +33,7 @@ const ImprovementFormDialog = ({ open, onOpenChange, workOrder, onSuccess }) => 
     statut: 'OUVERT',
     priorite: 'AUCUNE',
     equipement_id: '',
+    sous_equipement_id: '',
     assigne_a_id: '',
     emplacement_id: '',
     dateLimite: '',
@@ -48,13 +51,23 @@ const ImprovementFormDialog = ({ open, onOpenChange, workOrder, onSuccess }) => 
     if (open) {
       loadData();
       setIsClosing(false);
+      setChildEquipments([]);
       if (workOrder) {
+        // Détecter si l'équipement stocké est un sous-équipement (a un parent_id)
+        const eqId = workOrder.equipement?.id || workOrder.equipement_id || '';
+        let parentEqId = eqId;
+        let sousEqId = '';
+        if (workOrder.equipement?.parent_id) {
+          parentEqId = workOrder.equipement.parent_id;
+          sousEqId = eqId;
+        }
         setFormData({
           titre: workOrder.titre || '',
           description: workOrder.description || '',
           statut: workOrder.statut || 'OUVERT',
           priorite: workOrder.priorite || 'AUCUNE',
-          equipement_id: workOrder.equipement?.id || '',
+          equipement_id: parentEqId,
+          sous_equipement_id: sousEqId,
           assigne_a_id: workOrder.assigneA?.id || workOrder.assigne_a_id || '',
           assigne_type: workOrder.assigne_type || null,
           assigne_service: workOrder.assigne_service || null,
@@ -71,6 +84,7 @@ const ImprovementFormDialog = ({ open, onOpenChange, workOrder, onSuccess }) => 
           statut: 'OUVERT',
           priorite: 'AUCUNE',
           equipement_id: '',
+          sous_equipement_id: '',
           assigne_a_id: '',
           emplacement_id: '',
           dateLimite: '',
@@ -83,10 +97,25 @@ const ImprovementFormDialog = ({ open, onOpenChange, workOrder, onSuccess }) => 
     }
   }, [open, workOrder]);
 
+  // Auto-remplir l'emplacement et charger les sous-équipements quand l'équipement change
+  useEffect(() => {
+    if (formData.equipement_id && equipments.length > 0) {
+      const parentEq = equipments.find(eq => eq.id === formData.equipement_id);
+      if (parentEq) {
+        if (parentEq.emplacement_id && formData.emplacement_id !== parentEq.emplacement_id) {
+          setFormData(prev => ({ ...prev, emplacement_id: parentEq.emplacement_id }));
+        }
+        loadChildren(parentEq.id);
+      }
+    } else if (!formData.equipement_id) {
+      setChildEquipments([]);
+    }
+  }, [formData.equipement_id, equipments]);
+
   const loadData = async () => {
     try {
       const [equipRes, locRes, userRes] = await Promise.all([
-        equipmentsAPI.getAll(),
+        equipmentsAPI.getParents(),
         locationsAPI.getAll(),
         usersAPI.getAll()
       ]);
@@ -95,6 +124,19 @@ const ImprovementFormDialog = ({ open, onOpenChange, workOrder, onSuccess }) => 
       setUsers(userRes.data);
     } catch (error) {
       console.error('Erreur de chargement:', error);
+    }
+  };
+
+  const loadChildren = async (parentId) => {
+    setLoadingChildren(true);
+    try {
+      const response = await equipmentsAPI.getChildren(parentId);
+      setChildEquipments(response.data || []);
+    } catch (error) {
+      console.error('Erreur chargement sous-équipements:', error);
+      setChildEquipments([]);
+    } finally {
+      setLoadingChildren(false);
     }
   };
 
@@ -163,14 +205,16 @@ const ImprovementFormDialog = ({ open, onOpenChange, workOrder, onSuccess }) => 
     setLoading(true);
 
     try {
+      const actualEquipementId = formData.sous_equipement_id || formData.equipement_id || null;
       const submitData = {
         ...formData,
         tempsEstime: formData.tempsEstime ? parseFloat(formData.tempsEstime) : null,
         dateLimite: formData.dateLimite ? new Date(formData.dateLimite).toISOString() : null,
-        equipement_id: formData.equipement_id || null,
+        equipement_id: actualEquipementId,
         assigne_a_id: formData.assigne_a_id || null,
         emplacement_id: formData.emplacement_id || null
       };
+      delete submitData.sous_equipement_id;
 
       if (workOrder) {
         await improvementsAPI.update(workOrder.id, submitData);
@@ -309,17 +353,48 @@ const ImprovementFormDialog = ({ open, onOpenChange, workOrder, onSuccess }) => 
 
           <div className="space-y-2">
             <Label htmlFor="equipement_id">Équipement</Label>
-            <Select value={formData.equipement_id} onValueChange={(value) => setFormData({ ...formData, equipement_id: value })}>
-              <SelectTrigger>
+            <Select
+              value={formData.equipement_id || "none"}
+              onValueChange={(value) => setFormData({ ...formData, equipement_id: value === "none" ? "" : value, sous_equipement_id: '' })}
+            >
+              <SelectTrigger data-testid="improvement-equipement-select">
                 <SelectValue placeholder="Sélectionner un équipement" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="none">Aucun</SelectItem>
                 {equipments.map(eq => (
                   <SelectItem key={eq.id} value={eq.id}>{eq.nom}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
+
+          {loadingChildren && (
+            <div className="flex items-center gap-2 text-sm text-gray-500">
+              <RefreshCw className="h-4 w-4 animate-spin" />
+              Chargement des sous-équipements...
+            </div>
+          )}
+
+          {!loadingChildren && formData.equipement_id && childEquipments.length > 0 && (
+            <div className="space-y-2">
+              <Label htmlFor="sous_equipement">Sous-équipement</Label>
+              <Select
+                value={formData.sous_equipement_id || "none"}
+                onValueChange={(value) => setFormData({ ...formData, sous_equipement_id: value === "none" ? "" : value })}
+              >
+                <SelectTrigger data-testid="improvement-sous-equipement-select">
+                  <SelectValue placeholder="Sélectionner un sous-équipement" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Aucun</SelectItem>
+                  {childEquipments.map(eq => (
+                    <SelectItem key={eq.id} value={eq.id}>{eq.nom}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           <div className="space-y-2">
             <AssigneeSelector
@@ -337,12 +412,18 @@ const ImprovementFormDialog = ({ open, onOpenChange, workOrder, onSuccess }) => 
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="emplacement_id">Emplacement</Label>
-            <Select value={formData.emplacement_id} onValueChange={(value) => setFormData({ ...formData, emplacement_id: value })}>
-              <SelectTrigger>
+            <Label htmlFor="emplacement_id">
+              Emplacement
+              {formData.emplacement_id && formData.equipement_id && (
+                <span className="text-xs text-green-600 ml-2 font-normal">(rempli automatiquement)</span>
+              )}
+            </Label>
+            <Select value={formData.emplacement_id || "none"} onValueChange={(value) => setFormData({ ...formData, emplacement_id: value === "none" ? "" : value })}>
+              <SelectTrigger data-testid="improvement-emplacement-select">
                 <SelectValue placeholder="Sélectionner un emplacement" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="none">Aucun</SelectItem>
                 {locations.map(loc => (
                   <SelectItem key={loc.id} value={loc.id}>{loc.nom}</SelectItem>
                 ))}
