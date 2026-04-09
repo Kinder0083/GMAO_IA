@@ -59,7 +59,7 @@ const WorkOrders = () => {
   const [generatingPDF, setGeneratingPDF] = useState(false);
   
   // Filtres de date
-  const [dateFilter, setDateFilter] = useState('today'); // today, week, month, custom
+  const [dateFilter, setDateFilter] = useState('month'); // today, week, month, custom
   const [dateType, setDateType] = useState('creation'); // creation ou echeance
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
