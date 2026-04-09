@@ -994,11 +994,16 @@ async def update_time_entry(
             new_user = await find_user_flexible(update_data.user_id)
             if not new_user:
                 raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
-            new_user_name = f"{new_user.get('prenom', '')} {new_user.get('nom', '')}".strip()
-            old_user_name = old_entry.get("user_name", "?")
-            update_set["time_entries.$.user_id"] = update_data.user_id
-            update_set["time_entries.$.user_name"] = new_user_name
-            details_parts.append(f"collaborateur: {old_user_name} -> {new_user_name}")
+            # Toujours stocker l'_id MongoDB (format hex) pour cohérence avec les rapports
+            canonical_user_id = str(new_user["_id"])
+            old_canonical = old_entry.get("user_id", "")
+            # Ne mettre à jour que si le collaborateur a vraiment changé (compare les _id canoniques)
+            if canonical_user_id != old_canonical:
+                new_user_name = f"{new_user.get('prenom', '')} {new_user.get('nom', '')}".strip()
+                old_user_name = old_entry.get("user_name", "?")
+                update_set["time_entries.$.user_id"] = canonical_user_id
+                update_set["time_entries.$.user_name"] = new_user_name
+                details_parts.append(f"collaborateur: {old_user_name} -> {new_user_name}")
 
         await db.work_orders.update_one(
             {"_id": wo_oid, "time_entries.id": entry_id},
