@@ -49,7 +49,13 @@ Application GMAO (Gestion de Maintenance Assistée par Ordinateur) complète pou
   - Création raccourci d'adresse (URL, chemin réseau)
   - Affichage style Windows sur le dashboard (icône + nom)
 
-### Session 10 avril 2026
+### Session 10 avril 2026 (suite)
+- **Feature : Exclure les inactifs des dropdowns et widgets** — Tests: iteration_163 + curl
+  - `routes/service_manager.py`: `/api/assignment-targets` filtre `statut != "inactif"` (regex insensible à la casse pour compatibilité legacy)
+  - `team_management_routes.py`: `/team/members` exclut les permanents inactifs du widget charge d'équipe
+  - `api.js`: ajout `usersAPI.getActive()` qui filtre les inactifs côté frontend
+  - 8 composants mis à jour : `WorkOrderFormDialog`, `WorkOrderDialog`, `ConvertToWorkOrderDialog`, `ConvertToImprovementDialog`, `ImprovementFormDialog`, `PreventiveMaintenanceFormDialog`, `PresquAccidentList`, `SurveillanceItemForm`, `UserPasswordReset`, `ConsignationsLOTO`
+  - Les rapports `/api/reports/user-time-tracking` ne filtrent PAS par statut → heures historiques préservées
 - **Feature: Activation / Désactivation des utilisateurs (Option C)** — Tests: iteration_163.json — 100% (13/13)
   - `models.py`: `UserUpdate` → ajout `statut: Optional[str] = None`
   - `dependencies.py`: `get_current_user` → vérifie `statut == "inactif"` → 401 immédiat (invalidation session sans token blacklist)

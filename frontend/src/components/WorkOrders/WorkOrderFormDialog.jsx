@@ -238,8 +238,7 @@ const WorkOrderFormDialog = ({ open, onOpenChange, workOrder, prefillData, onSuc
       const [equipRes, locRes, userRes] = await Promise.all([
         equipmentsAPI.getParents(),
         locationsAPI.getAll(),
-        usersAPI.getAll()
-      ]);
+        usersAPI.getActive()      ]);
       setEquipments(equipRes.data);
       setLocations(locRes.data);
       setUsers(userRes.data); // Tous les membres, quel que soit leur rôle

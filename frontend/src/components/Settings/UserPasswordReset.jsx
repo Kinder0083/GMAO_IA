@@ -30,7 +30,7 @@ const UserPasswordReset = () => {
   const loadUsers = async () => {
     try {
       setLoading(true);
-      const response = await usersAPI.getAll();
+      const response = await usersAPI.getActive();
       setUsers(response.data);
     } catch (error) {
       toast({

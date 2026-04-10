@@ -152,10 +152,14 @@ async def get_assignment_targets(current_user: dict = Depends(get_current_user))
         })
 
     # Récupérer les utilisateurs actifs triés par nom
-    # On inclut tous les utilisateurs sauf ceux explicitement désactivés
-    # On garde _id en fallback si le champ 'id' n'existe pas
+    # Exclure les utilisateurs explicitement désactivés (statut=inactif, insensible à la casse)
+    # et ceux avec le flag legacy actif=False
     users_cursor = db.users.find(
-        {"actif": {"$ne": False}, **NOT_DELETED},
+        {
+            "actif": {"$ne": False},
+            "statut": {"$not": {"$regex": "^inactif$", "$options": "i"}},
+            **NOT_DELETED
+        },
         {"nom": 1, "prenom": 1, "role": 1, "email": 1, "id": 1}
     ).sort([("nom", 1), ("prenom", 1)])
     users = []

@@ -369,6 +369,11 @@ export const aiMaintenanceAPI = {
 // ==================== USERS ====================
 export const usersAPI = {
   getAll: () => api.get('/users'),
+  // Retourne uniquement les utilisateurs actifs (pour les dropdowns d'assignation)
+  getActive: () => api.get('/users').then(res => ({
+    ...res,
+    data: (res.data || []).filter(u => (u.statut || 'actif').toLowerCase() !== 'inactif')
+  })),
   getById: (id) => api.get(`/users/${id}`),
   update: (id, data) => api.put(`/users/${id}`, data),
   delete: (id) => api.delete(`/users/${id}`),

@@ -193,7 +193,7 @@ function PresquAccidentList() {
 
   const loadUsers = async () => {
     try {
-      const response = await usersAPI.getAll();
+      const response = await usersAPI.getActive();
       setUsers(response.data || []);
     } catch (error) {
       console.error('Erreur chargement utilisateurs:', error);

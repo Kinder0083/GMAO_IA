@@ -485,7 +485,7 @@ const WorkOrderDialog = ({ open, onOpenChange, workOrder, onSuccess }) => {
     if (activeUsers.length === 0) {
       try {
         const res = await usersAPI.getAll();
-        const users = (res.data || []).filter(u => u.statut === 'actif' || u.actif === true);
+        const users = (res.data || []).filter(u => (u.statut || 'actif').toLowerCase() !== 'inactif');
         setActiveUsers(users);
       } catch (e) {
         // Silencieux — la liste restera vide

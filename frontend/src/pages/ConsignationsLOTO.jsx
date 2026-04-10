@@ -442,11 +442,12 @@ function LOTOCreateDialog({ open, onClose, onCreated }) {
       try {
         const [eqRes, usersRes] = await Promise.all([
           fetch(`${API}/api/equipments`, { headers: authHeaders() }).then(r => r.json()),
-          fetch(`${API}/api/users`, { headers: authHeaders() }).then(r => r.json())
+          fetch(`${API}/api/users`, { headers: authHeaders() }).then(r => r.json()).then(data =>
+            (Array.isArray(data) ? data : []).filter(u => (u.statut || 'actif').toLowerCase() !== 'inactif')
+          )
         ]);
         setEquipments(Array.isArray(eqRes) ? eqRes : []);
-        setUsers(Array.isArray(usersRes) ? usersRes : []);
-      } catch (e) { console.error(e); }
+        setUsers(Array.isArray(usersRes) ? usersRes : []);      } catch (e) { console.error(e); }
     };
     loadData();
   }, []);

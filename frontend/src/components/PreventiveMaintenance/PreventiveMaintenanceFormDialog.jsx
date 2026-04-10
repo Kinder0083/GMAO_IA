@@ -71,8 +71,7 @@ const PreventiveMaintenanceFormDialog = ({ open, onOpenChange, maintenance, onSu
     try {
       const [equipRes, userRes] = await Promise.all([
         equipmentsAPI.getAll(),
-        usersAPI.getAll()
-      ]);
+        usersAPI.getActive()      ]);
       setEquipments(equipRes.data);
       setUsers(userRes.data);
     } catch (error) {

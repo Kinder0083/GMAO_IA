@@ -263,8 +263,11 @@ async def get_team_members(
     # Récupérer les membres temporaires
     temp_members = await db.team_members.find(query).to_list(200)
     
-    # Récupérer les utilisateurs permanents du service
+    # Récupérer les utilisateurs permanents du service (actifs uniquement)
     user_query = {"service": query.get("service")} if query.get("service") else {}
+    # Exclure les inactifs (nouveau champ statut + legacy actif=False)
+    user_query["statut"] = {"$not": {"$regex": "^inactif$", "$options": "i"}}
+    user_query["actif"] = {"$ne": False}
     users = await db.users.find(user_query, {"password": 0}).to_list(200)
     
     result = []

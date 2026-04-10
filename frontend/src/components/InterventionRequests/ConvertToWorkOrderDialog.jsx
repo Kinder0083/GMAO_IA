@@ -44,7 +44,7 @@ const ConvertToWorkOrderDialog = ({ open, onOpenChange, request, onSuccess }) =>
 
   const loadUsers = async () => {
     try {
-      const response = await usersAPI.getAll();
+      const response = await usersAPI.getActive();
       setUsers(response.data.filter(u => u.role === 'TECHNICIEN' || u.role === 'ADMIN'));
     } catch (error) {
       console.error('Erreur chargement utilisateurs:', error);
