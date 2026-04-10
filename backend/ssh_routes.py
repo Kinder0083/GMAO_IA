@@ -1,8 +1,8 @@
 """
 SSH Terminal - WebSocket + PTY
-Utilise le binaire SSH du système pour une compatibilité maximale.
-Fonctionne exactement comme PuTTY.
-+ Système de macros (CRUD) pour exécuter des commandes prédéfinies.
+- Connexions LOCALES  : PTY + PAM (vérification shadow) → shell direct
+- Connexions DISTANTES : Paramiko (SSH Python natif) → authentification par mot de passe fiable
+Fonctionne exactement comme PuTTY pour les connexions root sur Debian 12 / Proxmox.
 """
 import asyncio
 import os
@@ -17,6 +17,7 @@ import json
 from typing import List, Optional
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException, Depends
 from pydantic import BaseModel
+import paramiko
 from dependencies import get_current_user
 from server import db
 from datetime import datetime, timezone
@@ -203,14 +204,18 @@ async def _verify_token_admin(token_str):
 @router.websocket("/ws")
 async def ssh_websocket(websocket: WebSocket):
     """
-    WebSocket pour terminal SSH interactif via PTY + binaire ssh système.
+    WebSocket pour terminal SSH interactif.
+    - LOCAL  : PTY + PAM  (remplace /bin/login -f défaillant sur Debian 12)
+    - DISTANT: Paramiko   (auth mot de passe native, fiable pour root/Proxmox)
     """
     await websocket.accept()
     child_pid = None
     master_fd = None
+    ssh_client = None   # objet paramiko pour connexions distantes
+    channel = None      # channel paramiko
 
     try:
-        # 1. Authentification applicative
+        # ── 1. Authentification applicative ───────────────────────────────
         auth_data = await asyncio.wait_for(websocket.receive_json(), timeout=30)
         if auth_data.get("type") != "auth":
             await websocket.send_json({"type": "error", "data": "Message d'authentification attendu"})
@@ -226,130 +231,180 @@ async def ssh_websocket(websocket: WebSocket):
             await websocket.send_json({"type": "error", "data": f"Token invalide: {str(e)}"})
             return
 
-        host = auth_data.get("host", "localhost")
-        port = int(auth_data.get("port", 22))
+        host     = auth_data.get("host", "localhost")
+        port     = int(auth_data.get("port", 22))
         username = auth_data.get("username", "root")
         password = auth_data.get("password", "")
+        cols     = int(auth_data.get("cols", 120))
+        rows     = int(auth_data.get("rows", 40))
 
         is_local = host in ("localhost", "127.0.0.1", "::1")
 
-        # 2. Vérification du mot de passe pour les connexions locales
-        # (remplace /bin/login -f qui échoue sur Debian 12+ à cause de pam_securetty)
+        # ── 2a. CONNEXION LOCALE — PTY + PAM ─────────────────────────────
         if is_local:
             if not _verify_password_shadow(username, password):
                 await websocket.send_json({"type": "error", "data": "Mot de passe incorrect"})
                 await websocket.close()
                 return
 
-        # 3. Créer un PTY et lancer le processus
-        (child_pid, master_fd) = pty.fork()
+            (child_pid, master_fd) = pty.fork()
 
-        if child_pid == 0:
-            # === Processus enfant ===
-            env = os.environ.copy()
-            env["TERM"] = "xterm-256color"
-            env["LANG"] = "en_US.UTF-8"
-
-            if is_local:
-                # Connexion locale : shell direct sans passer par /bin/login
-                # Le mot de passe a déjà été vérifié ci-dessus via /etc/shadow
-                env["HOME"] = f"/root" if username == "root" else f"/home/{username}"
-                env["USER"] = username
+            if child_pid == 0:
+                env = os.environ.copy()
+                env["TERM"] = "xterm-256color"
+                env["LANG"] = "en_US.UTF-8"
+                env["HOME"]    = "/root" if username == "root" else f"/home/{username}"
+                env["USER"]    = username
                 env["LOGNAME"] = username
-                env["SHELL"] = "/bin/bash"
+                env["SHELL"]   = "/bin/bash"
                 os.execvpe("/bin/bash", ["-bash"], env)
-            else:
-                # Connexion distante: utiliser ssh
-                os.execvpe("/usr/bin/ssh", [
-                    "ssh",
-                    "-o", "StrictHostKeyChecking=no",
-                    "-o", "UserKnownHostsFile=/dev/null",
-                    "-p", str(port),
-                    f"{username}@{host}"
-                ], env)
-            os._exit(1)
+                os._exit(1)
 
-        # === Processus parent ===
-        logger.info(f"SSH PTY started: pid={child_pid}, fd={master_fd}, target={username}@{host}:{port}")
+            winsize = struct.pack("HHHH", rows, cols, 0, 0)
+            fcntl.ioctl(master_fd, termios.TIOCSWINSZ, winsize)
+            await websocket.send_json({"type": "connected", "data": f"Connecté à {username}@{host}:{port}"})
 
-        # Taille initiale du terminal
-        winsize = struct.pack("HHHH", 40, 120, 0, 0)
-        fcntl.ioctl(master_fd, termios.TIOCSWINSZ, winsize)
-
-        await websocket.send_json({"type": "connected", "data": f"Connecté à {username}@{host}:{port}"})
-
-        # Pour les connexions distantes, envoyer le mot de passe quand SSH le demande
-        if not is_local:
-            # Attendre le prompt de mot de passe SSH
-            password_sent = False
-            for _ in range(50):  # max 5 secondes
-                await asyncio.sleep(0.1)
-                try:
-                    r, _, _ = select.select([master_fd], [], [], 0)
-                    if r:
-                        data = os.read(master_fd, 4096)
-                        if data:
-                            text = data.decode("utf-8", errors="replace").lower()
-                            await websocket.send_bytes(data)
-                            if "password" in text and not password_sent:
-                                os.write(master_fd, (password + "\n").encode("utf-8"))
-                                password_sent = True
+            async def read_pty():
+                while True:
+                    try:
+                        await asyncio.sleep(0.01)
+                        r, _, _ = select.select([master_fd], [], [], 0.02)
+                        if r:
+                            data = os.read(master_fd, 4096)
+                            if data:
+                                await websocket.send_bytes(data)
+                            else:
                                 break
-                except Exception:
-                    break
+                    except (OSError, IOError):
+                        break
+                    except Exception:
+                        break
 
-        # 3. Boucle bidirectionnelle PTY <-> WebSocket
-        async def read_pty():
-            """Lire la sortie du PTY et l'envoyer au WebSocket."""
-            while True:
-                try:
-                    await asyncio.sleep(0.01)
-                    r, _, _ = select.select([master_fd], [], [], 0.02)
-                    if r:
-                        data = os.read(master_fd, 4096)
+            async def write_pty():
+                while True:
+                    try:
+                        message = await websocket.receive()
+                        if message.get("type") == "websocket.disconnect":
+                            break
+                        if "bytes" in message:
+                            os.write(master_fd, message["bytes"])
+                        elif "text" in message:
+                            text = message["text"]
+                            try:
+                                msg = json.loads(text)
+                                if msg.get("type") == "resize":
+                                    c = msg.get("cols", cols)
+                                    r = msg.get("rows", rows)
+                                    ws = struct.pack("HHHH", r, c, 0, 0)
+                                    fcntl.ioctl(master_fd, termios.TIOCSWINSZ, ws)
+                                    os.kill(child_pid, signal.SIGWINCH)
+                                    continue
+                            except (json.JSONDecodeError, ValueError):
+                                pass
+                            os.write(master_fd, text.encode("utf-8"))
+                    except WebSocketDisconnect:
+                        break
+                    except Exception:
+                        break
+
+            read_task  = asyncio.create_task(read_pty())
+            write_task = asyncio.create_task(write_pty())
+
+        # ── 2b. CONNEXION DISTANTE — Paramiko ────────────────────────────
+        else:
+            loop = asyncio.get_event_loop()
+
+            # Connexion paramiko dans un thread (opération bloquante)
+            def _connect():
+                client = paramiko.SSHClient()
+                client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                client.connect(
+                    hostname=host,
+                    port=port,
+                    username=username,
+                    password=password,
+                    timeout=30,
+                    auth_timeout=30,
+                    banner_timeout=30,
+                    allow_agent=False,
+                    look_for_keys=False,
+                )
+                return client
+
+            try:
+                ssh_client = await asyncio.wait_for(
+                    loop.run_in_executor(None, _connect),
+                    timeout=35
+                )
+            except asyncio.TimeoutError:
+                await websocket.send_json({"type": "error", "data": f"Timeout : impossible de joindre {host}:{port}"})
+                return
+            except paramiko.AuthenticationException:
+                await websocket.send_json({"type": "error", "data": "Authentification refusée — vérifiez le nom d'utilisateur et le mot de passe"})
+                return
+            except paramiko.SSHException as e:
+                await websocket.send_json({"type": "error", "data": f"Erreur SSH : {e}"})
+                return
+            except Exception as e:
+                await websocket.send_json({"type": "error", "data": f"Connexion impossible : {e}"})
+                return
+
+            # Ouvrir un canal interactif avec PTY
+            transport = ssh_client.get_transport()
+            transport.set_keepalive(30)
+            channel = transport.open_session()
+            channel.get_pty("xterm-256color", cols, rows)
+            channel.invoke_shell()
+            channel.setblocking(False)
+
+            await websocket.send_json({"type": "connected", "data": f"Connecté à {username}@{host}:{port}"})
+            logger.info(f"SSH Paramiko connecté: {username}@{host}:{port}")
+
+            async def read_pty():
+                """Lire le canal paramiko et envoyer au WebSocket."""
+                while True:
+                    try:
+                        data = await loop.run_in_executor(None, _read_channel, channel)
+                        if data is None:
+                            # canal fermé
+                            break
                         if data:
                             await websocket.send_bytes(data)
                         else:
-                            break
-                except (OSError, IOError):
-                    break
-                except Exception:
-                    break
-
-        async def write_pty():
-            """Lire le WebSocket et écrire dans le PTY."""
-            while True:
-                try:
-                    message = await websocket.receive()
-                    if message.get("type") == "websocket.disconnect":
+                            await asyncio.sleep(0.02)
+                    except Exception:
                         break
 
-                    if "bytes" in message:
-                        os.write(master_fd, message["bytes"])
-                    elif "text" in message:
-                        text = message["text"]
-                        # Vérifier si c'est un message de resize
-                        try:
-                            msg = json.loads(text)
-                            if msg.get("type") == "resize":
-                                cols = msg.get("cols", 120)
-                                rows = msg.get("rows", 40)
-                                winsize = struct.pack("HHHH", rows, cols, 0, 0)
-                                fcntl.ioctl(master_fd, termios.TIOCSWINSZ, winsize)
-                                # Envoyer SIGWINCH au processus enfant
-                                os.kill(child_pid, signal.SIGWINCH)
-                                continue
-                        except (json.JSONDecodeError, ValueError):
-                            pass
-                        os.write(master_fd, text.encode("utf-8"))
-                except WebSocketDisconnect:
-                    break
-                except Exception:
-                    break
+            async def write_pty():
+                """Recevoir depuis le WebSocket et écrire dans le canal paramiko."""
+                while True:
+                    try:
+                        message = await websocket.receive()
+                        if message.get("type") == "websocket.disconnect":
+                            break
+                        if "bytes" in message:
+                            channel.send(message["bytes"])
+                        elif "text" in message:
+                            text = message["text"]
+                            try:
+                                msg = json.loads(text)
+                                if msg.get("type") == "resize":
+                                    c = msg.get("cols", cols)
+                                    r = msg.get("rows", rows)
+                                    channel.resize_pty(width=c, height=r)
+                                    continue
+                            except (json.JSONDecodeError, ValueError):
+                                pass
+                            channel.send(text.encode("utf-8"))
+                    except WebSocketDisconnect:
+                        break
+                    except Exception:
+                        break
 
-        read_task = asyncio.create_task(read_pty())
-        write_task = asyncio.create_task(write_pty())
+            read_task  = asyncio.create_task(read_pty())
+            write_task = asyncio.create_task(write_pty())
 
+        # ── 3. Attendre la fin d'une des deux tâches ─────────────────────
         done, pending = await asyncio.wait(
             [read_task, write_task],
             return_when=asyncio.FIRST_COMPLETED
@@ -365,21 +420,50 @@ async def ssh_websocket(websocket: WebSocket):
         logger.error(f"SSH WebSocket erreur: {e}", exc_info=True)
         try:
             await websocket.send_json({"type": "error", "data": str(e)})
-        except:
+        except Exception:
             pass
     finally:
+        # Nettoyage connexion distante (paramiko)
+        if channel is not None:
+            try:
+                channel.close()
+            except Exception:
+                pass
+        if ssh_client is not None:
+            try:
+                ssh_client.close()
+            except Exception:
+                pass
+        # Nettoyage connexion locale (PTY)
         if master_fd is not None:
             try:
                 os.close(master_fd)
-            except:
+            except Exception:
                 pass
         if child_pid and child_pid > 0:
             try:
                 os.kill(child_pid, signal.SIGTERM)
                 os.waitpid(child_pid, os.WNOHANG)
-            except:
+            except Exception:
                 pass
         try:
             await websocket.close()
-        except:
+        except Exception:
             pass
+
+
+def _read_channel(channel: paramiko.Channel) -> Optional[bytes]:
+    """
+    Lecture non-bloquante d'un canal paramiko.
+    Retourne None si le canal est fermé, b'' si rien à lire, bytes sinon.
+    """
+    if channel.closed or channel.exit_status_ready():
+        return None
+    try:
+        if channel.recv_ready():
+            return channel.recv(4096)
+        if channel.recv_stderr_ready():
+            return channel.recv_stderr(4096)
+        return b""
+    except Exception:
+        return None
