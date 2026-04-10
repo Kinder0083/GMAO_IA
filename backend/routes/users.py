@@ -16,6 +16,7 @@ from models import (
     MessageResponse, SuccessResponse, get_default_permissions_by_role
 )
 from auth import get_password_hash
+from routes.auth import generate_temp_password
 from dependencies import get_current_user, get_current_admin_user, require_permission
 from routes.shared import db, audit_service, serialize_doc, find_user_flexible, NOT_DELETED
 import email_service
