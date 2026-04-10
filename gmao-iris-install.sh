@@ -826,15 +826,28 @@ fi
 echo "🌐 Étape 5: Vérification nginx..."
 if [ -f /etc/nginx/sites-available/gmao-iris ]; then
     NGINX_CHANGED=0
+
+    # Fix IPv6 : remplacer localhost par 127.0.0.1 (évite connect() failed [::1])
+    if grep -q "proxy_pass http://localhost" /etc/nginx/sites-available/gmao-iris; then
+        sed -i 's|proxy_pass http://localhost:8001|proxy_pass http://127.0.0.1:8001|g' /etc/nginx/sites-available/gmao-iris
+        NGINX_CHANGED=1
+        echo "   ✅ proxy_pass: localhost → 127.0.0.1 (fix IPv6)"
+    fi
+
+    # Fix taille upload
     if grep -q "client_max_body_size 25M" /etc/nginx/sites-available/gmao-iris; then
         sed -i 's/client_max_body_size 25M/client_max_body_size 200M/' /etc/nginx/sites-available/gmao-iris
         NGINX_CHANGED=1
         echo "   ✅ client_max_body_size: 25M -> 200M"
     fi
-    if ! grep -q "proxy_buffering off" /etc/nginx/sites-available/gmao-iris; then
-        sed -i '/location \/api/,/}/ { /proxy_set_header X-Real-IP/a\        proxy_read_timeout 300;\n        proxy_send_timeout 300;\n        proxy_buffering off;' /etc/nginx/sites-available/gmao-iris 2>/dev/null || true
+
+    # Ajouter la location WebSocket SSH si absente
+    if ! grep -q "location /api/ssh/ws" /etc/nginx/sites-available/gmao-iris; then
+        sed -i '/location \/api {/i\    # WebSocket SSH Terminal\n    location \/api\/ssh\/ws {\n        proxy_pass http:\/\/127.0.0.1:8001;\n        proxy_http_version 1.1;\n        proxy_set_header Upgrade \$http_upgrade;\n        proxy_set_header Connection "upgrade";\n        proxy_set_header Host \$host;\n        proxy_set_header X-Real-IP \$remote_addr;\n        proxy_read_timeout 3600s;\n        proxy_send_timeout 3600s;\n        proxy_buffering off;\n    }\n' /etc/nginx/sites-available/gmao-iris 2>/dev/null || true
         NGINX_CHANGED=1
+        echo "   ✅ Location /api/ssh/ws ajoutée"
     fi
+
     if [ "\$NGINX_CHANGED" -eq 1 ]; then
         nginx -t 2>/dev/null && systemctl reload nginx 2>/dev/null
         echo "   ✅ Nginx rechargé"
@@ -920,27 +933,41 @@ server {
     listen 80;
     server_name _;
     client_max_body_size 200M;
-    
+
     location / {
         root /opt/gmao-iris/frontend/build;
         try_files $uri $uri/ /index.html;
     }
-    
-    location /api {
-        proxy_pass http://localhost:8001;
+
+    # WebSocket SSH Terminal (AVANT /api pour avoir la priorité)
+    # IMPORTANT: utiliser 127.0.0.1 et non localhost (IPv6 [::1] non supporté par uvicorn)
+    location /api/ssh/ws {
+        proxy_pass http://127.0.0.1:8001;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection upgrade;
+        proxy_set_header Connection "upgrade";
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
-        proxy_read_timeout 300;
-        proxy_send_timeout 300;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
         proxy_buffering off;
     }
-    
-    # WebSocket pour le Chat Live
+
+    location /api {
+        proxy_pass http://127.0.0.1:8001;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+        proxy_buffering off;
+    }
+
+    # WebSocket Chat Live
     location /ws/chat/ {
-        proxy_pass http://localhost:8001;
+        proxy_pass http://127.0.0.1:8001;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
@@ -949,10 +976,10 @@ server {
         proxy_read_timeout 86400;
         proxy_send_timeout 86400;
     }
-    
-    # WebSocket pour le Tableau d affichage
+
+    # WebSocket Tableau d'affichage
     location /ws/whiteboard/ {
-        proxy_pass http://localhost:8001;
+        proxy_pass http://127.0.0.1:8001;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
