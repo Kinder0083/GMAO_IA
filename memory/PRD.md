@@ -49,7 +49,14 @@ Application GMAO (Gestion de Maintenance Assistée par Ordinateur) complète pou
   - Création raccourci d'adresse (URL, chemin réseau)
   - Affichage style Windows sur le dashboard (icône + nom)
 
-### Session 08 avril 2026 (fork suivant)
+### Session 10 avril 2026
+- **Feature: Activation / Désactivation des utilisateurs (Option C)** — Tests: iteration_163.json — 100% (13/13)
+  - `models.py`: `UserUpdate` → ajout `statut: Optional[str] = None`
+  - `dependencies.py`: `get_current_user` → vérifie `statut == "inactif"` → 401 immédiat (invalidation session sans token blacklist)
+  - `routes/auth.py`: login bloqué avec 403 si `statut == "inactif"`
+  - `routes/users.py`: audit log "Compte désactivé/réactivé" + fix imports manquants (`get_default_permissions_by_role`, `get_password_hash`, `email_service`)
+  - `People.jsx`: filtres Tous/Actifs/Inactifs + badge "Inactif" sur les cartes + bouton rapide toggle + `normalizeStatut()` pour compatibilité legacy DB (ACTIF majuscule)
+  - `EditUserDialog.jsx`: Switch statut admin + avertissement invalidation session + `.toLowerCase()` sur init
 - **Feature: Modification du collaborateur d'une entrée de temps (OT)** - Tests: iteration_162.json - 100% (11/11 backend + frontend).
   - `models.py`: `TimeEntryUpdate` → ajout `user_id: Optional[str] = None`
   - `routes/work_orders.py`: `update_time_entry` → gestion changement collaborateur (find_user_flexible + update user_id + user_name + audit log "collaborateur: Ancien -> Nouveau")
