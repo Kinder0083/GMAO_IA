@@ -112,8 +112,13 @@ function SSHTerminal() {
     setStatus('connecting');
     term.writeln(`\x1b[33mConnexion à ${username}@${host}:${port}...\x1b[0m`);
 
-    const wsProtocol = BACKEND_URL.startsWith('https') ? 'wss' : 'ws';
-    const wsHost = BACKEND_URL.replace(/^https?:\/\//, '');
+    // Si BACKEND_URL est vide (prod sans variable d'env), utiliser window.location
+    const wsProtocol = BACKEND_URL
+      ? (BACKEND_URL.startsWith('https') ? 'wss' : 'ws')
+      : (window.location.protocol === 'https:' ? 'wss' : 'ws');
+    const wsHost = BACKEND_URL
+      ? BACKEND_URL.replace(/^https?:\/\//, '')
+      : window.location.host;
     const ws = new WebSocket(`${wsProtocol}://${wsHost}/api/ssh/ws`);
     wsRef.current = ws;
     ws.binaryType = 'arraybuffer';
