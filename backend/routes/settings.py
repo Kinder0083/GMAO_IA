@@ -8,6 +8,8 @@ from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
 import logging
 import json
+import os
+from pathlib import Path
 
 from models import (
     ActionType, EntityType,
@@ -17,6 +19,10 @@ from models import (
 )
 from dependencies import get_current_user, get_current_admin_user, require_permission
 from routes.shared import db, audit_service, serialize_doc
+import email_service
+
+# Chemin racine du backend (pour lecture/écriture du .env)
+ROOT_DIR = Path(__file__).parent.parent
 
 EntityType_Audit = EntityType
 logger = logging.getLogger(__name__)
