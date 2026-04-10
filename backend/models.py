@@ -717,6 +717,7 @@ class UserUpdate(BaseModel):
     role: Optional[UserRole] = None
     service: Optional[str] = None
     regime: Optional[UserRegime] = None
+    statut: Optional[str] = None              # "actif" ou "inactif" — modifiable par admin uniquement
     # Champs MQTT pour les consignes
     mqtt_topic: Optional[str] = None           # Topic principal pour les actions simples
     mqtt_action_ok: Optional[str] = None       # Payload à envoyer sur mqtt_topic quand OK

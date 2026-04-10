@@ -13,10 +13,12 @@ import logging
 from models import (
     ActionType, EntityType, User, UserUpdate, UserInvite,
     UserPermissions, UserPermissionsUpdate, ResetPasswordAdminResponse,
-    MessageResponse, SuccessResponse
+    MessageResponse, SuccessResponse, get_default_permissions_by_role
 )
+from auth import get_password_hash
 from dependencies import get_current_user, get_current_admin_user, require_permission
 from routes.shared import db, audit_service, serialize_doc, find_user_flexible, NOT_DELETED
+import email_service
 
 EntityType_Audit = EntityType
 logger = logging.getLogger(__name__)
@@ -74,11 +76,20 @@ async def update_user(user_id: str, user_update: UserUpdate, current_user: dict 
         
         update_data = {k: v for k, v in user_update.model_dump().items() if v is not None}
         
+        # Valider la valeur du statut si fourni
+        if "statut" in update_data and update_data["statut"] not in ("actif", "inactif"):
+            raise HTTPException(status_code=400, detail="Statut invalide. Valeurs acceptées : actif, inactif")
+        
         # Si le rôle change, mettre à jour automatiquement les permissions par défaut
         if "role" in update_data:
             new_role = update_data["role"]
             default_permissions = get_default_permissions_by_role(new_role).model_dump()
             update_data["permissions"] = default_permissions
+        
+        # Détecter le changement de statut pour l'audit
+        old_statut = user.get("statut", "actif")
+        new_statut = update_data.get("statut")
+        statut_changed = new_statut and new_statut != old_statut
         
         await db.users.update_one(
             {"_id": user["_id"]},
@@ -87,6 +98,20 @@ async def update_user(user_id: str, user_update: UserUpdate, current_user: dict 
         
         updated = await db.users.find_one({"_id": user["_id"]})
         user_response = User(**serialize_doc(updated))
+        
+        # Log d'audit pour le changement de statut
+        if statut_changed:
+            action_label = "désactivé" if new_statut == "inactif" else "réactivé"
+            await audit_service.log_action(
+                user_id=current_user["id"],
+                user_name=f"{current_user['prenom']} {current_user['nom']}",
+                user_email=current_user["email"],
+                action=ActionType.UPDATE,
+                entity_type=EntityType_Audit.USER,
+                entity_id=user_id,
+                entity_name=f"{user.get('prenom', '')} {user.get('nom', '')}".strip(),
+                details=f"Compte {action_label} (statut: {old_statut} → {new_statut})"
+            )
         
         # Émettre l'événement WebSocket à TOUS les utilisateurs (y compris celui qui fait la modification)
         # Important pour la synchronisation du Planning quand on modifie un service

@@ -74,6 +74,14 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
             headers={"WWW-Authenticate": "Bearer"},
         )
     
+    # Vérifier que le compte est actif (invalidation immédiate si désactivé par un admin)
+    if user.get("statut") == "inactif":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Compte désactivé. Contactez un administrateur.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
     user["id"] = str(user["_id"])
     del user["_id"]
     # Remove password field if it exists (support both 'password' and 'hashed_password')

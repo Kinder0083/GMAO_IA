@@ -3,7 +3,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
-import { Edit, Building2, Clock, Radio } from 'lucide-react';
+import { Switch } from '../ui/switch';
+import { Edit, Building2, Clock, Radio, UserCheck, UserX, AlertTriangle } from 'lucide-react';
 import { usersAPI } from '../../services/api';
 import { useToast } from '../../hooks/use-toast';
 import { formatErrorMessage } from '../../utils/errorFormatter';
@@ -43,6 +44,7 @@ const EditUserDialog = ({ open, onOpenChange, user, onSuccess }) => {
     service: '',
     regime: 'Journée',
     role: 'VISUALISEUR',
+    statut: 'actif',
     mqtt_topic: '',
     mqtt_action_ok: '',
     mqtt_action_reception: '',
@@ -62,6 +64,7 @@ const EditUserDialog = ({ open, onOpenChange, user, onSuccess }) => {
         service: userService,
         regime: user.regime || 'Journée',
         role: user.role || 'VISUALISEUR',
+        statut: (user.statut || 'actif').toLowerCase(),
         mqtt_topic: user.mqtt_topic || '',
         mqtt_action_ok: user.mqtt_action_ok || '',
         mqtt_action_reception: user.mqtt_action_reception || '',
@@ -258,6 +261,51 @@ const EditUserDialog = ({ open, onOpenChange, user, onSuccess }) => {
                 <option value="VISUALISEUR">Visualiseur - Accès en lecture seule</option>
               </select>
             </div>
+
+            {/* Section Statut du compte — Admin uniquement */}
+            {isAdmin && (
+              <div className={`rounded-lg border-2 p-4 transition-colors ${
+                formData.statut === 'inactif'
+                  ? 'border-red-200 bg-red-50'
+                  : 'border-green-200 bg-green-50'
+              }`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    {formData.statut === 'actif' ? (
+                      <UserCheck size={20} className="text-green-600" />
+                    ) : (
+                      <UserX size={20} className="text-red-600" />
+                    )}
+                    <div>
+                      <p className="font-medium text-sm text-gray-900">
+                        {formData.statut === 'actif' ? 'Compte actif' : 'Compte désactivé'}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {formData.statut === 'actif'
+                          ? "L'utilisateur peut se connecter et recevoir des tâches"
+                          : "L'utilisateur ne peut plus se connecter ni recevoir de tâches"}
+                      </p>
+                    </div>
+                  </div>
+                  <Switch
+                    data-testid="user-statut-switch"
+                    checked={formData.statut === 'actif'}
+                    onCheckedChange={(checked) =>
+                      setFormData({ ...formData, statut: checked ? 'actif' : 'inactif' })
+                    }
+                    className={formData.statut === 'actif' ? 'data-[state=checked]:bg-green-600' : ''}
+                  />
+                </div>
+                {formData.statut === 'inactif' && (
+                  <div className="mt-3 flex items-start gap-2 text-red-700 text-xs bg-red-100 rounded p-2">
+                    <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+                    <span>
+                      La session de cet utilisateur sera immédiatement invalidée. Il sera déconnecté et ne pourra plus se reconnecter.
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Section MQTT - Visible uniquement pour les administrateurs */}
             {isAdmin && (

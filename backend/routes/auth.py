@@ -125,6 +125,14 @@ async def login(login_request: LoginRequest):
             detail="Email ou mot de passe incorrect"
         )
     
+    # Vérifier que le compte est actif
+    if user.get("statut") == "inactif":
+        logger.warning(f"❌ Login refusé — compte inactif: {login_request.email}")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Votre compte a été désactivé. Contactez un administrateur."
+        )
+    
     # Update last login
     await db.users.update_one(
         {"_id": user["_id"]},

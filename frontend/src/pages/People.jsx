@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { Plus, Search, Users as UsersIcon, Mail, Phone, Trash2, Settings, UserPlus, Edit, Shield, Wifi, WifiOff, BellRing, Monitor } from 'lucide-react';
+import { Switch } from '../components/ui/switch';
+import { Plus, Search, Users as UsersIcon, Mail, Phone, Trash2, Settings, UserPlus, Edit, Shield, Wifi, WifiOff, BellRing, Monitor, UserCheck, UserX } from 'lucide-react';
 import UserProfileDialog from '../components/Common/UserProfileDialog';
 import InviteMemberDialog from '../components/Common/InviteMemberDialog';
 import CreateMemberDialog from '../components/Common/CreateMemberDialog';
@@ -23,6 +24,8 @@ const People = () => {
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRole, setFilterRole] = useState('ALL');
+  const [filterStatus, setFilterStatus] = useState('all'); // 'all' | 'actif' | 'inactif'
+  const [toggleStatusLoading, setToggleStatusLoading] = useState(null);
   const [profileDialogOpen, setProfileDialogOpen] = useState(false);
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -104,6 +107,9 @@ const People = () => {
     return currentUser?.role === 'ADMIN';
   };
 
+  // Normaliser le statut (ancien format 'ACTIF'/'INACTIF' → nouveau format 'actif'/'inactif')
+  const normalizeStatut = (statut) => (statut || 'actif').toLowerCase();
+
   const filteredUsers = users.filter(user => {
     // Masquer le compte de secours pour tous sauf l'admin
     if (user.email === 'buenogy@gmail.com' && currentUser?.role !== 'ADMIN') {
@@ -114,11 +120,14 @@ const People = () => {
                          user.prenom.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          user.email.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesRole = filterRole === 'ALL' || user.role === filterRole;
-    return matchesSearch && matchesRole;
+    const matchesStatus = filterStatus === 'all' || normalizeStatut(user.statut) === filterStatus;
+    return matchesSearch && matchesRole && matchesStatus;
   });
 
-  // Comptabiliser uniquement les membres qui ne sont pas le compte de secours
+  // Comptages
   const activeUsersCount = users.filter(u => u.email !== 'buenogy@gmail.com').length;
+  const inactifCount = users.filter(u => normalizeStatut(u.statut) === 'inactif' && u.email !== 'buenogy@gmail.com').length;
+  const actifCount = users.filter(u => normalizeStatut(u.statut) === 'actif' && u.email !== 'buenogy@gmail.com').length;
 
   const getRoleBadge = (role) => {
     const badges = {
@@ -181,6 +190,29 @@ const People = () => {
   const handleEditUser = (user) => {
     setSelectedUser(user);
     setEditDialogOpen(true);
+  };
+
+  // Basculer rapidement le statut actif/inactif sans ouvrir la modale
+  const handleQuickToggleStatus = async (user) => {
+    const newStatut = normalizeStatut(user.statut) === 'inactif' ? 'actif' : 'inactif';
+    setToggleStatusLoading(user.id);
+    try {
+      await usersAPI.update(user.id, { statut: newStatut });
+      toast({
+        title: newStatut === 'inactif' ? 'Compte désactivé' : 'Compte réactivé',
+        description: `${user.prenom} ${user.nom} est maintenant ${newStatut === 'inactif' ? 'inactif' : 'actif'}.`,
+        variant: newStatut === 'inactif' ? 'destructive' : 'default'
+      });
+      loadUsers();
+    } catch (error) {
+      toast({
+        title: 'Erreur',
+        description: formatErrorMessage(error, 'Impossible de modifier le statut'),
+        variant: 'destructive'
+      });
+    } finally {
+      setToggleStatusLoading(null);
+    }
   };
 
   const roles = [
@@ -300,7 +332,41 @@ const People = () => {
                 />
               </div>
             </div>
-            <div className="flex gap-2 flex-wrap">
+            <div className="flex gap-2 flex-wrap items-center">
+              {/* Filtre statut actif/inactif — admin uniquement */}
+              {isAdmin() && (
+                <div className="flex gap-1 border rounded-lg p-1 bg-gray-50">
+                  <Button
+                    size="sm"
+                    variant={filterStatus === 'all' ? 'default' : 'ghost'}
+                    onClick={() => setFilterStatus('all')}
+                    className={filterStatus === 'all' ? 'bg-gray-700 hover:bg-gray-800 text-white h-7 text-xs' : 'h-7 text-xs'}
+                    data-testid="filter-status-all"
+                  >
+                    Tous ({activeUsersCount})
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={filterStatus === 'actif' ? 'default' : 'ghost'}
+                    onClick={() => setFilterStatus('actif')}
+                    className={filterStatus === 'actif' ? 'bg-green-600 hover:bg-green-700 text-white h-7 text-xs' : 'h-7 text-xs text-green-700'}
+                    data-testid="filter-status-actif"
+                  >
+                    <UserCheck size={12} className="mr-1" />
+                    Actifs ({actifCount})
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={filterStatus === 'inactif' ? 'default' : 'ghost'}
+                    onClick={() => setFilterStatus('inactif')}
+                    className={filterStatus === 'inactif' ? 'bg-red-600 hover:bg-red-700 text-white h-7 text-xs' : 'h-7 text-xs text-red-600'}
+                    data-testid="filter-status-inactif"
+                  >
+                    <UserX size={12} className="mr-1" />
+                    Inactifs ({inactifCount})
+                  </Button>
+                </div>
+              )}
               {roles.map(role => (
                 <Button
                   key={role.value}
@@ -329,8 +395,20 @@ const People = () => {
           </div>
         ) : (
           filteredUsers.map((user) => (
-            <Card key={user.id} className="hover:shadow-xl transition-all duration-300 relative">
+            <Card
+              key={user.id}
+              className={`hover:shadow-xl transition-all duration-300 relative ${
+                normalizeStatut(user.statut) === 'inactif' ? 'opacity-60 grayscale-[30%] border-red-200' : ''
+              }`}
+            >
               <CardContent className="pt-6">
+                {/* Badge Inactif */}
+                {normalizeStatut(user.statut) === 'inactif' && (
+                  <div className="absolute top-2 left-2 flex items-center gap-1 bg-red-100 text-red-700 text-xs font-semibold px-2 py-0.5 rounded-full border border-red-200">
+                    <UserX size={11} />
+                    Inactif
+                  </div>
+                )}
                 {/* Bouton test notification push - Admin uniquement */}
                 {isAdmin() && (
                   <div className="absolute top-3 right-3">
@@ -420,11 +498,12 @@ const People = () => {
 
                   {/* Admin Actions */}
                   {isAdmin() && user.id !== currentUser?.id && (
-                    <div className="flex gap-2 mt-2 w-full">
+                    <div className="flex gap-2 mt-2 w-full flex-wrap">
                       <Button 
                         variant="outline" 
                         className="flex-1 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300"
                         onClick={() => handleEditUser(user)}
+                        data-testid={`btn-edit-user-${user.id}`}
                       >
                         <Edit size={16} className="mr-2" />
                         Modifier
@@ -433,6 +512,7 @@ const People = () => {
                         variant="outline" 
                         className="flex-1 hover:bg-purple-50 hover:text-purple-600 hover:border-purple-300"
                         onClick={() => handleManagePermissions(user)}
+                        data-testid={`btn-permissions-${user.id}`}
                       >
                         <Settings size={16} className="mr-2" />
                         Permissions
@@ -446,10 +526,37 @@ const People = () => {
                         <Monitor size={16} className="mr-2" />
                         Headers
                       </Button>
+                      {/* Bouton rapide : activer / désactiver */}
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="outline"
+                            disabled={toggleStatusLoading === user.id}
+                            onClick={() => handleQuickToggleStatus(user)}
+                            data-testid={`btn-toggle-status-${user.id}`}
+                            className={
+                              normalizeStatut(user.statut) === 'inactif'
+                                ? 'hover:bg-green-50 hover:text-green-700 hover:border-green-300 text-green-600 border-green-300'
+                                : 'hover:bg-red-50 hover:text-red-600 hover:border-red-300 text-red-500'
+                            }
+                          >
+                            {toggleStatusLoading === user.id
+                              ? '...'
+                              : normalizeStatut(user.statut) === 'inactif'
+                                ? <UserCheck size={16} />
+                                : <UserX size={16} />
+                            }
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          {normalizeStatut(user.statut) === 'inactif' ? 'Réactiver le compte' : 'Désactiver le compte'}
+                        </TooltipContent>
+                      </Tooltip>
                       <Button 
                         variant="outline" 
                         className="hover:bg-red-50 hover:text-red-600 hover:border-red-300"
                         onClick={() => handleDeleteClick(user)}
+                        data-testid={`btn-delete-user-${user.id}`}
                       >
                         <Trash2 size={16} />
                       </Button>
