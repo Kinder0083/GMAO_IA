@@ -177,6 +177,9 @@ async def get_all_intervention_requests(current_user: dict = Depends(require_per
                 req["priorite"] = req.get("priority", "AUCUNE")
             elif isinstance(req.get("priorite"), str):
                 req["priorite"] = req["priorite"].upper()
+            # Normaliser work_order_numero : float → string (données legacy prod où le numéro est stocké en float)
+            if req.get("work_order_numero") is not None and isinstance(req["work_order_numero"], (int, float)):
+                req["work_order_numero"] = str(int(req["work_order_numero"]))
             try:
                 requests.append(InterventionRequest(**req))
             except Exception as e:
@@ -188,6 +191,9 @@ async def get_all_intervention_requests(current_user: dict = Depends(require_per
                 req.setdefault("date_creation", datetime.utcnow())
                 if isinstance(req.get("priorite"), str):
                     req["priorite"] = req["priorite"].upper()
+                # Re-normaliser work_order_numero dans la correction également
+                if req.get("work_order_numero") is not None and isinstance(req["work_order_numero"], (int, float)):
+                    req["work_order_numero"] = str(int(req["work_order_numero"]))
                 try:
                     requests.append(InterventionRequest(**req))
                 except Exception as e2:

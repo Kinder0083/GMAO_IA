@@ -162,6 +162,11 @@ Application GMAO (Gestion de Maintenance Assistée par Ordinateur) complète pou
   - Vérification : 23/23 work_orders en UUID, tous les champs dates en type datetime
   - Script fourni à l'utilisateur pour la production Proxmox
 
+### Session 10 avril 2026 (suite 2 — fork correctifs prod)
+- **Fix : DI invalides en boucle** (`routes/intervention_requests.py`) — `work_order_numero` stocké en float en prod (ex: `5811.0`) → normalisation `int(float) → str` avant validation Pydantic. Plus d'erreurs `définitivement invalide` en log.
+- **Fix : OT créateur "PUBLIC" erreur en boucle** (`routes/work_orders.py`) — `ObjectId("PUBLIC")` → `InvalidId` loggé en ERROR à chaque requête OT. Code rendu robuste : essai ObjectId silencieux, fallback par champ `id`, affichage "Public" si `createdBy == "PUBLIC"`.
+- **Script migration prod** — `/app/backend/tests/migrate_prod_fix.py` : convertit `work_order_numero` et `numero` float → string en MongoDB (idempotent, safe à relancer). Validé localement (4 OT corrigés, 0 erreur).
+
 ## Backlog
 - P2: Tester le script `MAJ_FSAO.sh`
 - EN ATTENTE consignes utilisateur

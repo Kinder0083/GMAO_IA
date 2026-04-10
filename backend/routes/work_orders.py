@@ -154,16 +154,23 @@ async def get_work_orders(
             wo["equipement"] = await get_equipment_by_id(wo["equipement_id"])
 
         if wo.get("createdBy"):
+            created_by_val = wo["createdBy"]
             try:
-                creator = await db.users.find_one({"_id": ObjectId(wo["createdBy"])})
+                creator = None
+                # Tenter d'abord via ObjectId (format 24-char hex)
+                try:
+                    creator = await db.users.find_one({"_id": ObjectId(created_by_val)})
+                except Exception:
+                    pass  # Non-ObjectId valide (ex: "PUBLIC", UUID)
+                # Fallback via champ id (UUID ou string quelconque)
+                if not creator:
+                    creator = await db.users.find_one({"id": created_by_val})
                 if creator:
                     wo["createdByName"] = f"{creator.get('prenom', '')} {creator.get('nom', '')}".strip()
-                else:
-                    creator = await db.users.find_one({"id": wo["createdBy"]})
-                    if creator:
-                        wo["createdByName"] = f"{creator.get('prenom', '')} {creator.get('nom', '')}".strip()
-            except Exception as e:
-                logger.error(f"Erreur lors de la recherche du créateur {wo.get('createdBy')}: {e}")
+                elif created_by_val == "PUBLIC":
+                    wo["createdByName"] = "Public"
+            except Exception:
+                pass  # Silencieux : créateur introuvable n'est pas bloquant
 
     for wo in work_orders:
         if "numero" not in wo or not wo["numero"]:
