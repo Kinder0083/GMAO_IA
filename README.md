@@ -236,7 +236,7 @@ FSAO Iris integre des fonctionnalites d'IA generative (Gemini Pro) pour automati
 - Demandes d'amelioration avec suivi
 - Demandes d'intervention avec pieces jointes, glisser-deposer, conversion en OT et transfert automatique des photos
 - **KPI Demandes d'Intervention sur le Dashboard** : indicateurs en temps reel affichant le nombre de DI en attente et le temps de reponse moyen, mis a jour automatiquement
-- Acces SSH distant depuis l'interface (admin)
+- Acces SSH distant depuis l'interface (admin) — Terminal interactif via WebSocket + Paramiko (connexion SSH native, compatible Debian 12/yescrypt)
 - Configuration Tailscale depuis l'interface web
 - Gestion des fuseaux horaires
 
@@ -750,7 +750,129 @@ Si la banniere d'installation de la PWA n'apparait pas :
 4. **Cache** : Videz le cache du navigateur (`Ctrl+Shift+Delete` ou parametres Safari)
 5. **Sur iOS** : Il n'y a pas de banniere automatique. Utilisez le bouton Partager → "Sur l'ecran d'accueil"
 
-### PWA : Notifications push non recues
+### Terminal SSH : Erreur de connexion WebSocket
+
+**Symptômes :** Le terminal SSH affiche "Erreur de connexion WebSocket" ou reste bloqué sur "Connexion à root@..."
+
+**Cause racine (Debian 12 / Proxmox LXC) :**
+Nginx résout `localhost` en IPv6 (`[::1]`) sur Debian 12, mais Uvicorn n'écoute que sur IPv4 (`127.0.0.1`). Résultat : `connect() failed (111: Connection refused)` sur toutes les routes `/api`, y compris le WebSocket SSH.
+
+**Vérification :**
+```bash
+# Ces erreurs dans les logs nginx confirment le problème IPv6 :
+tail -20 /var/log/nginx/error.log | grep "\[::1\]"
+# → connect() failed (111: Connection refused) upstream: "http://[::1]:8001/..."
+
+# Test direct du WebSocket backend (doit retourner 101) :
+curl -v -H "Upgrade: websocket" -H "Connection: Upgrade" \
+  -H "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==" \
+  -H "Sec-WebSocket-Version: 13" \
+  http://localhost:8001/api/ssh/ws 2>&1 | grep "HTTP/"
+# → HTTP/1.1 101 Switching Protocols  ← Backend OK, problème dans nginx
+```
+
+**Correctif nginx** (`/etc/nginx/sites-available/gmao-iris`) :
+
+Remplacer **tous** les `proxy_pass http://localhost:8001` par `proxy_pass http://127.0.0.1:8001`, et ajouter une location dédiée pour le WebSocket SSH **avant** le bloc `/api` :
+
+```nginx
+server {
+    listen 80;
+    server_name _;
+    client_max_body_size 200M;
+
+    location / {
+        root /opt/gmao-iris/frontend/build;
+        try_files $uri $uri/ /index.html;
+    }
+
+    # WebSocket SSH Terminal — AVANT /api (priorité nginx)
+    location /api/ssh/ws {
+        proxy_pass http://127.0.0.1:8001;   # 127.0.0.1 obligatoire (pas localhost)
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+        proxy_buffering off;
+    }
+
+    location /api {
+        proxy_pass http://127.0.0.1:8001;   # 127.0.0.1 obligatoire (pas localhost)
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_read_timeout 300s;
+        proxy_send_timeout 300s;
+        proxy_buffering off;
+    }
+
+    location /ws/chat/ {
+        proxy_pass http://127.0.0.1:8001;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_read_timeout 86400;
+        proxy_send_timeout 86400;
+    }
+
+    location /ws/whiteboard/ {
+        proxy_pass http://127.0.0.1:8001;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_read_timeout 86400;
+        proxy_send_timeout 86400;
+    }
+}
+```
+
+**Application du correctif :**
+```bash
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+> **Note :** Ce correctif est automatiquement appliqué par `gmao-iris-install.sh` et `backend/post-update.sh` depuis la version 1.11.0. Les installations existantes doivent le corriger manuellement une fois.
+
+---
+
+### Terminal SSH : Authentification refusée
+
+```bash
+# Vérifier la config sshd sur le serveur cible
+sshd -T | grep -E "permitrootlogin|passwordauthentication"
+
+# Pour autoriser root par mot de passe :
+# Dans /etc/ssh/sshd_config :
+# PermitRootLogin yes
+# PasswordAuthentication yes
+# systemctl restart sshd
+
+# Test paramiko direct (remplacer VOTRE_MDP) :
+/opt/gmao-iris/backend/venv/bin/python3 - <<'EOF'
+import paramiko
+c = paramiko.SSHClient()
+c.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+try:
+    c.connect('127.0.0.1', port=22, username='root', password='VOTRE_MDP',
+              timeout=10, allow_agent=False, look_for_keys=False)
+    _, out, _ = c.exec_command('whoami')
+    print("SUCCÈS :", out.read().decode().strip())
+    c.close()
+except Exception as e:
+    print("ÉCHEC :", type(e).__name__, str(e))
+EOF
+```
+
+
 
 Si les notifications push ne fonctionnent pas :
 1. **Verifiez les cles VAPID** dans `backend/.env` (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_CLAIMS_EMAIL`)
