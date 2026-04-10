@@ -4,7 +4,7 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { useToast } from '../hooks/use-toast';
-import { User, Mail, Phone, Lock, Bell, Globe, Info, HelpCircle, Download, BellRing } from 'lucide-react';
+import { User, Mail, Phone, Lock, Bell, Globe, Info, HelpCircle, Download, BellRing, CheckCircle, AlertTriangle, Monitor, Smartphone, Chrome, ExternalLink, Copy, RefreshCw } from 'lucide-react';
 import { Switch } from '../components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../components/ui/tooltip';
@@ -14,7 +14,7 @@ import { GuidedTourSettings, ChangelogAdmin } from '../components/Settings';
 import { authAPI } from '../services/api';
 import api from '../services/api';
 import { formatErrorMessage } from '../utils/errorFormatter';
-import { usePushNotifications, useInstallPrompt } from '../hooks/usePWA';
+import { usePushNotifications, usePlatformInstall } from '../hooks/usePWA';
 
 const Settings = () => {
   const { toast } = useToast();
@@ -25,7 +25,8 @@ const Settings = () => {
   const [responsableInfo, setResponsableInfo] = useState(null);
   const [notifLoading, setNotifLoading] = useState(false);
   const { permission, isSubscribed, isSupported, subscribe, testNotification, unsubscribe } = usePushNotifications();
-  const { canInstall, isInstalled, install } = useInstallPrompt();
+  const { platform, isIncognito, incognitoChecked, canInstall, isInstalled, install, installMethod, appUrl } = usePlatformInstall();
+  const [copySuccess, setCopySuccess] = useState(false);
   const [settings, setSettings] = useState({
     nom: '',
     prenom: '',
@@ -394,35 +395,148 @@ const Settings = () => {
                 </p>
               </div>
               <div>
-                <Button
-                  variant="outline"
-                  className="w-full justify-start"
-                  disabled={isInstalled}
-                  onClick={async () => {
-                    if (canInstall) {
-                      const accepted = await install();
-                      if (accepted) {
-                        toast({ title: 'Application installee', description: 'FSAO Iris est maintenant disponible sur votre appareil.' });
-                      }
-                    } else {
-                      toast({
-                        title: 'Installation manuelle',
-                        description: 'Utilisez le menu de votre navigateur (3 points) puis "Installer l\'application" ou "Ajouter a l\'ecran d\'accueil".',
-                      });
-                    }
-                  }}
-                  data-testid="install-app-btn"
-                >
-                  <Download className="h-4 w-4 mr-2 flex-shrink-0" />
-                  {isInstalled ? 'Application installee' : 'Installer l\'application'}
-                </Button>
-                <p className="text-xs text-gray-500 mt-1">
-                  {isInstalled
-                    ? 'L\'application est installee sur cet appareil'
-                    : canInstall
-                      ? 'Installez l\'application pour un acces rapide'
-                      : 'Via le menu du navigateur : "Installer l\'application"'}
-                </p>
+                {/* ── Panneau d'installation contextuel ────────────────── */}
+                <div className="rounded-lg border bg-gray-50 p-3 space-y-3" data-testid="pwa-install-panel">
+
+                  {/* En-tête statut */}
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    {installMethod === 'installed' ? (
+                      <><CheckCircle size={16} className="text-green-600" /><span className="text-green-700">Application installée sur cet appareil</span></>
+                    ) : installMethod === 'prompt' ? (
+                      <><Download size={16} className="text-blue-600" /><span className="text-blue-700">Installation disponible</span></>
+                    ) : (
+                      <><Monitor size={16} className="text-gray-600" /><span className="text-gray-700">Guide d'installation — {platform?.osName} · {platform?.browserName}</span></>
+                    )}
+                  </div>
+
+                  {/* Alerte mode privé */}
+                  {incognitoChecked && isIncognito && installMethod !== 'installed' && (
+                    <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded p-2 text-xs text-amber-800">
+                      <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+                      <div>
+                        <p className="font-semibold">Mode navigation privée détecté</p>
+                        <p>Le bouton d'installation automatique est bloqué par votre navigateur en mode privé. Utilisez la méthode manuelle ci-dessous ou ouvrez l'application dans une fenêtre normale pour activer l'installation en un clic.</p>
+                        <button
+                          className="mt-1 underline font-semibold"
+                          onClick={() => window.open(appUrl, '_blank', 'noopener')}
+                        >
+                          Ouvrir dans une fenêtre normale →
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* CAS A : bouton natif disponible */}
+                  {installMethod === 'prompt' && (
+                    <Button
+                      className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                      onClick={async () => {
+                        const accepted = await install();
+                        if (accepted) toast({ title: 'Application installée', description: 'FSAO Iris est maintenant disponible sur votre appareil.' });
+                      }}
+                      data-testid="install-app-btn"
+                    >
+                      <Download size={16} className="mr-2" />
+                      Installer FSAO Iris
+                    </Button>
+                  )}
+
+                  {/* CAS B : déjà installée */}
+                  {installMethod === 'installed' && (
+                    <p className="text-xs text-green-700">✓ L'application est accessible depuis votre écran d'accueil ou bureau.</p>
+                  )}
+
+                  {/* CAS C : iOS Safari — Partager → Écran d'accueil */}
+                  {(installMethod === 'ios-safari') && (
+                    <ol className="space-y-2 text-sm text-gray-700">
+                      <li className="flex items-center gap-2"><span className="w-5 h-5 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center font-bold flex-shrink-0">1</span>Touchez l'icône <strong>Partager</strong> <span className="inline-block border rounded px-1 text-blue-600">↑</span> en bas de Safari</li>
+                      <li className="flex items-center gap-2"><span className="w-5 h-5 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center font-bold flex-shrink-0">2</span>Faites défiler et touchez <strong>"Sur l'écran d'accueil"</strong> <span className="inline-block border rounded px-1">＋</span></li>
+                      <li className="flex items-center gap-2"><span className="w-5 h-5 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center font-bold flex-shrink-0">3</span>Touchez <strong>"Ajouter"</strong> en haut à droite pour confirmer</li>
+                    </ol>
+                  )}
+
+                  {/* CAS D : iOS Chrome → ouvrir dans Safari */}
+                  {installMethod === 'ios-chrome' && (
+                    <div className="space-y-2">
+                      <p className="text-sm text-gray-700">Chrome sur iOS ne permet pas l'installation. Ouvrez l'application dans <strong>Safari</strong> :</p>
+                      <ol className="space-y-2 text-sm text-gray-700">
+                        <li className="flex items-center gap-2"><span className="w-5 h-5 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center font-bold flex-shrink-0">1</span>Copiez l'adresse ci-dessous</li>
+                        <li className="flex items-center gap-2"><span className="w-5 h-5 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center font-bold flex-shrink-0">2</span>Ouvrez <strong>Safari</strong> et collez l'adresse</li>
+                        <li className="flex items-center gap-2"><span className="w-5 h-5 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center font-bold flex-shrink-0">3</span>Touchez <strong>Partager ↑ → Sur l'écran d'accueil</strong></li>
+                      </ol>
+                      <div className="flex gap-2 items-center mt-1">
+                        <code className="flex-1 text-xs bg-white border rounded px-2 py-1 truncate">{appUrl}</code>
+                        <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => { navigator.clipboard.writeText(appUrl); setCopySuccess(true); setTimeout(() => setCopySuccess(false), 2000); }}>
+                          {copySuccess ? <CheckCircle size={12} className="text-green-600" /> : <Copy size={12} />}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* CAS E : Android ou Desktop — menu navigateur */}
+                  {(installMethod === 'desktop-menu' || installMethod === 'android-menu') && (
+                    <div className="space-y-2">
+                      {isIncognito && (
+                        <p className="text-xs text-amber-700 font-medium">↓ Méthode disponible même en mode privé :</p>
+                      )}
+                      <ol className="space-y-2 text-sm text-gray-700">
+                        <li className="flex items-center gap-2">
+                          <span className="w-5 h-5 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center font-bold flex-shrink-0">1</span>
+                          {installMethod === 'android-menu'
+                            ? <>Regardez la <strong>barre d'adresse</strong> : une icône <span className="border rounded px-1 font-bold">⊕</span> ou <span className="border rounded px-1">↓</span> peut apparaître à droite</>
+                            : <>Regardez la <strong>barre d'adresse</strong> à droite : cherchez l'icône <span className="border rounded px-1 font-bold">⊕</span> (Installer)</>
+                          }
+                        </li>
+                        <li className="flex items-center gap-2"><span className="w-5 h-5 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center font-bold flex-shrink-0">2</span>Si absent, cliquez sur le <strong>menu ⋮</strong> (3 points en haut à droite)</li>
+                        <li className="flex items-center gap-2"><span className="w-5 h-5 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center font-bold flex-shrink-0">3</span>Sélectionnez <strong>"Installer l'application"</strong> ou <strong>"Ajouter à l'écran d'accueil"</strong></li>
+                      </ol>
+                      {/* Tentative de forcer l'ouverture hors mode privé */}
+                      {isIncognito && (
+                        <Button variant="outline" size="sm" className="w-full mt-1 text-xs" onClick={() => window.open(appUrl, '_blank', 'noopener')}>
+                          <ExternalLink size={12} className="mr-1" /> Ouvrir dans une fenêtre normale
+                        </Button>
+                      )}
+                    </div>
+                  )}
+
+                  {/* CAS F : Firefox */}
+                  {installMethod === 'firefox' && (
+                    <div className="space-y-2 text-sm text-gray-700">
+                      <p className="text-amber-700 font-medium flex items-center gap-1"><AlertTriangle size={14} /> Firefox ne supporte pas l'installation de PWA.</p>
+                      <p>Pour installer FSAO Iris, utilisez :</p>
+                      <div className="flex gap-2">
+                        <a href="https://www.google.com/chrome/" target="_blank" rel="noopener noreferrer" className="flex-1">
+                          <Button variant="outline" size="sm" className="w-full text-xs"><ExternalLink size={12} className="mr-1" />Google Chrome</Button>
+                        </a>
+                        <a href="https://www.microsoft.com/edge/" target="_blank" rel="noopener noreferrer" className="flex-1">
+                          <Button variant="outline" size="sm" className="w-full text-xs"><ExternalLink size={12} className="mr-1" />Microsoft Edge</Button>
+                        </a>
+                      </div>
+                      <div className="mt-1">
+                        <p className="text-xs text-gray-500 mb-1">Ou copiez l'adresse :</p>
+                        <div className="flex gap-2 items-center">
+                          <code className="flex-1 text-xs bg-white border rounded px-2 py-1 truncate">{appUrl}</code>
+                          <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => { navigator.clipboard.writeText(appUrl); setCopySuccess(true); setTimeout(() => setCopySuccess(false), 2000); }}>
+                            {copySuccess ? <CheckCircle size={12} className="text-green-600" /> : <Copy size={12} />}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* CAS G : Inconnu */}
+                  {installMethod === 'unknown' && (
+                    <div className="space-y-1 text-sm text-gray-700">
+                      <p>Utilisez le menu de votre navigateur pour trouver l'option <strong>"Installer l'application"</strong> ou <strong>"Ajouter à l'écran d'accueil"</strong>.</p>
+                      <div className="flex gap-2 items-center mt-2">
+                        <code className="flex-1 text-xs bg-white border rounded px-2 py-1 truncate">{appUrl}</code>
+                        <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => { navigator.clipboard.writeText(appUrl); setCopySuccess(true); setTimeout(() => setCopySuccess(false), 2000); }}>
+                          {copySuccess ? <CheckCircle size={12} className="text-green-600" /> : <Copy size={12} />}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </CardContent>
           </Card>

@@ -278,3 +278,85 @@ export function useInstallPrompt() {
 
   return { canInstall: (!!installPrompt || !!window.__pwaInstallEvent) && !isInstalled, isInstalled, install };
 }
+
+// ─── Détection plateforme et mode privé ──────────────────────────────────────
+async function detectIncognito() {
+  try {
+    if ('storage' in navigator && 'estimate' in navigator.storage) {
+      const { quota } = await navigator.storage.estimate();
+      // Chrome incognito limite le quota à ~120 Mo
+      if (typeof quota === 'number' && quota < 120 * 1024 * 1024) return true;
+    }
+  } catch { /* Firefox ou autres */ }
+  return false;
+}
+
+function detectPlatform() {
+  const ua = navigator.userAgent;
+  const isIOS = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
+  const isAndroid = /Android/.test(ua);
+  const isWindows = /Win/.test(navigator.platform || ua);
+  const isMac = /Mac/.test(navigator.platform || ua) && !isIOS;
+  const isMobile = isIOS || isAndroid || /Mobile/.test(ua);
+
+  // Navigateurs — ordre important (Edge contient "Chrome", Safari contient "Safari")
+  const isEdge = /Edg\//.test(ua);
+  const isChrome = /Chrome\//.test(ua) && !isEdge && !/OPR\//.test(ua);
+  const isChromeIOS = /CriOS\//.test(ua);
+  const isSafari = /Safari\//.test(ua) && !isChrome && !isEdge && !isChromeIOS && !/CriOS/.test(ua);
+  const isFirefox = /Firefox\//.test(ua) || /FxiOS\//.test(ua);
+  const isSamsung = /SamsungBrowser\//.test(ua);
+  const isOpera = /OPR\//.test(ua);
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+
+  return {
+    isIOS, isAndroid, isWindows, isMac, isMobile,
+    isEdge, isChrome, isChromeIOS, isSafari, isFirefox, isSamsung, isOpera,
+    isStandalone,
+    browserName: isEdge ? 'Edge' : isChrome ? 'Chrome' : isSafari ? 'Safari' : isFirefox ? 'Firefox' : isSamsung ? 'Samsung Internet' : isOpera ? 'Opera' : 'Navigateur',
+    osName: isIOS ? 'iOS' : isAndroid ? 'Android' : isWindows ? 'Windows' : isMac ? 'macOS' : 'Bureau',
+  };
+}
+
+export function usePlatformInstall() {
+  const { canInstall, isInstalled, install } = useInstallPrompt();
+  const [platform, setPlatform] = useState(null);
+  const [isIncognito, setIsIncognito] = useState(false);
+  const [incognitoChecked, setIncognitoChecked] = useState(false);
+
+  useEffect(() => {
+    setPlatform(detectPlatform());
+    detectIncognito().then(result => {
+      setIsIncognito(result);
+      setIncognitoChecked(true);
+    });
+  }, []);
+
+  // Méthode d'installation recommandée selon la plateforme
+  const getInstallMethod = () => {
+    if (!platform) return 'loading';
+    if (isInstalled) return 'installed';
+    if (canInstall) return 'prompt';                     // bouton natif disponible
+    if (platform.isIOS && platform.isSafari) return 'ios-safari';
+    if (platform.isIOS && platform.isChromeIOS) return 'ios-chrome';
+    if (platform.isIOS) return 'ios-other';
+    if (platform.isFirefox) return 'firefox';
+    if (platform.isAndroid) return 'android-menu';      // pas de prompt = menu
+    // Desktop Chrome / Edge sans prompt
+    if (platform.isChrome || platform.isEdge) return 'desktop-menu';
+    return 'unknown';
+  };
+
+  const appUrl = window.location.origin;
+
+  return {
+    platform,
+    isIncognito,
+    incognitoChecked,
+    canInstall,
+    isInstalled,
+    install,
+    installMethod: getInstallMethod(),
+    appUrl,
+  };
+}

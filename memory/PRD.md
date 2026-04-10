@@ -49,8 +49,12 @@ Application GMAO (Gestion de Maintenance Assistée par Ordinateur) complète pou
   - Création raccourci d'adresse (URL, chemin réseau)
   - Affichage style Windows sur le dashboard (icône + nom)
 
-### Session 10 avril 2026 (suite)
-- **Feature : Exclure les inactifs des dropdowns et widgets** — Tests: iteration_163 + curl
+### Session 10 avril 2026 (suite : inactifs dropdowns + PWA guide)
+- **Feature : Exclure les inactifs des dropdowns** — `assignment-targets`, `team/members`, `usersAPI.getActive()` sur 10 composants, historique rapports préservé
+- **Feature: Guide d'installation PWA contextuel** — inline dans Paramètres
+  - `hooks/usePWA.js`: `usePlatformInstall()` — détecte OS/navigateur/mode privé (quota < 120 Mo)
+  - `Settings.jsx`: 7 scénarios : prompt natif, installée, iOS Safari, iOS Chrome, Android/Desktop menu (⊕ + ⋮), Firefox, inconnu. Mode privé → alerte + "Ouvrir fenêtre normale"
+
   - `routes/service_manager.py`: `/api/assignment-targets` filtre `statut != "inactif"` (regex insensible à la casse pour compatibilité legacy)
   - `team_management_routes.py`: `/team/members` exclut les permanents inactifs du widget charge d'équipe
   - `api.js`: ajout `usersAPI.getActive()` qui filtre les inactifs côté frontend
