@@ -1,8 +1,7 @@
 import { useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 
 const TokenValidator = () => {
-  const navigate = useNavigate();
   const location = useLocation();
 
   useEffect(() => {
@@ -15,9 +14,9 @@ const TokenValidator = () => {
         return;
       }
 
-      // Si pas de token, rediriger vers login
+      // Si pas de token, rediriger vers login (rechargement complet)
       if (!token || !user) {
-        navigate('/login');
+        window.location.href = '/login';
         return;
       }
 
@@ -30,18 +29,17 @@ const TokenValidator = () => {
         // Vérifier si le token est expiré
         const currentTime = Math.floor(Date.now() / 1000);
         if (payload.exp && payload.exp < currentTime) {
-          // Token expiré, déconnecter silencieusement
           console.log('Token expiré, déconnexion silencieuse');
           localStorage.removeItem('token');
           localStorage.removeItem('user');
-          navigate('/login');
+          window.location.href = '/login';
         }
       } catch (error) {
         // Token invalide, déconnecter
         console.error('Token invalide:', error);
         localStorage.removeItem('token');
         localStorage.removeItem('user');
-        navigate('/login');
+        window.location.href = '/login';
       }
     };
 
@@ -52,7 +50,7 @@ const TokenValidator = () => {
     const interval = setInterval(validateToken, 30000);
 
     return () => clearInterval(interval);
-  }, [navigate, location.pathname]);
+  }, [location.pathname]);
 
   return null; // Ce composant ne rend rien
 };

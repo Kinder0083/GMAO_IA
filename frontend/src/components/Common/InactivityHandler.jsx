@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import {
   Dialog,
   DialogContent,
@@ -13,7 +13,6 @@ import { AlertTriangle, LogOut } from 'lucide-react';
 import api from '../../services/api';
 
 const InactivityHandler = () => {
-  const navigate = useNavigate();
   const location = useLocation();
   const [showWarning, setShowWarning] = useState(false);
   const [countdown, setCountdown] = useState(60);
@@ -48,12 +47,12 @@ const InactivityHandler = () => {
     }
   }, [showWarning]);
 
-  // Déconnexion
+  // Déconnexion avec rechargement complet (évite le mélange d'état entre utilisateurs)
   const handleLogout = useCallback(() => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-    navigate('/login');
-  }, [navigate]);
+    window.location.href = '/login';
+  }, []);
 
   // Rester connecté
   const handleStayConnected = () => {

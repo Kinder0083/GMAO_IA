@@ -218,7 +218,9 @@ const MainLayout = () => {
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-    navigate('/login');
+    // Forcer un rechargement complet pour vider tout l'état React
+    // (évite le mélange d'interface entre deux utilisateurs successifs)
+    window.location.href = '/login';
   };
 
   // Helper pour obtenir les styles de boutons sidebar
