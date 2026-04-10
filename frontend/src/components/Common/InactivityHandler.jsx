@@ -20,6 +20,10 @@ const InactivityHandler = () => {
   const [inactivityTimeout, setInactivityTimeout] = useState(15 * 60 * 1000); // Par défaut 15 minutes
   const [isTimeoutDisabled, setIsTimeoutDisabled] = useState(false);
 
+  // Détecter si l'utilisateur est sur mobile (appareil personnel → pas de déconnexion auto)
+  const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) ||
+    window.matchMedia('(pointer: coarse)').matches;
+
   // Charger les paramètres au démarrage
   useEffect(() => {
     const loadSettings = async () => {
@@ -102,8 +106,10 @@ const InactivityHandler = () => {
     setIsTimeoutDisabled(disabledPaths.includes(location.pathname));
   }, [location.pathname]);
 
-  // Vérification de l'inactivité
+  // Vérification de l'inactivité (désactivée sur mobile)
   useEffect(() => {
+    if (isMobile) return; // Pas de déconnexion automatique sur appareil mobile
+
     const checkInactivity = setInterval(() => {
       // Si sur une page protégée (Chat Live ou Whiteboard), désactiver le timeout
       if (isTimeoutDisabled) {
