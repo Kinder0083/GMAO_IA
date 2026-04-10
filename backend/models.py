@@ -771,6 +771,16 @@ class User(UserBase):
     mqtt_action_reception: Optional[str] = None # Payload à envoyer sur mqtt_topic à la réception
     mqtt_topic_discret: Optional[str] = None   # Topic pour envoyer le JSON détaillé
 
+    @field_validator('mqtt_action_ok', 'mqtt_action_reception', 'mqtt_topic', 'mqtt_topic_discret', mode='before')
+    @classmethod
+    def coerce_mqtt_to_str(cls, v):
+        """Convertit float/int en str (données legacy en DB stockées en nombre)."""
+        if v is None:
+            return None
+        if isinstance(v, (int, float)):
+            return str(int(v)) if v == int(v) else str(v)
+        return v
+
     class Config:
         from_attributes = True
 
