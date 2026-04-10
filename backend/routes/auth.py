@@ -106,7 +106,8 @@ async def login(login_request: LoginRequest):
     logger.info(f"   Password length: {len(login_request.password)}")
     
     # Support both 'password' and 'hashed_password' field names
-    password_hash = user.get("hashed_password") or user.get("password")
+    # Priorité à hashed_password s'il est non-vide, sinon fallback sur password
+    password_hash = (user.get("hashed_password") or "").strip() or (user.get("password") or "").strip()
     if not password_hash:
         logger.warning(f"❌ No password hash found for email: {login_request.email}")
         raise HTTPException(

@@ -526,16 +526,27 @@ async def reset_password_admin(
         # Hasher le mot de passe
         hashed_password = get_password_hash(temp_password)
         
-        # Mettre à jour le mot de passe et forcer le changement au prochain login
-        await db.users.update_one(
+        # Mise à jour robuste : écrire dans les deux champs (legacy + actuel)
+        # et essayer par _id puis par champ id (gère les deux types en prod)
+        update_data = {
+            "hashed_password": hashed_password,
+            "password": hashed_password,  # compat legacy (certains docs n'ont que ce champ)
+            "firstLogin": True
+        }
+
+        result = await db.users.update_one(
             {"_id": user["_id"]},
-            {
-                "$set": {
-                    "hashed_password": hashed_password,
-                    "firstLogin": True
-                }
-            }
+            {"$set": update_data}
         )
+        # Fallback par champ id (UUID) si _id n'a pas matché (prod avec types mixtes)
+        if result.matched_count == 0 and user.get("id"):
+            result = await db.users.update_one(
+                {"id": user["id"]},
+                {"$set": update_data}
+            )
+        
+        if result.matched_count == 0:
+            raise HTTPException(status_code=404, detail="Impossible de mettre à jour l'utilisateur")
         
         # Enregistrer l'action dans le journal d'audit
         await audit_service.log_action(
