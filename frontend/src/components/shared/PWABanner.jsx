@@ -1,17 +1,19 @@
-import React, { useEffect, useState } from 'react';
-import { X, Download, Bell } from 'lucide-react';
+import React, { useEffect, useState, useRef } from 'react';
+import { X, Download, Bell, BellOff } from 'lucide-react';
 import { Button } from '../ui/button';
 import { usePushNotifications, useInstallPrompt } from '../../hooks/usePWA';
 import { useToast } from '../../hooks/use-toast';
 
 const DISMISS_INSTALL_KEY = 'pwa_install_dismissed_at';
 const DISMISS_NOTIF_KEY = 'pwa_notif_dismissed_at';
+const DISMISS_RESUBSCRIBE_KEY = 'pwa_resubscribe_dismissed_at';
 const DISMISS_DURATION_MS = 30 * 24 * 60 * 60 * 1000; // 30 jours
+const RESUBSCRIBE_DISMISS_MS = 24 * 60 * 60 * 1000;   // 24h seulement (plus urgent)
 
-function wasDismissedRecently(key) {
+function wasDismissedRecently(key, duration = DISMISS_DURATION_MS) {
   const val = localStorage.getItem(key);
   if (!val) return false;
-  return (Date.now() - parseInt(val, 10)) < DISMISS_DURATION_MS;
+  return (Date.now() - parseInt(val, 10)) < duration;
 }
 
 const PWABanner = () => {
@@ -20,14 +22,38 @@ const PWABanner = () => {
   const { toast } = useToast();
   const [installDismissed, setInstallDismissed] = useState(() => wasDismissedRecently(DISMISS_INSTALL_KEY));
   const [notifDismissed, setNotifDismissed] = useState(() => wasDismissedRecently(DISMISS_NOTIF_KEY));
+  const [resubscribeDismissed, setResubscribeDismissed] = useState(() => wasDismissedRecently(DISMISS_RESUBSCRIBE_KEY, RESUBSCRIBE_DISMISS_MS));
   const [showNotifBanner, setShowNotifBanner] = useState(false);
+  const [showResubscribeBanner, setShowResubscribeBanner] = useState(false);
+  const [resubscribing, setResubscribing] = useState(false);
+  const syncDoneRef = useRef(false);
 
-  // Auto-subscribe on login if permission already granted
+  // Auto-subscribe on login if permission already granted (silently, en arrière-plan)
   useEffect(() => {
     if (isSupported && permission === 'granted' && !isSubscribed) {
-      subscribe();
+      subscribe().then(() => { syncDoneRef.current = true; });
+    } else if (permission === 'granted' && isSubscribed) {
+      syncDoneRef.current = true;
     }
   }, [isSupported, permission, isSubscribed, subscribe]);
+
+  // Après 4s : si permission accordée mais toujours pas abonné → bannière de réabonnement
+  useEffect(() => {
+    if (!isSupported || resubscribeDismissed) return;
+    if (permission !== 'granted') return;
+    // Attendre que la tentative auto-subscribe ait eu le temps de s'exécuter
+    const timer = setTimeout(() => {
+      if (!isSubscribed) {
+        setShowResubscribeBanner(true);
+      }
+    }, 4000);
+    return () => clearTimeout(timer);
+  }, [isSupported, permission, isSubscribed, resubscribeDismissed]);
+
+  // Masquer la bannière réabonnement dès que l'abonnement est rétabli
+  useEffect(() => {
+    if (isSubscribed) setShowResubscribeBanner(false);
+  }, [isSubscribed]);
 
   // Show notification banner after delay, only if not dismissed and not already granted
   useEffect(() => {
@@ -48,6 +74,12 @@ const PWABanner = () => {
     setShowNotifBanner(false);
   };
 
+  const dismissResubscribe = () => {
+    localStorage.setItem(DISMISS_RESUBSCRIBE_KEY, Date.now().toString());
+    setResubscribeDismissed(true);
+    setShowResubscribeBanner(false);
+  };
+
   const handleInstall = async () => {
     const accepted = await install();
     if (accepted) {
@@ -59,7 +91,6 @@ const PWABanner = () => {
     const result = await subscribe();
     setShowNotifBanner(false);
     if (result?.permissionGranted) {
-      // Marquer comme traité pour ne plus redemander
       localStorage.setItem(DISMISS_NOTIF_KEY, Date.now().toString());
       setNotifDismissed(true);
       if (result?.subscribed) {
@@ -72,10 +103,28 @@ const PWABanner = () => {
         toast({ title: 'Permission accordee', description: `Abonnement push incomplet (${result?.error || 'inconnu'}). Verifiez la console pour les details.`, variant: 'destructive' });
       }
     } else {
-      // Permission refusée - ne plus redemander
       localStorage.setItem(DISMISS_NOTIF_KEY, Date.now().toString());
       setNotifDismissed(true);
       toast({ title: 'Notifications refusees', description: 'Verifiez les permissions du site dans les parametres du navigateur > Parametres du site > Notifications', variant: 'destructive' });
+    }
+  };
+
+  const handleResubscribe = async () => {
+    setResubscribing(true);
+    try {
+      const result = await subscribe();
+      if (result?.subscribed) {
+        setShowResubscribeBanner(false);
+        toast({ title: 'Notifications reactiveees', description: 'Vous recevrez a nouveau les alertes en temps reel' });
+        const testResult = await testNotification();
+        if (testResult?.sent > 0) {
+          toast({ description: 'Notification de test envoyee !' });
+        }
+      } else {
+        toast({ title: 'Echec du reabonnement', description: result?.error || 'Reessayez dans Parametres > Notifications', variant: 'destructive' });
+      }
+    } finally {
+      setResubscribing(false);
     }
   };
 
@@ -100,6 +149,40 @@ const PWABanner = () => {
             Installer
           </Button>
           <Button onClick={dismissInstall} size="sm" variant="ghost" className="text-slate-400 hover:text-white">
+            Plus tard
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // Bannière de REABONNEMENT : permission accordée mais abonnement inactif/expiré
+  if (showResubscribeBanner && isSupported && permission === 'granted' && !isSubscribed && !resubscribeDismissed) {
+    return (
+      <div className="fixed bottom-4 left-4 right-4 md:left-auto md:right-4 md:w-96 z-50 bg-amber-900 text-white rounded-xl shadow-2xl border border-amber-700 p-4 animate-in slide-in-from-bottom-4" data-testid="pwa-resubscribe-banner">
+        <div className="flex items-start gap-3">
+          <div className="bg-amber-600 rounded-lg p-2 flex-shrink-0">
+            <BellOff size={20} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-sm">Notifications desactivees</p>
+            <p className="text-xs text-amber-300 mt-0.5">Votre abonnement a expire. Reactiver pour recevoir les alertes.</p>
+          </div>
+          <button onClick={dismissResubscribe} className="text-amber-400 hover:text-white p-1 flex-shrink-0" data-testid="pwa-resubscribe-dismiss">
+            <X size={16} />
+          </button>
+        </div>
+        <div className="flex gap-2 mt-3">
+          <Button
+            onClick={handleResubscribe}
+            disabled={resubscribing}
+            size="sm"
+            className="flex-1 bg-amber-600 hover:bg-amber-500 text-white"
+            data-testid="pwa-resubscribe-btn"
+          >
+            {resubscribing ? 'Reactivation...' : 'Reactiver les notifications'}
+          </Button>
+          <Button onClick={dismissResubscribe} size="sm" variant="ghost" className="text-amber-300 hover:text-white">
             Plus tard
           </Button>
         </div>

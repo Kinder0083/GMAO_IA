@@ -32,7 +32,11 @@ Application GMAO (Gestion de Maintenance Assistée par Ordinateur) complète pou
 - Export PDF individuel des OT (jsPDF)
 - Export PDF en masse des OT avec mode sélection
 
-### Session 11 avril 2026 (Suite - Fork 2)
+### Session 11 avril 2026 (Suite - Fork 3)
+- **Fix: Santé notifications "ERREUR" faux positif avec 0 abonnements** (`routes/notification_health.py`) — `sub_status` passait à `"error"` quand 0 abonnements au lieu de `"warning"`. Maintenant `0 abonnements = warning` (utilisateur n'a pas encore activé les notifications).
+- **Fix SSH: Script diagnostic push** (`/app/backend/tools/diagnostic_push.py`) — ajout auto-install `pymongo` + instructions pour environnement Debian externally-managed (venv + export .env).
+- **Feature: Bannière de réabonnement push automatique** (`PWABanner.jsx`) — nouvelle bannière ambrée qui apparaît après 4s si `permission === 'granted'` mais abonnement inactif/expiré. Bouton "Réactiver les notifications" visible sur mobile comme sur desktop. Rediminuable 24h.
+
 - **Fix P0: "Abonnement expiré" faux positif lors du test push (People page)** :
   - `web_push.py` : HTTP 401 (VAPID key mismatch) ajouté à la liste de nettoyage automatique des subscriptions invalides. Retour du compteur `deactivated` dans les résultats.
   - `server.py` : Quand de nouvelles clés VAPID sont auto-générées (premier démarrage sans clés), TOUS les abonnements push actifs sont immédiatement invalidés (évite les abonnements "Actif" en DB mais liés aux anciennes clés).
