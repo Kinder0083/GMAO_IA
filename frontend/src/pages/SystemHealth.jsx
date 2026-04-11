@@ -610,6 +610,7 @@ export default function SystemHealth() {
         notifChecking={notifChecking}
         forceNotifCheck={forceNotifCheck}
         purgeInactive={purgeInactive}
+        cleanupInvalid={cleanupInvalid}
         pushUsersStatus={pushUsersStatus}
       />
 
@@ -748,7 +749,7 @@ export default function SystemHealth() {
   );
 }
 
-function NotificationHealthSection({ notifHealth, notifHistory, notifExpanded, setNotifExpanded, notifChecking, forceNotifCheck, purgeInactive, pushUsersStatus }) {
+function NotificationHealthSection({ notifHealth, notifHistory, notifExpanded, setNotifExpanded, notifChecking, forceNotifCheck, purgeInactive, cleanupInvalid, pushUsersStatus }) {
   const statusColor = (s) => s === 'ok' ? 'text-green-600' : s === 'warning' ? 'text-amber-600' : s === 'error' ? 'text-red-600' : 'text-gray-400';
   const statusBg = (s) => s === 'ok' ? 'bg-green-50' : s === 'warning' ? 'bg-amber-50' : s === 'error' ? 'bg-red-50' : 'bg-gray-50';
   const statusIcon = (s) => s === 'ok' ? <CheckCircle2 size={14} className="text-green-500" /> : s === 'warning' ? <AlertTriangle size={14} className="text-amber-500" /> : s === 'error' ? <XCircle size={14} className="text-red-500" /> : <Clock size={14} className="text-gray-400" />;
