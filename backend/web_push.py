@@ -10,15 +10,22 @@ from pywebpush import webpush, WebPushException
 
 logger = logging.getLogger("web_push")
 
-VAPID_PUBLIC_KEY = os.environ.get("VAPID_PUBLIC_KEY")
-VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY")
-VAPID_SUBJECT = os.environ.get("VAPID_SUBJECT")
+
+def _get_vapid():
+    """Lit les clés VAPID dynamiquement depuis l'environnement (lecture tardive pour éviter
+    les problèmes d'ordre d'initialisation avec load_dotenv)."""
+    return (
+        os.environ.get("VAPID_PUBLIC_KEY"),
+        os.environ.get("VAPID_PRIVATE_KEY"),
+        os.environ.get("VAPID_SUBJECT")
+    )
 
 
 async def send_web_push_to_user(db, user_id: str, title: str, body: str, data: dict = None, tag: str = None):
     """Envoie une notification web push a tous les appareils d'un utilisateur."""
+    VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT = _get_vapid()
     if not VAPID_PRIVATE_KEY or not VAPID_PUBLIC_KEY:
-        logger.warning("[WEB PUSH] Cles VAPID non configurees")
+        logger.warning("[WEB PUSH] Cles VAPID non configurees. Vérifiez VAPID_PUBLIC_KEY et VAPID_PRIVATE_KEY dans le .env")
         return {"sent": 0, "failed": 0, "errors": ["VAPID keys not configured"]}
 
     subscriptions = []

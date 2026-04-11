@@ -32,6 +32,11 @@ Application GMAO (Gestion de Maintenance Assistée par Ordinateur) complète pou
 - Export PDF individuel des OT (jsPDF)
 - Export PDF en masse des OT avec mode sélection
 
+### Session 11 avril 2026
+- **Fix P0: Datetime bug notification_health.py** — erreur `can't subtract offset-naive and offset-aware datetimes` dans le scheduler de vérification santé (toutes les 30 min). Ajout de `lc_time.replace(tzinfo=timezone.utc)` pour les datetimes naïfs lus depuis MongoDB. Tests: OK.
+- **Fix: VAPID keys lecture dynamique (web_push.py)** — lecture des clés VAPID maintenant faite via `_get_vapid()` à chaque appel (plus de lecture statique au moment de l'import). Garantit le bon fonctionnement en production même si les clés sont chargées tardivement.
+- **Fix: Service Worker clone error (sw.js)** — ajout `try/catch` autour de `response.clone()`, vérification `response.type !== 'opaque'`, filtrage des requêtes cross-origin. Version: `fsao-iris-v1` → `fsao-iris-v2`.
+
 ### Session 08 avril 2026 (suite)
 - **Feature: Onglet "MongoDB Natif"** dans Import/Export — interface complète de gestion des sauvegardes mongodump sans SSH : état système, sauvegarde manuelle, planification cron, liste/restauration/suppression des sauvegardes, journaux, guide LXC. Backend : `/app/backend/routes/mongodb_backup.py`. Frontend : `MongoDBBackupTab.jsx`.
 - Fichiers script cron générés automatiquement : `/etc/cron.d/gmao_mongodump` et `/root/backup_mongo_auto.sh`.

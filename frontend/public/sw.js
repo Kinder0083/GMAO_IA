@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fsao-iris-v1';
+const CACHE_NAME = 'fsao-iris-v2';
 const OFFLINE_URL = '/offline.html';
 
 // Fichiers a mettre en cache pour le mode hors-ligne
@@ -39,15 +39,24 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Ignorer les requetes cross-origin (WebSocket, extensions, etc.)
+  if (!event.request.url.startsWith(self.location.origin)) {
+    return;
+  }
+
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        // Mettre en cache la reponse reussie
-        if (response.status === 200) {
-          const responseClone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseClone);
-          });
+        // Ne cacher que les reponses valides et same-origin (pas opaques)
+        if (response && response.status === 200 && response.type !== 'opaque') {
+          try {
+            const responseClone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, responseClone).catch(() => {});
+            }).catch(() => {});
+          } catch (e) {
+            // Ignorer les erreurs de clonage silencieusement
+          }
         }
         return response;
       })

@@ -122,6 +122,9 @@ async def _check_notification_health_internal():
             if isinstance(lc_time, str):
                 from dateutil.parser import parse as parse_date
                 lc_time = parse_date(lc_time)
+            # Assurer que lc_time est timezone-aware pour éviter l'erreur offset-naive/aware
+            if lc_time is not None and hasattr(lc_time, 'tzinfo') and lc_time.tzinfo is None:
+                lc_time = lc_time.replace(tzinfo=timezone.utc)
             age_min = (now - lc_time).total_seconds() / 60 if lc_time else 999
             cron_ok = last_check.get("success", False)
             cron_status = "ok" if cron_ok and age_min < 45 else "warning" if age_min < 90 else "error"
