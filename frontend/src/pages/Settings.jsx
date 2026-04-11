@@ -4,7 +4,7 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { useToast } from '../hooks/use-toast';
-import { User, Mail, Phone, Lock, Bell, Globe, Info, HelpCircle, Download, BellRing, CheckCircle, AlertTriangle, Monitor, Smartphone, Chrome, ExternalLink, Copy, RefreshCw } from 'lucide-react';
+import { User, Mail, Phone, Lock, Bell, BellOff, Globe, Info, HelpCircle, Download, BellRing, CheckCircle, AlertTriangle, Monitor, Smartphone, Chrome, ExternalLink, Copy, RefreshCw } from 'lucide-react';
 import { Switch } from '../components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../components/ui/tooltip';
@@ -340,58 +340,92 @@ const Settings = () => {
             </CardHeader>
             <CardContent className="space-y-3">
               <div>
-                <Button
-                  variant="outline"
-                  className="w-full justify-start"
-                  disabled={!isSupported || notifLoading}
-                  onClick={async () => {
-                    setNotifLoading(true);
-                    try {
-                      if (permission === 'granted' && isSubscribed) {
-                        // Test existing subscription
-                        const testResult = await testNotification();
-                        if (testResult?.sent > 0) {
-                          toast({ title: 'Notification envoyee', description: 'Vous devriez la recevoir dans quelques secondes.' });
-                        } else {
-                          // Subscription expired - force re-subscribe
-                          toast({ title: 'Renouvellement en cours...', description: 'L\'abonnement a expire, renouvellement automatique.' });
-                          await unsubscribe();
-                          const result = await subscribe();
-                          if (result?.subscribed) {
-                            toast({ title: 'Notifications renouvelees', description: 'Votre abonnement a ete renouvele avec succes.' });
+                {/* Statut actuel */}
+                <div className="flex items-center gap-2 mb-3 p-3 rounded-lg bg-gray-50 border">
+                  {!isSupported ? (
+                    <><AlertTriangle size={16} className="text-gray-400" /><span className="text-sm text-gray-500">Non supporté par ce navigateur</span></>
+                  ) : permission === 'denied' ? (
+                    <><AlertTriangle size={16} className="text-red-500" /><span className="text-sm text-red-600 font-medium">Notifications bloquées dans le navigateur</span></>
+                  ) : permission === 'granted' && isSubscribed ? (
+                    <><CheckCircle size={16} className="text-green-500" /><span className="text-sm text-green-700 font-medium">Notifications push actives sur cet appareil</span></>
+                  ) : (
+                    <><BellRing size={16} className="text-gray-400" /><span className="text-sm text-gray-600">Notifications non activées</span></>
+                  )}
+                </div>
+
+                <div className="flex gap-2">
+                  <Button
+                    variant={permission === 'granted' && isSubscribed ? 'outline' : 'default'}
+                    className="flex-1 justify-center"
+                    disabled={!isSupported || permission === 'denied' || notifLoading}
+                    onClick={async () => {
+                      setNotifLoading(true);
+                      try {
+                        if (permission === 'granted' && isSubscribed) {
+                          // Test existing subscription
+                          const testResult = await testNotification();
+                          if (testResult?.sent > 0) {
+                            toast({ title: 'Notification de test envoyée', description: 'Vous devriez la recevoir dans quelques secondes.' });
                           } else {
-                            toast({ title: 'Erreur de renouvellement', description: result?.error || 'Reessayez plus tard.', variant: 'destructive' });
+                            // Subscription expired - force re-subscribe
+                            toast({ title: 'Renouvellement en cours...', description: 'Renouvellement automatique de l\'abonnement.' });
+                            await unsubscribe();
+                            const result = await subscribe();
+                            if (result?.subscribed) {
+                              toast({ title: 'Abonnement renouvelé', description: 'Vous recevrez à nouveau les notifications.' });
+                            } else {
+                              toast({ title: 'Erreur de renouvellement', description: result?.error || 'Réessayez plus tard.', variant: 'destructive' });
+                            }
+                          }
+                        } else {
+                          const result = await subscribe();
+                          if (result.permissionGranted) {
+                            toast({ title: 'Notifications activées', description: result.subscribed ? 'Vous recevrez désormais les notifications push.' : 'Permission accordée.' });
+                          } else {
+                            toast({ title: 'Permission refusée', description: 'Activez les notifications dans les paramètres de votre navigateur.', variant: 'destructive' });
                           }
                         }
-                      } else {
-                        const result = await subscribe();
-                        if (result.permissionGranted) {
-                          toast({ title: 'Notifications activees', description: result.subscribed ? 'Vous recevrez les notifications push.' : 'Permission accordee.' });
-                        } else {
-                          toast({ title: 'Permission refusee', description: 'Activez les notifications dans les parametres de votre navigateur.', variant: 'destructive' });
-                        }
+                      } catch {
+                        toast({ title: 'Erreur', variant: 'destructive' });
+                      } finally {
+                        setNotifLoading(false);
                       }
-                    } catch {
-                      toast({ title: 'Erreur', variant: 'destructive' });
-                    } finally {
-                      setNotifLoading(false);
-                    }
-                  }}
-                  data-testid="enable-notifications-btn"
-                >
-                  <BellRing className="h-4 w-4 mr-2 flex-shrink-0" />
-                  {notifLoading ? 'En cours...' : permission === 'granted' ? (isSubscribed ? 'Tester les notifications' : 'Reactiver les notifications') : 'Activer les notifications'}
-                </Button>
-                <p className="text-xs text-gray-500 mt-1">
-                  {!isSupported
-                    ? 'Notifications non supportees par ce navigateur'
-                    : permission === 'granted'
-                      ? isSubscribed
-                        ? 'Cliquez pour tester ou forcer le renouvellement si besoin'
-                        : 'L\'abonnement push necessite une reactivation'
-                      : permission === 'denied'
-                        ? 'Bloquees - reactivez-les dans les parametres du navigateur'
-                        : 'Recevez des alertes en temps reel'}
+                    }}
+                    data-testid="enable-notifications-btn"
+                  >
+                    <BellRing className="h-4 w-4 mr-2 flex-shrink-0" />
+                    {notifLoading ? 'En cours...' : permission === 'granted' && isSubscribed ? 'Envoyer une notification test' : 'Activer les notifications'}
+                  </Button>
+
+                  {/* Bouton désactiver si abonné */}
+                  {permission === 'granted' && isSubscribed && (
+                    <Button
+                      variant="ghost"
+                      className="text-gray-400 hover:text-red-500 hover:bg-red-50 px-3"
+                      disabled={notifLoading}
+                      onClick={async () => {
+                        setNotifLoading(true);
+                        try {
+                          await unsubscribe();
+                          toast({ title: 'Notifications désactivées', description: 'Vous ne recevrez plus de notifications push sur cet appareil.' });
+                        } catch {
+                          toast({ title: 'Erreur', variant: 'destructive' });
+                        } finally {
+                          setNotifLoading(false);
+                        }
+                      }}
+                      data-testid="disable-notifications-btn"
+                    >
+                      <BellOff className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+                <p className="text-xs text-gray-500 mt-1.5">
+                  {permission === 'denied'
+                    ? 'Pour activer : ouvrez les paramètres de votre navigateur → Autorisations → Notifications'
+                    : permission === 'granted' && isSubscribed
+                      ? 'Cliquez sur "Envoyer une notification test" pour vérifier que tout fonctionne'
+                      : 'Activez pour recevoir les alertes de consignes, OT assignés et pannes même quand l\'app est fermée'}
                 </p>
               </div>
               <div>

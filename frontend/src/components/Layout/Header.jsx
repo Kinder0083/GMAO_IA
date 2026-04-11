@@ -10,7 +10,6 @@ import {
   Menu,
   X,
   Bell,
-  BellOff,
   Package,
   Eye,
   Mail,
@@ -34,7 +33,6 @@ import OfflineIndicator from '../Common/OfflineIndicator';
 import MESAlertIcon from './MESAlertIcon';
 import { usePreferences } from '../../contexts/PreferencesContext';
 import { DEFAULT_HEADER_ORDER, HEADER_ICONS_REGISTRY } from '../Personnalisation/HeaderOrganizationSection';
-import { usePushNotifications } from '../../hooks/usePWA';
 import api from '../../services/api';
 
 const Header = ({
@@ -61,17 +59,6 @@ const Header = ({
   const [changelogOpen, setChangelogOpen] = useState(false);
   const [hasNewRelease, setHasNewRelease] = useState(false);
   const [headerVisibility, setHeaderVisibility] = useState(null);
-
-  // Gestion des notifications push
-  const { isSupported: pushSupported, permission: pushPermission, isSubscribed: pushSubscribed, subscribe: pushSubscribe, unsubscribe: pushUnsubscribe } = usePushNotifications();
-
-  const handlePushToggle = async () => {
-    if (pushSubscribed) {
-      await pushUnsubscribe();
-    } else {
-      await pushSubscribe();
-    }
-  };
 
   // Charger la visibilité des icônes pour l'utilisateur connecté
   useEffect(() => {
@@ -394,33 +381,6 @@ const Header = ({
         
         {rightIcons.filter(id => id !== 'offline_indicator').map(id => renderIcon(id))}
         
-        {/* Bouton notifications push */}
-        {pushSupported && pushPermission !== 'denied' && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                onClick={handlePushToggle}
-                className={`relative p-2 rounded-lg transition-colors ${
-                  pushSubscribed
-                    ? 'text-green-600 hover:bg-green-50'
-                    : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'
-                }`}
-                data-testid="push-notifications-toggle"
-              >
-                {pushSubscribed ? <Bell size={20} /> : <BellOff size={20} />}
-                {pushSubscribed && (
-                  <span className="absolute top-1 right-1 w-2 h-2 bg-green-500 rounded-full" />
-                )}
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" className="bg-gray-900 text-white px-3 py-2 rounded-lg shadow-lg">
-              <p className="font-medium text-xs">
-                {pushSubscribed ? 'Notifications push actives — cliquer pour désactiver' : 'Activer les notifications push (consignes hors ligne)'}
-              </p>
-            </TooltipContent>
-          </Tooltip>
-        )}
-
         {/* Profil — toujours en dernier */}
         <Tooltip>
           <TooltipTrigger asChild>

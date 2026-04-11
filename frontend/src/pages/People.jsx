@@ -51,15 +51,15 @@ const People = () => {
 
       if (isSuccess) {
         title = 'Notification envoyée';
-        description = `${user.prenom} ${user.nom} : notification push envoyée avec succès.`;
+        description = `${user.prenom} ${user.nom} : notification push reçue avec succès.`;
         variant = 'default';
       } else if (isNoChannel) {
-        title = 'Aucun abonnement push actif';
-        description = `${user.prenom} ${user.nom} doit ouvrir l'application dans son navigateur et activer les notifications (icône cloche en haut à droite).`;
+        title = 'Utilisateur non abonné';
+        description = `${user.prenom} ${user.nom} n'a pas activé les notifications push. Il doit se connecter à l'application et aller dans Paramètres → Notifications pour les activer.`;
         variant = 'destructive';
       } else if (isAllFailed) {
         title = 'Abonnement expiré';
-        description = `L'abonnement push de ${user.prenom} ${user.nom} a expiré. Il doit désactiver puis réactiver les notifications depuis son navigateur.`;
+        description = `L'abonnement push de ${user.prenom} ${user.nom} a expiré. Il doit aller dans Paramètres → Notifications pour le réactiver.`;
         variant = 'destructive';
       } else {
         title = 'Envoi partiel';
@@ -443,8 +443,9 @@ const People = () => {
                             <BellRing size={16} className={pushTestLoading === user.id ? 'animate-pulse' : ''} />
                           </Button>
                         </TooltipTrigger>
-                        <TooltipContent>
-                          <p>Tester la notification push</p>
+                        <TooltipContent className="max-w-[220px] text-center">
+                          <p className="font-medium">Envoyer une notification test</p>
+                          <p className="text-xs text-gray-400 mt-0.5">L'utilisateur doit avoir activé ses notifications dans Paramètres</p>
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
