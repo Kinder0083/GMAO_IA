@@ -367,14 +367,29 @@ const Settings = () => {
                           if (testResult?.sent > 0) {
                             toast({ title: 'Notification de test envoyée', description: 'Vous devriez la recevoir dans quelques secondes.' });
                           } else {
-                            // Subscription expired - force re-subscribe
-                            toast({ title: 'Renouvellement en cours...', description: 'Renouvellement automatique de l\'abonnement.' });
-                            await unsubscribe();
+                            // Subscription expired - force re-subscribe with proper cleanup
+                            toast({ title: 'Renouvellement en cours...', description: 'Désabonnement puis réabonnement en cours.' });
+                            try {
+                              await unsubscribe();
+                            } catch {}
+                            // Délai important : laisse le navigateur finaliser le désabonnement
+                            // avec le service push (FCM/Mozilla) avant de créer un nouvel abonnement
+                            await new Promise(resolve => setTimeout(resolve, 2000));
                             const result = await subscribe();
                             if (result?.subscribed) {
                               toast({ title: 'Abonnement renouvelé', description: 'Vous recevrez à nouveau les notifications.' });
+                            } else if (result?.error === 'needs_page_refresh') {
+                              toast({ 
+                                title: 'Action requise', 
+                                description: 'Votre ancien abonnement a été supprimé. Rafraîchissez la page (F5) puis cliquez à nouveau sur "Activer les notifications".',
+                                variant: 'destructive' 
+                              });
                             } else {
-                              toast({ title: 'Erreur de renouvellement', description: result?.error || 'Réessayez plus tard.', variant: 'destructive' });
+                              toast({ 
+                                title: 'Rafraîchissement requis', 
+                                description: 'Veuillez rafraîchir la page (F5) et cliquer à nouveau sur "Activer les notifications".',
+                                variant: 'destructive' 
+                              });
                             }
                           }
                         } else {
@@ -382,11 +397,19 @@ const Settings = () => {
                           if (result.subscribed) {
                             toast({ title: 'Notifications activées', description: 'Vous recevrez désormais les notifications push sur cet appareil.' });
                           } else if (result.permissionGranted) {
-                            const errMsg = result.error?.includes('vapid') || result.error?.includes('VAPID')
-                              ? 'Le serveur n\'a pas de clés VAPID configurées. Contactez l\'administrateur.'
-                              : result.error?.includes('Registration failed')
-                              ? 'Erreur de connexion au service push. Vérifiez votre connexion et réessayez.'
-                              : `Activation impossible : ${result.error || 'erreur inconnue'}`;
+                            let errMsg;
+                            const err = result.error || '';
+                            if (err.includes('needs_page_refresh')) {
+                              errMsg = 'Votre ancien abonnement expiré a été supprimé. Veuillez rafraîchir la page (F5) puis cliquer à nouveau sur "Activer les notifications".';
+                            } else if (err.includes('vapid') || err.includes('VAPID')) {
+                              errMsg = 'Le serveur n\'a pas de clés VAPID configurées. Contactez l\'administrateur.';
+                            } else if (err.includes('Registration failed') || err.includes('AbortError')) {
+                              errMsg = 'Le service push de votre navigateur a refusé l\'abonnement. Solutions : 1) Rafraîchissez la page (F5) et réessayez. 2) Désactivez votre VPN si actif. 3) Vérifiez que les notifications système sont activées pour ce navigateur dans les paramètres de votre appareil. 4) Essayez sur un autre navigateur (Chrome recommandé).';
+                            } else if (err.includes('backend_error')) {
+                              errMsg = 'Erreur serveur lors de l\'enregistrement. Réessayez dans quelques instants.';
+                            } else {
+                              errMsg = `Activation impossible : ${err || 'erreur inconnue'}`;
+                            }
                             toast({ title: 'Activation échouée', description: errMsg, variant: 'destructive' });
                           } else {
                             toast({ title: 'Permission refusée', description: 'Activez les notifications dans les paramètres de votre navigateur.', variant: 'destructive' });
@@ -434,6 +457,35 @@ const Settings = () => {
                       ? 'Cliquez sur "Envoyer une notification test" pour vérifier que tout fonctionne'
                       : 'Activez pour recevoir les alertes de consignes, OT assignés et pannes même quand l\'app est fermée'}
                 </p>
+
+                {/* Bouton de réinitialisation — visible uniquement si les notifications sont bloquées */}
+                {isSupported && permission !== 'denied' && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="mt-2 text-xs text-gray-400 hover:text-amber-600 hover:bg-amber-50 gap-1.5"
+                    disabled={notifLoading}
+                    data-testid="reset-push-subscription-btn"
+                    onClick={async () => {
+                      setNotifLoading(true);
+                      try {
+                        // Supprimer l'abonnement côté navigateur ET backend
+                        await unsubscribe();
+                        toast({
+                          title: 'Abonnement supprimé',
+                          description: 'Rafraîchissez la page (F5) puis cliquez "Activer les notifications" pour créer un abonnement frais.',
+                        });
+                      } catch {
+                        toast({ title: 'Rafraîchissez la page (F5) puis réessayez', variant: 'destructive' });
+                      } finally {
+                        setNotifLoading(false);
+                      }
+                    }}
+                  >
+                    <RefreshCw className="h-3 w-3" />
+                    Réinitialiser l'abonnement push
+                  </Button>
+                )}
               </div>
               <div>
                 {/* ── Panneau d'installation contextuel ────────────────── */}

@@ -41,33 +41,10 @@ export function usePushNotifications() {
           const registration = await navigator.serviceWorker.register('/sw.js');
           await navigator.serviceWorker.ready;
 
-          let subscription = await registration.pushManager.getSubscription();
-
-          // Si l'abonnement existant utilise une clé VAPID différente → forcer un nouvel abonnement
-          if (subscription) {
-            try {
-              const currentKey = subscription.options && subscription.options.applicationServerKey;
-              const newKey = urlBase64ToUint8Array(publicKey);
-              if (currentKey) {
-                const currentArr = new Uint8Array(currentKey);
-                if (currentArr.length !== newKey.length || !currentArr.every((v, i) => v === newKey[i])) {
-                  await subscription.unsubscribe();
-                  subscription = null;
-                }
-              }
-            } catch {
-              // Si la comparaison échoue, forcer un nouvel abonnement par sécurité
-              try { await subscription.unsubscribe(); } catch(e) {}
-              subscription = null;
-            }
-          }
-
-          if (!subscription) {
-            subscription = await registration.pushManager.subscribe({
-              userVisibleOnly: true,
-              applicationServerKey: urlBase64ToUint8Array(publicKey)
-            });
-          }
+          // Récupérer l'abonnement existant sans forcer de désabonnement
+          // Le backend détectera les clés VAPID invalides (HTTP 401) et nettoiera
+          const subscription = await registration.pushManager.getSubscription();
+          if (!subscription) return;
 
           const browser = navigator.userAgent.includes('Firefox') ? 'firefox' :
             navigator.userAgent.includes('Edg') ? 'edge' :
@@ -84,18 +61,23 @@ export function usePushNotifications() {
 
           if (syncResp.ok) {
             const syncData = await syncResp.json();
-            // Si le backend signale que l'endpoint était mort (410/404), forcer un nouveau
+            // Si le backend signale que l'endpoint était mort (410/404) → forcer un nouveau
             if (syncData.needs_fresh_subscription) {
-              try { await subscription.unsubscribe(); } catch(e) {}
-              const freshSub = await registration.pushManager.subscribe({
-                userVisibleOnly: true,
-                applicationServerKey: urlBase64ToUint8Array(publicKey)
-              });
-              await fetch(`${API_URL}/api/web-push/subscribe`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                body: JSON.stringify({ subscription: freshSub.toJSON(), browser })
-              });
+              try {
+                await subscription.unsubscribe();
+                await new Promise(resolve => setTimeout(resolve, 500));
+                const freshSub = await registration.pushManager.subscribe({
+                  userVisibleOnly: true,
+                  applicationServerKey: urlBase64ToUint8Array(publicKey)
+                });
+                await fetch(`${API_URL}/api/web-push/subscribe`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                  body: JSON.stringify({ subscription: freshSub.toJSON(), browser })
+                });
+              } catch (e) {
+                console.warn('[PWA] Auto-sync: impossible de créer un abonnement frais:', e.message);
+              }
             }
             subscribedRef.current = true;
             setIsSubscribed(true);
@@ -123,7 +105,7 @@ export function usePushNotifications() {
     if (!token) return { permissionGranted: false, subscribed: false, error: 'no_token' };
 
     try {
-      // Request permission
+      // Demander la permission
       let perm = Notification.permission;
       if (perm === 'default') {
         perm = await Notification.requestPermission();
@@ -131,45 +113,24 @@ export function usePushNotifications() {
       setPermission(perm);
       if (perm !== 'granted') return { permissionGranted: false, error: 'permission_denied' };
 
-      // Get VAPID key
+      // Récupérer la clé VAPID
       const keyResp = await fetch(`${API_URL}/api/web-push/vapid-key`);
       if (!keyResp.ok) return { permissionGranted: true, subscribed: false, error: 'vapid_key_error' };
       const { publicKey } = await keyResp.json();
       if (!publicKey) return { permissionGranted: true, subscribed: false, error: 'no_vapid_key' };
 
-      // Enregistrer SW et attendre qu'il contrôle la page
+      // Enregistrer SW et attendre
       await navigator.serviceWorker.register('/sw.js');
       const swRegistration = await navigator.serviceWorker.ready;
 
-      // Obtenir l'abonnement existant
+      // Obtenir l'abonnement existant OU en créer un nouveau
+      // IMPORTANT: ne pas forcer unsubscribe ici — le navigateur peut refuser
+      // de créer un nouvel abonnement immédiatement après (erreur "Registration failed")
+      // Le backend détectera les abonnements invalides (HTTP 401) et les nettoiera
       let subscription = await swRegistration.pushManager.getSubscription();
 
-      if (subscription) {
-        // Vérifier si l'abonnement utilise la même clé VAPID
-        try {
-          const currentKey = subscription.options?.applicationServerKey;
-          const newKey = urlBase64ToUint8Array(publicKey);
-          if (currentKey) {
-            const currentArr = new Uint8Array(currentKey);
-            const keysMatch = currentArr.length === newKey.length && currentArr.every((v, i) => v === newKey[i]);
-            if (!keysMatch) {
-              // Clés différentes → forcer un nouveau abonnement
-              await subscription.unsubscribe();
-              subscription = null;
-            }
-          } else {
-            // Pas d'accès aux options → forcer un nouvel abonnement par sécurité
-            await subscription.unsubscribe();
-            subscription = null;
-          }
-        } catch {
-          // En cas d'erreur de comparaison, forcer un nouvel abonnement par sécurité
-          try { await subscription.unsubscribe(); } catch(e) {}
-          subscription = null;
-        }
-      }
-
       if (!subscription) {
+        // Pas d'abonnement existant → créer un nouveau
         subscription = await swRegistration.pushManager.subscribe({
           userVisibleOnly: true,
           applicationServerKey: urlBase64ToUint8Array(publicKey)
@@ -193,10 +154,13 @@ export function usePushNotifications() {
 
       const respData = await resp.json();
 
-      // Si le backend signale un endpoint mort → forcer un abonnement frais
+      // Le backend signale que cet endpoint est mort (410/404) → forcer un abonnement frais
+      // Différent du cas VAPID key mismatch qui est géré côté backend (HTTP 401 cleanup)
       if (respData.needs_fresh_subscription) {
         try {
           await subscription.unsubscribe();
+          // Délai court pour laisser le navigateur traiter le désabonnement
+          await new Promise(resolve => setTimeout(resolve, 1000));
           const freshSub = await swRegistration.pushManager.subscribe({
             userVisibleOnly: true,
             applicationServerKey: urlBase64ToUint8Array(publicKey)
@@ -206,7 +170,19 @@ export function usePushNotifications() {
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
             body: JSON.stringify({ subscription: freshSub.toJSON(), browser })
           });
-        } catch { /* ignorer */ }
+        } catch (e) {
+          // L'ancien abonnement du navigateur a été supprimé (unsubscribe() a réussi)
+          // mais le nouveau abonnement n'a pas pu être créé. En rafraîchissant la page
+          // et en réessayant, le navigateur créera un abonnement frais sans erreur.
+          console.warn('[PWA] Impossible de créer un abonnement frais:', e.message);
+          subscribedRef.current = false;
+          setIsSubscribed(false);
+          return { 
+            permissionGranted: true, 
+            subscribed: false, 
+            error: 'needs_page_refresh'
+          };
+        }
       }
 
       subscribedRef.current = true;
