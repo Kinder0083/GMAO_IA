@@ -13,6 +13,21 @@ Ce script ne modifie rien sans --fix.
 
 import sys
 import os
+import subprocess
+
+# Auto-installation des dependances manquantes
+def _ensure(pkg, import_name=None):
+    import_name = import_name or pkg
+    try:
+        __import__(import_name)
+    except ImportError:
+        print(f"  [INFO] Installation de '{pkg}'...")
+        subprocess.check_call([sys.executable, "-m", "pip", "install", pkg, "-q"])
+        print(f"  [OK] '{pkg}' installe.")
+
+_ensure("pymongo")
+_ensure("python-dotenv", "dotenv")
+
 import argparse
 from datetime import datetime, timezone
 from pymongo import MongoClient
