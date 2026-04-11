@@ -32,8 +32,18 @@ Application GMAO (Gestion de Maintenance Assistée par Ordinateur) complète pou
 - Export PDF individuel des OT (jsPDF)
 - Export PDF en masse des OT avec mode sélection
 
-### Session 11 avril 2026
-- **Fix P0: Datetime bug notification_health.py** — erreur `can't subtract offset-naive and offset-aware datetimes` (Motor/MongoDB retourne des datetimes sans tzinfo). Ajout de `lc_time.replace(tzinfo=timezone.utc)`.
+### Session 11 avril 2026 (Suite - Fork 2)
+- **Fix P0: "Abonnement expiré" faux positif lors du test push (People page)** :
+  - `web_push.py` : HTTP 401 (VAPID key mismatch) ajouté à la liste de nettoyage automatique des subscriptions invalides. Retour du compteur `deactivated` dans les résultats.
+  - `server.py` : Quand de nouvelles clés VAPID sont auto-générées (premier démarrage sans clés), TOUS les abonnements push actifs sont immédiatement invalidés (évite les abonnements "Actif" en DB mais liés aux anciennes clés).
+  - `notifications.py` : Nouveau statut `subscription_cleaned_up` retourné quand des abonnements ont été trouvés mais nettoyés. Message `detail` clair dans chaque statut.
+  - `routes/notifications.py` : `web_push_users_status()` retourne maintenant `deactivation_reason` pour chaque utilisateur.
+  - `routes/notifications.py` : `web_push_subscribe()` inclut `vapid_key_mismatch` et `vapid_key_changed` dans la détection des endpoints morts (`needs_fresh_subscription`).
+  - `usePWA.js` : `subscribe()` force maintenant un nouvel abonnement même quand la comparaison de clés VAPID échoue (au lieu de garder l'ancien).
+  - `People.jsx` : Nouveau statut `subscription_cleaned_up` géré avec message clair invitant l'utilisateur à se réabonner.
+  - `SystemHealth.jsx` : Affichage de la raison de désactivation (ex: "Clés VAPID changées → réabonnement requis") pour chaque abonnement expiré.
+  - **Fix annexe** : `routes/update_management.py` : Import `from pathlib import Path` manquant corrigé (route `/api/maintenance/status` retournait 500).
+  - Tests: iteration_164.json - 100% (25/25 tests)
 - **Fix: VAPID keys lecture dynamique (web_push.py)** — lecture via `_get_vapid()` à chaque appel, plus de lecture statique au moment de l'import.
 - **Fix: Service Worker clone error (sw.js)** — `try/catch` autour de `response.clone()`, vérification `response.type !== 'opaque'`, filtrage cross-origin. Version: `fsao-iris-v2`.
 - **Fix récurrence: Subscribe PWA toujours forcé frais (usePWA.js)** — `subscribe()` désabonne TOUJOURS l'ancien endpoint avant d'en créer un nouveau (élimine le cycle endpoint-mort → réabonnement → endpoint-mort).
