@@ -58,7 +58,7 @@ async def _check_notification_health_internal():
         active_subs = await db.web_push_subscriptions.count_documents({"is_active": True})
         inactive_subs = await db.web_push_subscriptions.count_documents({"is_active": False})
         total_subs = active_subs + inactive_subs
-        sub_status = "ok" if active_subs > 0 else ("warning" if total_subs > 0 else "error")
+        sub_status = "ok" if active_subs > 0 else "warning"  # 0 abonnements = warning, jamais error
         result["web_push_subscriptions"] = {
             "status": sub_status,
             "active": active_subs,
