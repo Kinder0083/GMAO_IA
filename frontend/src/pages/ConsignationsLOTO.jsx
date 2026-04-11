@@ -422,11 +422,15 @@ export default function ConsignationsLOTO() {
 function LOTOCreateDialog({ open, onClose, onCreated }) {
   const { toast } = useToast();
   const [equipments, setEquipments] = useState([]);
+  const [childEquipments, setChildEquipments] = useState([]);
+  const [loadingChildren, setLoadingChildren] = useState(false);
   const [users, setUsers] = useState([]);
   const [linkedItems, setLinkedItems] = useState([]);
   const [loadingLinked, setLoadingLinked] = useState(false);
   const [form, setForm] = useState({
-    equipement_id: '', equipement_nom: '', emplacement: '',
+    equipement_id: '', equipement_nom: '',
+    sous_equipement_id: '', sous_equipement_nom: '',
+    emplacement: '',
     linked_type: '', linked_id: '', linked_numero: '',
     energy_types: [], motif: '', notes: '',
     responsable_id: '', responsable_nom: '',
@@ -441,7 +445,7 @@ function LOTOCreateDialog({ open, onClose, onCreated }) {
     const loadData = async () => {
       try {
         const [eqRes, usersRes] = await Promise.all([
-          fetch(`${API}/api/equipments`, { headers: authHeaders() }).then(r => r.json()),
+          fetch(`${API}/api/equipments?parents_only=true`, { headers: authHeaders() }).then(r => r.json()),
           fetch(`${API}/api/users`, { headers: authHeaders() }).then(r => r.json()).then(data =>
             (Array.isArray(data) ? data : []).filter(u => (u.statut || 'actif').toLowerCase() !== 'inactif')
           )
@@ -508,9 +512,17 @@ function LOTOCreateDialog({ open, onClose, onCreated }) {
       linked_numero: String(numero),
       equipement_id: eqId || f.equipement_id,
       equipement_nom: eqNom || f.equipement_nom,
+      sous_equipement_id: '',
+      sous_equipement_nom: '',
       motif: motif || f.motif,
       duree_prevue_heures: duree !== '' && duree !== null && duree !== undefined ? String(duree) : f.duree_prevue_heures
     }));
+    // Charger les enfants si l'équipement sélectionné en a
+    if (eqId) {
+      const eq = equipments.find(e => e.id === eqId);
+      setChildEquipments([]);
+      if (eq?.hasChildren) loadChildren(eqId);
+    }
   };
 
   const getLinkedLabel = (item) => {
@@ -551,14 +563,34 @@ function LOTOCreateDialog({ open, onClose, onCreated }) {
     });
   };
 
+  const loadChildren = async (parentId) => {
+    setLoadingChildren(true);
+    try {
+      const res = await fetch(`${API}/api/equipments/${parentId}/children`, { headers: authHeaders() });
+      const data = await res.json();
+      setChildEquipments(Array.isArray(data) ? data : (data.children || []));
+    } catch (e) {
+      console.error('Erreur chargement sous-équipements:', e);
+      setChildEquipments([]);
+    } finally {
+      setLoadingChildren(false);
+    }
+  };
+
   const handleEquipChange = (eqId) => {
     const eq = equipments.find(e => e.id === eqId);
     setForm(f => ({
       ...f,
       equipement_id: eqId,
       equipement_nom: eq?.nom || '',
+      sous_equipement_id: '',
+      sous_equipement_nom: '',
       emplacement: eq?.emplacement?.nom || eq?.localisation || ''
     }));
+    setChildEquipments([]);
+    if (eq?.hasChildren) {
+      loadChildren(eqId);
+    }
   };
 
   const handleSubmit = async () => {
@@ -572,6 +604,8 @@ function LOTOCreateDialog({ open, onClose, onCreated }) {
         method: 'POST',
         body: JSON.stringify({
           ...form,
+          sous_equipement_id: form.sous_equipement_id || null,
+          sous_equipement_nom: form.sous_equipement_nom || null,
           duree_prevue_heures: form.duree_prevue_heures ? parseFloat(form.duree_prevue_heures) : null,
           linked_type: form.linked_type || null,
           linked_id: form.linked_id || null,
@@ -594,12 +628,12 @@ function LOTOCreateDialog({ open, onClose, onCreated }) {
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-5">
-          {/* Equipment */}
+          {/* Equipement & Sous-équipement */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label>Equipement *</Label>
               <Select value={form.equipement_id} onValueChange={handleEquipChange}>
-                <SelectTrigger data-testid="loto-eq-select"><SelectValue placeholder="Choisir..." /></SelectTrigger>
+                <SelectTrigger data-testid="loto-eq-select"><SelectValue placeholder="Choisir un équipement..." /></SelectTrigger>
                 <SelectContent>
                   {equipments.map(eq => (
                     <SelectItem key={eq.id} value={eq.id}>{eq.nom}</SelectItem>
@@ -608,6 +642,39 @@ function LOTOCreateDialog({ open, onClose, onCreated }) {
               </Select>
             </div>
             <div>
+              <Label>Sous-équipement <span className="text-gray-400 font-normal text-xs">(optionnel)</span></Label>
+              <Select
+                value={form.sous_equipement_id}
+                onValueChange={v => {
+                  if (v === 'none-loto') {
+                    setForm(f => ({ ...f, sous_equipement_id: '', sous_equipement_nom: '' }));
+                    return;
+                  }
+                  const child = childEquipments.find(c => c.id === v);
+                  setForm(f => ({ ...f, sous_equipement_id: v, sous_equipement_nom: child?.nom || '' }));
+                }}
+                disabled={!form.equipement_id || childEquipments.length === 0}
+              >
+                <SelectTrigger data-testid="loto-sous-eq-select">
+                  <SelectValue placeholder={
+                    !form.equipement_id ? 'Sélectionnez d\'abord un équipement' :
+                    loadingChildren ? 'Chargement...' :
+                    childEquipments.length === 0 ? 'Aucun sous-équipement' :
+                    'Choisir un sous-équipement...'
+                  } />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none-loto">-- Aucun sous-équipement --</SelectItem>
+                  {childEquipments.map(child => (
+                    <SelectItem key={child.id} value={child.id}>{child.nom}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Responsable consignation */}
+          <div>
               <Label>Responsable consignation *</Label>
               <Select value={form.responsable_id} onValueChange={v => {
                 const u = users.find(u => u.id === v);
@@ -621,7 +688,6 @@ function LOTOCreateDialog({ open, onClose, onCreated }) {
                 </SelectContent>
               </Select>
             </div>
-          </div>
 
           {/* Link to WO/PM/Improvement */}
           <div className="grid grid-cols-2 gap-3">

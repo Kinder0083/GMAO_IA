@@ -105,6 +105,8 @@ class IntervenantEntry(BaseModel):
 class LOTOCreate(BaseModel):
     equipement_id: str
     equipement_nom: str
+    sous_equipement_id: Optional[str] = None
+    sous_equipement_nom: Optional[str] = None
     emplacement: str = ""
     linked_type: Optional[str] = None  # work_order, preventive_maintenance, improvement
     linked_id: Optional[str] = None
@@ -263,12 +265,19 @@ async def create_consignation(data: LOTOCreate, current_user: dict = Depends(get
     numero, seq = await _get_next_numero()
     now = datetime.now(timezone.utc).isoformat()
 
+    # Si un sous-équipement est sélectionné, il devient l'équipement réel de la consignation
+    actual_equipement_id = data.sous_equipement_id or data.equipement_id
+    actual_equipement_nom = data.sous_equipement_nom or data.equipement_nom
+
     doc = {
         "id": str(uuid.uuid4()),
         "numero": numero,
         "numero_seq": seq,
-        "equipement_id": data.equipement_id,
-        "equipement_nom": data.equipement_nom,
+        "equipement_id": actual_equipement_id,
+        "equipement_nom": actual_equipement_nom,
+        # Conserver la référence au parent et au sous-équipement pour l'affichage
+        "parent_equipement_id": data.equipement_id if data.sous_equipement_id else None,
+        "parent_equipement_nom": data.equipement_nom if data.sous_equipement_id else None,
         "emplacement": data.emplacement,
         "linked_type": data.linked_type,
         "linked_id": data.linked_id,
@@ -295,7 +304,7 @@ async def create_consignation(data: LOTOCreate, current_user: dict = Depends(get
             "user_id": current_user["id"],
             "user_nom": current_user.get("name", ""),
             "timestamp": now,
-            "details": f"Demande de consignation créée pour {data.equipement_nom}"
+            "details": f"Demande de consignation créée pour {actual_equipement_nom}"
         }],
         "created_at": now,
         "updated_at": now
@@ -305,7 +314,7 @@ async def create_consignation(data: LOTOCreate, current_user: dict = Depends(get
     del doc["_id"]
     await _emit_loto_event("create", {"id": doc["id"], "status": doc["status"]})
     await _log_loto_audit(current_user, "CREATE", doc["id"], doc["numero"],
-                          f"Création consignation {doc['numero']} pour {data.equipement_nom}")
+                          f"Création consignation {doc['numero']} pour {actual_equipement_nom}")
     return doc
 
 
