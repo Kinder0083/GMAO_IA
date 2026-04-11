@@ -33,9 +33,14 @@ Application GMAO (Gestion de Maintenance Assistée par Ordinateur) complète pou
 - Export PDF en masse des OT avec mode sélection
 
 ### Session 11 avril 2026
-- **Fix P0: Datetime bug notification_health.py** — erreur `can't subtract offset-naive and offset-aware datetimes` dans le scheduler de vérification santé (toutes les 30 min). Ajout de `lc_time.replace(tzinfo=timezone.utc)` pour les datetimes naïfs lus depuis MongoDB. Tests: OK.
-- **Fix: VAPID keys lecture dynamique (web_push.py)** — lecture des clés VAPID maintenant faite via `_get_vapid()` à chaque appel (plus de lecture statique au moment de l'import). Garantit le bon fonctionnement en production même si les clés sont chargées tardivement.
-- **Fix: Service Worker clone error (sw.js)** — ajout `try/catch` autour de `response.clone()`, vérification `response.type !== 'opaque'`, filtrage des requêtes cross-origin. Version: `fsao-iris-v1` → `fsao-iris-v2`.
+- **Fix P0: Datetime bug notification_health.py** — erreur `can't subtract offset-naive and offset-aware datetimes` (Motor/MongoDB retourne des datetimes sans tzinfo). Ajout de `lc_time.replace(tzinfo=timezone.utc)`.
+- **Fix: VAPID keys lecture dynamique (web_push.py)** — lecture via `_get_vapid()` à chaque appel, plus de lecture statique au moment de l'import.
+- **Fix: Service Worker clone error (sw.js)** — `try/catch` autour de `response.clone()`, vérification `response.type !== 'opaque'`, filtrage cross-origin. Version: `fsao-iris-v2`.
+- **Fix récurrence: Subscribe PWA toujours forcé frais (usePWA.js)** — `subscribe()` désabonne TOUJOURS l'ancien endpoint avant d'en créer un nouveau (élimine le cycle endpoint-mort → réabonnement → endpoint-mort).
+- **Fix: Auto-sync endpoints morts (usePWA.js)** — l'auto-sync au chargement de page gère `needs_fresh_subscription: True` en créant un nouvel abonnement browser si l'endpoint était dead (HTTP 410/404/endpoint_gone).
+- **Fix backend subscribe (routes/notifications.py)** — détection des endpoints morts à la réinscription, retour du flag `needs_fresh_subscription`, nettoyage de `deactivation_reason` lors de la réactivation.
+- **Fix web_push.py** — raisons de désactivation standardisées : `HTTP 410`, `HTTP 404`, `endpoint_gone` (détectables par le frontend).
+- **Fix UX People.jsx** — messages d'erreur précis selon le cas : `no_channel` = l'utilisateur n'a jamais activé les notifs, `all_failed` = abonnement expiré (avec instructions claires).
 
 ### Session 08 avril 2026 (suite)
 - **Feature: Onglet "MongoDB Natif"** dans Import/Export — interface complète de gestion des sauvegardes mongodump sans SSH : état système, sauvegarde manuelle, planification cron, liste/restauration/suppression des sauvegardes, journaux, guide LXC. Backend : `/app/backend/routes/mongodb_backup.py`. Frontend : `MongoDBBackupTab.jsx`.

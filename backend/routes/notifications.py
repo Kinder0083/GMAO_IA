@@ -67,16 +67,25 @@ async def web_push_subscribe(
     
     user_id = str(current_user["id"])
     now = datetime.now(timezone.utc)
+    endpoint = subscription["endpoint"]
+
+    # Vérifier si cet endpoint était précédemment mort (HTTP 410/404)
+    # Dans ce cas, signaler au frontend qu'il faut un abonnement frais
+    existing_dead = await db.web_push_subscriptions.find_one(
+        {"subscription.endpoint": endpoint, "is_active": False,
+         "deactivation_reason": {"$in": ["HTTP 410", "HTTP 404", "endpoint_gone"]}}
+    )
+    needs_fresh = bool(existing_dead)
     
-    # Desactiver les anciens abonnements du meme navigateur
+    # Desactiver les anciens abonnements du meme navigateur (endpoints différents)
     await db.web_push_subscriptions.update_many(
-        {"user_id": user_id, "browser": browser, "subscription.endpoint": {"$ne": subscription["endpoint"]}},
+        {"user_id": user_id, "browser": browser, "subscription.endpoint": {"$ne": endpoint}},
         {"$set": {"is_active": False, "updated_at": now}}
     )
     
-    # Upsert l'abonnement
+    # Upsert l'abonnement — supprimer raison de désactivation si réactivé
     await db.web_push_subscriptions.update_one(
-        {"subscription.endpoint": subscription["endpoint"]},
+        {"subscription.endpoint": endpoint},
         {"$set": {
             "user_id": user_id,
             "subscription": subscription,
@@ -84,12 +93,17 @@ async def web_push_subscribe(
             "is_active": True,
             "updated_at": now
         },
+        "$unset": {"deactivation_reason": "", "deactivated_at": ""},
         "$setOnInsert": {"created_at": now}},
         upsert=True
     )
     
-    logger.info(f"[WEB PUSH] Abonnement enregistre pour user {user_id} ({browser})")
-    return {"message": "Abonnement enregistre", "status": "ok"}
+    logger.info(f"[WEB PUSH] Abonnement enregistré pour user {user_id} ({browser}), fresh={not needs_fresh}")
+    return {
+        "message": "Abonnement enregistre",
+        "status": "ok",
+        "needs_fresh_subscription": needs_fresh
+    }
 
 @router.post("/web-push/unsubscribe", tags=["Web Push PWA"])
 async def web_push_unsubscribe(

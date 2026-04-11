@@ -43,7 +43,7 @@ export function usePushNotifications() {
 
           let subscription = await registration.pushManager.getSubscription();
 
-          // If existing subscription uses a different VAPID key, re-subscribe
+          // Si l'abonnement existant utilise une clé VAPID différente → forcer un nouvel abonnement
           if (subscription) {
             try {
               const currentKey = subscription.options && subscription.options.applicationServerKey;
@@ -56,7 +56,9 @@ export function usePushNotifications() {
                 }
               }
             } catch {
-              // If key comparison fails, keep existing subscription
+              // Si la comparaison échoue, forcer un nouvel abonnement par sécurité
+              try { await subscription.unsubscribe(); } catch(e) {}
+              subscription = null;
             }
           }
 
@@ -81,6 +83,20 @@ export function usePushNotifications() {
           });
 
           if (syncResp.ok) {
+            const syncData = await syncResp.json();
+            // Si le backend signale que l'endpoint était mort (410/404), forcer un nouveau
+            if (syncData.needs_fresh_subscription) {
+              try { await subscription.unsubscribe(); } catch(e) {}
+              const freshSub = await registration.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: urlBase64ToUint8Array(publicKey)
+              });
+              await fetch(`${API_URL}/api/web-push/subscribe`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ subscription: freshSub.toJSON(), browser })
+              });
+            }
             subscribedRef.current = true;
             setIsSubscribed(true);
           }
@@ -103,7 +119,6 @@ export function usePushNotifications() {
   }, []);
 
   const subscribe = useCallback(async () => {
-    if (subscribedRef.current) return { permissionGranted: true, subscribed: true };
     const token = localStorage.getItem('token');
     if (!token) return { permissionGranted: false, subscribed: false, error: 'no_token' };
 
@@ -118,26 +133,28 @@ export function usePushNotifications() {
 
       // Get VAPID key
       const keyResp = await fetch(`${API_URL}/api/web-push/vapid-key`);
+      if (!keyResp.ok) return { permissionGranted: true, subscribed: false, error: 'vapid_key_error' };
       const { publicKey } = await keyResp.json();
       if (!publicKey) return { permissionGranted: true, subscribed: false, error: 'no_vapid_key' };
 
       const registration = await registerServiceWorker();
       if (!registration) return { permissionGranted: true, subscribed: false, error: 'sw_failed' };
 
-      // Wait for SW to be ready
       await navigator.serviceWorker.ready;
 
-      // Check existing subscription
-      let subscription = await registration.pushManager.getSubscription();
-
-      if (!subscription) {
-        subscription = await registration.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(publicKey)
-        });
+      // TOUJOURS forcer un nouvel abonnement : désabonner l'ancien en premier
+      // Cela garantit un endpoint valide et frais auprès du service push
+      const existingSub = await registration.pushManager.getSubscription();
+      if (existingSub) {
+        try { await existingSub.unsubscribe(); } catch (e) { /* ignorer */ }
       }
 
-      // Send to backend
+      // Créer un nouvel abonnement avec la clé VAPID courante
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey)
+      });
+
       const browser = navigator.userAgent.includes('Firefox') ? 'firefox' :
         navigator.userAgent.includes('Edg') ? 'edge' :
         navigator.userAgent.includes('Chrome') ? 'chrome' : 'other';

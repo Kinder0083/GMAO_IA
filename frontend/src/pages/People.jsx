@@ -43,17 +43,31 @@ const People = () => {
     try {
       const response = await api.post(`/push-notifications/test/${user.id}`);
       const data = response.data;
-      const summaryText = (data.summary || []).join(' | ');
       const isSuccess = data.status === 'ok';
       const isNoChannel = data.status === 'no_channel';
+      const isAllFailed = data.status === 'all_failed';
 
-      toast({
-        title: isSuccess ? 'Notification envoyee' : isNoChannel ? 'Aucun canal disponible' : 'Envoi echoue',
-        description: isNoChannel
-          ? `${user.prenom} ${user.nom}: Doit ouvrir l'app pour activer les notifications`
-          : `${user.prenom} ${user.nom}: ${summaryText}`,
-        variant: isSuccess ? 'default' : 'destructive',
-      });
+      let title, description, variant;
+
+      if (isSuccess) {
+        title = 'Notification envoyée';
+        description = `${user.prenom} ${user.nom} : notification push envoyée avec succès.`;
+        variant = 'default';
+      } else if (isNoChannel) {
+        title = 'Aucun abonnement push actif';
+        description = `${user.prenom} ${user.nom} doit ouvrir l'application dans son navigateur et activer les notifications (icône cloche en haut à droite).`;
+        variant = 'destructive';
+      } else if (isAllFailed) {
+        title = 'Abonnement expiré';
+        description = `L'abonnement push de ${user.prenom} ${user.nom} a expiré. Il doit désactiver puis réactiver les notifications depuis son navigateur.`;
+        variant = 'destructive';
+      } else {
+        title = 'Envoi partiel';
+        description = (data.summary || []).join(' | ');
+        variant = 'default';
+      }
+
+      toast({ title, description, variant });
     } catch (error) {
       const msg = error.response?.data?.detail || 'Erreur lors de l\'envoi';
       toast({
