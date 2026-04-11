@@ -288,6 +288,97 @@ const Sidebar = ({
                 <Shield size={20} className="flex-shrink-0" />
                 {sidebarOpen && <span className="text-sm font-medium">Paramètres Spéciaux</span>}
               </button>
+              <button
+                onClick={() => navigate('/import-export')}
+                data-testid="sidebar-import-export"
+                className={`w-full flex items-center gap-3 px-4 py-2 rounded-lg transition-all ${!sidebarOpen ? 'justify-center px-2' : ''}`}
+                style={getSidebarButtonStyle(location.pathname === '/import-export')}
+                onMouseEnter={(e) => handleSidebarButtonHover(e, location.pathname === '/import-export')}
+                onMouseLeave={(e) => handleSidebarButtonLeave(e, location.pathname === '/import-export')}
+                title={!sidebarOpen ? 'Import / Export' : ''}
+              >
+                <Database size={20} className="flex-shrink-0" />
+                {sidebarOpen && <span className="text-sm font-medium">Import / Export</span>}
+              </button>
+              <button
+                onClick={() => navigate('/mqtt-pubsub')}
+                className={`w-full flex items-center gap-3 px-4 py-2 rounded-lg transition-all ${!sidebarOpen ? 'justify-center px-2' : ''}`}
+                style={getSidebarButtonStyle(location.pathname === '/mqtt-pubsub')}
+                onMouseEnter={(e) => handleSidebarButtonHover(e, location.pathname === '/mqtt-pubsub')}
+                onMouseLeave={(e) => handleSidebarButtonLeave(e, location.pathname === '/mqtt-pubsub')}
+                title={!sidebarOpen ? 'P/L MQTT' : ''}
+              >
+                <Radio size={20} className="flex-shrink-0" />
+                {sidebarOpen && <span className="text-sm font-medium">P/L MQTT</span>}
+              </button>
+              <button
+                onClick={() => navigate('/mqtt-logs')}
+                data-testid="sidebar-mqtt-logs"
+                className={`w-full flex items-center gap-3 px-4 py-2 rounded-lg transition-all ${!sidebarOpen ? 'justify-center px-2' : ''}`}
+                style={getSidebarButtonStyle(location.pathname === '/mqtt-logs')}
+                onMouseEnter={(e) => handleSidebarButtonHover(e, location.pathname === '/mqtt-logs')}
+                onMouseLeave={(e) => handleSidebarButtonLeave(e, location.pathname === '/mqtt-logs')}
+                title={!sidebarOpen ? 'Logs MQTT' : ''}
+              >
+                <Terminal size={20} className="flex-shrink-0" />
+                {sidebarOpen && <span className="text-sm font-medium">Logs MQTT</span>}
+              </button>
+              <button
+                onClick={() => navigate('/updates')}
+                className={`w-full flex items-center gap-3 px-4 py-2 rounded-lg transition-all ${!sidebarOpen ? 'justify-center px-2' : ''}`}
+                style={getSidebarButtonStyle(location.pathname === '/updates')}
+                onMouseEnter={(e) => handleSidebarButtonHover(e, location.pathname === '/updates')}
+                onMouseLeave={(e) => handleSidebarButtonLeave(e, location.pathname === '/updates')}
+                title={!sidebarOpen ? 'Mise à jour' : ''}
+              >
+                <RefreshCw size={20} className="flex-shrink-0" />
+                {sidebarOpen && <span className="text-sm font-medium">Mise à jour</span>}
+              </button>
+              <button
+                onClick={() => navigate('/journal')}
+                className={`w-full flex items-center gap-3 px-4 py-2 rounded-lg transition-all ${!sidebarOpen ? 'justify-center px-2' : ''}`}
+                style={getSidebarButtonStyle(location.pathname === '/journal')}
+                onMouseEnter={(e) => handleSidebarButtonHover(e, location.pathname === '/journal')}
+                onMouseLeave={(e) => handleSidebarButtonLeave(e, location.pathname === '/journal')}
+                title={!sidebarOpen ? 'Journal' : ''}
+              >
+                <FileText size={20} className="flex-shrink-0" />
+                {sidebarOpen && <span className="text-sm font-medium">Journal</span>}
+              </button>
+              <button
+                onClick={() => navigate('/trash')}
+                data-testid="sidebar-trash"
+                className={`w-full flex items-center gap-3 px-4 py-2 rounded-lg transition-all ${!sidebarOpen ? 'justify-center px-2' : ''}`}
+                style={getSidebarButtonStyle(location.pathname === '/trash')}
+                onMouseEnter={(e) => handleSidebarButtonHover(e, location.pathname === '/trash')}
+                onMouseLeave={(e) => handleSidebarButtonLeave(e, location.pathname === '/trash')}
+                title={!sidebarOpen ? 'Corbeille' : ''}
+              >
+                <Trash2 size={20} className="flex-shrink-0" />
+                {sidebarOpen && <span className="text-sm font-medium">Corbeille</span>}
+              </button>
+              <button
+                onClick={() => navigate('/ssh')}
+                className={`w-full flex items-center gap-3 px-4 py-2 rounded-lg transition-all ${!sidebarOpen ? 'justify-center px-2' : ''}`}
+                style={getSidebarButtonStyle(location.pathname === '/ssh')}
+                onMouseEnter={(e) => handleSidebarButtonHover(e, location.pathname === '/ssh')}
+                onMouseLeave={(e) => handleSidebarButtonLeave(e, location.pathname === '/ssh')}
+                title={!sidebarOpen ? 'SSH' : ''}
+              >
+                <Terminal size={20} className="flex-shrink-0" />
+                {sidebarOpen && <span className="text-sm font-medium">SSH</span>}
+              </button>
+              <button
+                onClick={() => navigate('/personnalisation')}
+                className={`w-full flex items-center gap-3 px-4 py-2 rounded-lg transition-all ${!sidebarOpen ? 'justify-center px-2' : ''}`}
+                style={getSidebarButtonStyle(location.pathname === '/personnalisation')}
+                onMouseEnter={(e) => handleSidebarButtonHover(e, location.pathname === '/personnalisation')}
+                onMouseLeave={(e) => handleSidebarButtonLeave(e, location.pathname === '/personnalisation')}
+                title={!sidebarOpen ? 'Personnalisation' : ''}
+              >
+                <Palette size={20} className="flex-shrink-0" />
+                {sidebarOpen && <span className="text-sm font-medium">Personnalisation</span>}
+              </button>
             </>
           )}
           <button
