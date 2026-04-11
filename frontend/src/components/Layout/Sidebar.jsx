@@ -92,7 +92,7 @@ const Sidebar = ({
     <div
       id="main-sidebar"
       data-testid="sidebar-nav"
-      className="fixed bottom-0 text-white transition-all duration-300 z-20"
+      className="fixed bottom-0 text-white transition-all duration-300 z-20 flex flex-col"
       style={{
         top: 'calc(4rem + env(safe-area-inset-top, 0px))',
         backgroundColor: preferences?.sidebar_bg_color || '#1f2937',
@@ -103,7 +103,8 @@ const Sidebar = ({
         transform: (!sidebarOpen && isMobile) ? 'translateX(-100%)' : 'translateX(0)'
       }}
     >
-      <div className="p-4 space-y-1 h-full overflow-y-auto">
+      {/* Zone scrollable — navigation principale */}
+      <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-1">
         {/* Rendu des catégories avec sous-menus */}
         {menuCategories
           .sort((a, b) => (a.order || 0) - (b.order || 0))
@@ -244,11 +245,16 @@ const Sidebar = ({
             );
           })}
         
-        {/* Section paramètres et admin */}
-        <div className="pt-4 mt-4" style={{ borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+      </div>{/* Fin zone scrollable */}
+
+      {/* Zone FIXE en bas — toujours visible sans scroll */}
+      <div
+        className="flex-shrink-0 p-3 space-y-0.5"
+        style={{ borderTop: '1px solid rgba(255,255,255,0.1)', backgroundColor: preferences?.sidebar_bg_color || '#1f2937' }}
+      >
           <button
             onClick={() => navigate('/settings')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${!sidebarOpen ? 'justify-center px-2' : ''}`}
+            className={`w-full flex items-center gap-3 px-4 py-2 rounded-lg transition-all ${!sidebarOpen ? 'justify-center px-2' : ''}`}
             style={getSidebarButtonStyle(location.pathname === '/settings')}
             onMouseEnter={(e) => handleSidebarButtonHover(e, location.pathname === '/settings')}
             onMouseLeave={(e) => handleSidebarButtonLeave(e, location.pathname === '/settings')}
@@ -260,20 +266,9 @@ const Sidebar = ({
           {user.role === 'ADMIN' && (
             <>
               <button
-                onClick={() => navigate('/special-settings')}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${!sidebarOpen ? 'justify-center px-2' : ''}`}
-                style={getSidebarButtonStyle(location.pathname === '/special-settings')}
-                onMouseEnter={(e) => handleSidebarButtonHover(e, location.pathname === '/special-settings')}
-                onMouseLeave={(e) => handleSidebarButtonLeave(e, location.pathname === '/special-settings')}
-                title={!sidebarOpen ? 'Paramètres Spéciaux' : ''}
-              >
-                <Shield size={20} className="flex-shrink-0" />
-                {sidebarOpen && <span className="text-sm font-medium">Paramètres Spéciaux</span>}
-              </button>
-              <button
                 onClick={() => navigate('/system-health')}
                 data-testid="sidebar-system-health"
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${!sidebarOpen ? 'justify-center px-2' : ''}`}
+                className={`w-full flex items-center gap-3 px-4 py-2 rounded-lg transition-all ${!sidebarOpen ? 'justify-center px-2' : ''}`}
                 style={getSidebarButtonStyle(location.pathname === '/system-health')}
                 onMouseEnter={(e) => handleSidebarButtonHover(e, location.pathname === '/system-health')}
                 onMouseLeave={(e) => handleSidebarButtonLeave(e, location.pathname === '/system-health')}
@@ -283,104 +278,21 @@ const Sidebar = ({
                 {sidebarOpen && <span className="text-sm font-medium">Santé Système</span>}
               </button>
               <button
-                onClick={() => navigate('/import-export')}
-                data-testid="sidebar-import-export"
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${!sidebarOpen ? 'justify-center px-2' : ''}`}
-                style={getSidebarButtonStyle(location.pathname === '/import-export')}
-                onMouseEnter={(e) => handleSidebarButtonHover(e, location.pathname === '/import-export')}
-                onMouseLeave={(e) => handleSidebarButtonLeave(e, location.pathname === '/import-export')}
-                title={!sidebarOpen ? 'Import / Export' : ''}
+                onClick={() => navigate('/special-settings')}
+                className={`w-full flex items-center gap-3 px-4 py-2 rounded-lg transition-all ${!sidebarOpen ? 'justify-center px-2' : ''}`}
+                style={getSidebarButtonStyle(location.pathname === '/special-settings')}
+                onMouseEnter={(e) => handleSidebarButtonHover(e, location.pathname === '/special-settings')}
+                onMouseLeave={(e) => handleSidebarButtonLeave(e, location.pathname === '/special-settings')}
+                title={!sidebarOpen ? 'Paramètres Spéciaux' : ''}
               >
-                <Database size={20} className="flex-shrink-0" />
-                {sidebarOpen && <span className="text-sm font-medium">Import / Export</span>}
-              </button>
-              <button
-                onClick={() => navigate('/mqtt-pubsub')}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${!sidebarOpen ? 'justify-center px-2' : ''}`}
-                style={getSidebarButtonStyle(location.pathname === '/mqtt-pubsub')}
-                onMouseEnter={(e) => handleSidebarButtonHover(e, location.pathname === '/mqtt-pubsub')}
-                onMouseLeave={(e) => handleSidebarButtonLeave(e, location.pathname === '/mqtt-pubsub')}
-                title={!sidebarOpen ? 'P/L MQTT' : ''}
-              >
-                <Radio size={20} className="flex-shrink-0" />
-                {sidebarOpen && <span className="text-sm font-medium">P/L MQTT</span>}
-              </button>
-              <button
-                onClick={() => navigate('/mqtt-logs')}
-                data-testid="sidebar-mqtt-logs"
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${!sidebarOpen ? 'justify-center px-2' : ''}`}
-                style={getSidebarButtonStyle(location.pathname === '/mqtt-logs')}
-                onMouseEnter={(e) => handleSidebarButtonHover(e, location.pathname === '/mqtt-logs')}
-                onMouseLeave={(e) => handleSidebarButtonLeave(e, location.pathname === '/mqtt-logs')}
-                title={!sidebarOpen ? 'Logs MQTT' : ''}
-              >
-                <Terminal size={20} className="flex-shrink-0" />
-                {sidebarOpen && <span className="text-sm font-medium">Logs MQTT</span>}
-              </button>
-              <button
-                onClick={() => navigate('/updates')}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${!sidebarOpen ? 'justify-center px-2' : ''}`}
-                style={getSidebarButtonStyle(location.pathname === '/updates')}
-                onMouseEnter={(e) => handleSidebarButtonHover(e, location.pathname === '/updates')}
-                onMouseLeave={(e) => handleSidebarButtonLeave(e, location.pathname === '/updates')}
-                title={!sidebarOpen ? 'Mise à jour' : ''}
-              >
-                <RefreshCw size={20} className="flex-shrink-0" />
-                {sidebarOpen && <span className="text-sm font-medium">Mise à jour</span>}
-              </button>
-              <button
-                onClick={() => navigate('/journal')}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${!sidebarOpen ? 'justify-center px-2' : ''}`}
-                style={getSidebarButtonStyle(location.pathname === '/journal')}
-                onMouseEnter={(e) => handleSidebarButtonHover(e, location.pathname === '/journal')}
-                onMouseLeave={(e) => handleSidebarButtonLeave(e, location.pathname === '/journal')}
-                title={!sidebarOpen ? 'Journal' : ''}
-              >
-                <FileText size={20} className="flex-shrink-0" />
-                {sidebarOpen && <span className="text-sm font-medium">Journal</span>}
-              </button>
-              <button
-                onClick={() => navigate('/trash')}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${!sidebarOpen ? 'justify-center px-2' : ''}`}
-                style={getSidebarButtonStyle(location.pathname === '/trash')}
-                onMouseEnter={(e) => handleSidebarButtonHover(e, location.pathname === '/trash')}
-                onMouseLeave={(e) => handleSidebarButtonLeave(e, location.pathname === '/trash')}
-                title={!sidebarOpen ? 'Corbeille' : ''}
-                data-testid="sidebar-trash"
-              >
-                <Trash2 size={20} className="flex-shrink-0" />
-                {sidebarOpen && <span className="text-sm font-medium">Corbeille</span>}
-              </button>
-              <button
-                onClick={() => navigate('/ssh')}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${!sidebarOpen ? 'justify-center px-2' : ''}`}
-                style={getSidebarButtonStyle(location.pathname === '/ssh')}
-                onMouseEnter={(e) => handleSidebarButtonHover(e, location.pathname === '/ssh')}
-                onMouseLeave={(e) => handleSidebarButtonLeave(e, location.pathname === '/ssh')}
-                title={!sidebarOpen ? 'SSH' : ''}
-              >
-                <Terminal size={20} className="flex-shrink-0" />
-                {sidebarOpen && <span className="text-sm font-medium">SSH</span>}
+                <Shield size={20} className="flex-shrink-0" />
+                {sidebarOpen && <span className="text-sm font-medium">Paramètres Spéciaux</span>}
               </button>
             </>
           )}
-          
-          {/* Personnalisation */}
-          <button
-            onClick={() => navigate('/personnalisation')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${!sidebarOpen ? 'justify-center px-2' : ''}`}
-            style={getSidebarButtonStyle(location.pathname === '/personnalisation')}
-            onMouseEnter={(e) => handleSidebarButtonHover(e, location.pathname === '/personnalisation')}
-            onMouseLeave={(e) => handleSidebarButtonLeave(e, location.pathname === '/personnalisation')}
-            title={!sidebarOpen ? 'Personnalisation' : ''}
-          >
-            <Palette size={20} className="flex-shrink-0" />
-            {sidebarOpen && <span className="text-sm font-medium">Personnalisation</span>}
-          </button>
-          
           <button
             onClick={onLogout}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${!sidebarOpen ? 'justify-center px-2' : ''}`}
+            className={`w-full flex items-center gap-3 px-4 py-2 rounded-lg transition-all ${!sidebarOpen ? 'justify-center px-2' : ''}`}
             style={{ backgroundColor: 'transparent', color: preferences?.sidebar_icon_color || '#ffffff' }}
             onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#dc2626'; }}
             onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent'; }}
@@ -389,7 +301,6 @@ const Sidebar = ({
             <LogOut size={20} className="flex-shrink-0" />
             {sidebarOpen && <span className="text-sm font-medium">Déconnexion</span>}
           </button>
-        </div>
       </div>
     </div>
   );
