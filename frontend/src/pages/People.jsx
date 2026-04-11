@@ -46,6 +46,7 @@ const People = () => {
       const isSuccess = data.status === 'ok';
       const isNoChannel = data.status === 'no_channel';
       const isAllFailed = data.status === 'all_failed';
+      const isCleanedUp = data.status === 'subscription_cleaned_up';
 
       let title, description, variant;
 
@@ -56,6 +57,10 @@ const People = () => {
       } else if (isNoChannel) {
         title = 'Utilisateur non abonné';
         description = `${user.prenom} ${user.nom} n'a pas activé les notifications push. Il doit se connecter à l'application et aller dans Paramètres → Notifications pour les activer.`;
+        variant = 'destructive';
+      } else if (isCleanedUp) {
+        title = 'Abonnement expiré — Nettoyé automatiquement';
+        description = `L'abonnement push de ${user.prenom} ${user.nom} avait expiré (changement de clés VAPID ou session expirée). Il a été supprimé. L'utilisateur doit aller dans Paramètres → Notifications pour se réabonner.`;
         variant = 'destructive';
       } else if (isAllFailed) {
         title = 'Abonnement expiré';

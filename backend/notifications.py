@@ -559,24 +559,38 @@ async def test_notification_for_user(
         data={"type": "test"},
         tag="test-notification"
     )
-    if web_result.get("sent", 0) > 0:
+    web_delivered = web_result.get("sent", 0)
+    web_failed = web_result.get("failed", 0)
+    web_deactivated = web_result.get("deactivated", 0)
+
+    if web_delivered > 0:
         results["web_push"] = {
             "sent": True,
-            "delivered": web_result["sent"],
-            "failed": web_result.get("failed", 0),
+            "delivered": web_delivered,
+            "failed": web_failed,
+            "deactivated": web_deactivated,
             "errors": web_result.get("errors", [])
+        }
+        results["channels_tested"] += 1
+    elif web_failed > 0:
+        results["web_push"] = {
+            "sent": False,
+            "delivered": 0,
+            "failed": web_failed,
+            "deactivated": web_deactivated,
+            "errors": web_result.get("errors", []),
+            "message": "Abonnements invalides, nettoyés automatiquement" if web_deactivated > 0 else "Tous les envois ont echoue"
         }
         results["channels_tested"] += 1
     else:
         results["web_push"] = {
             "sent": False,
             "delivered": 0,
-            "failed": web_result.get("failed", 0),
-            "errors": web_result.get("errors", []),
-            "message": "Aucun abonnement web push actif" if web_result.get("failed", 0) == 0 else "Tous les envois ont echoue"
+            "failed": 0,
+            "deactivated": 0,
+            "errors": [],
+            "message": "Aucun abonnement web push actif"
         }
-        if web_result.get("failed", 0) > 0:
-            results["channels_tested"] += 1
 
     # Résumé détaillé
     results["summary"] = []
@@ -585,17 +599,28 @@ async def test_notification_for_user(
     else:
         results["summary"].append(f"Expo: {results['expo'].get('message', 'aucun token')}")
 
-    if results["web_push"]["sent"] and results["web_push"].get("delivered", 0) > 0:
+    if results["web_push"].get("sent") and results["web_push"].get("delivered", 0) > 0:
         results["summary"].append(f"Web Push: {results['web_push']['delivered']} envoyee(s)")
     elif results["web_push"].get("failed", 0) > 0:
-        results["summary"].append(f"Web Push: {results['web_push']['failed']} echouee(s) (abonnements invalides)")
+        d = results["web_push"].get("deactivated", 0)
+        if d > 0:
+            results["summary"].append(f"Web Push: {d} abonnement(s) expire(s) nettoye(s), reabonnement requis")
+        else:
+            results["summary"].append(f"Web Push: {results['web_push']['failed']} echouee(s)")
     else:
         results["summary"].append(f"Web Push: {results['web_push'].get('message', 'aucun abonnement')}")
 
+    # Déterminer le statut global
+    web_delivered_ok = results["web_push"].get("sent") and results["web_push"].get("delivered", 0) > 0
+    web_cleaned_up = web_result.get("deactivated", 0) > 0 and web_delivered == 0
+
     if results["channels_tested"] == 0:
         results["status"] = "no_channel"
-        results["detail"] = "Aucun canal de notification disponible. L'utilisateur doit ouvrir l'application dans son navigateur pour activer les notifications push automatiquement."
-    elif not results["expo"]["sent"] and not (results["web_push"]["sent"] and results["web_push"].get("delivered", 0) > 0):
+        results["detail"] = "Aucun canal de notification disponible. L'utilisateur doit ouvrir l'application dans son navigateur et activer les notifications dans Paramètres → Notifications."
+    elif web_cleaned_up and not results["expo"]["sent"]:
+        results["status"] = "subscription_cleaned_up"
+        results["detail"] = "Des abonnements push expirés ont été détectés et supprimés automatiquement. L'utilisateur doit aller dans Paramètres → Notifications pour réactiver les notifications."
+    elif not results["expo"]["sent"] and not web_delivered_ok:
         results["status"] = "all_failed"
         results["detail"] = "Tous les envois ont echoue. Les abonnements sont probablement expires ou invalides. L'utilisateur doit rouvrir l'application pour renouveler automatiquement son abonnement."
     else:

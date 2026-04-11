@@ -46,6 +46,7 @@ async def send_web_push_to_user(db, user_id: str, title: str, body: str, data: d
 
     sent = 0
     failed = 0
+    deactivated = 0
     errors = []
 
     for sub in subscriptions:
@@ -62,7 +63,6 @@ async def send_web_push_to_user(db, user_id: str, title: str, body: str, data: d
             )
             sent += 1
             logger.info(f"[WEB PUSH] OK -> user {user_id} ({sub.get('browser', '?')})")
-            # Log success for health monitoring
             try:
                 await db.notification_health_logs.insert_one({
                     "type": "sent", "user_id": user_id,
@@ -73,7 +73,6 @@ async def send_web_push_to_user(db, user_id: str, title: str, body: str, data: d
         except WebPushException as e:
             failed += 1
             error_msg = str(e)
-            # Extract response body for better diagnostics
             resp_body = ""
             resp_status = 0
             if hasattr(e, 'response') and e.response is not None:
@@ -86,14 +85,21 @@ async def send_web_push_to_user(db, user_id: str, title: str, body: str, data: d
             if resp_body:
                 logger.error(f"[WEB PUSH] Response body: {resp_body}")
 
-            # Desactiver les subscriptions invalides:
-            # 404 = subscription introuvable, 410 = subscription expiree (Gone)
-            # HTTP 0 = erreur locale (ex: Invalid p256dh key) — aussi non récupérable
-            should_deactivate = resp_status in (404, 410) or (resp_status == 0 and "Invalid" in error_msg)
+            # Désactiver les subscriptions définitivement invalides:
+            # 404 = introuvable, 410 = expiré (Gone)
+            # 401 = clé VAPID invalide (changement de clés), 403 = Forbidden
+            # HTTP 0 = erreur locale (ex: Invalid p256dh key)
+            should_deactivate = (
+                resp_status in (401, 403, 404, 410)
+                or (resp_status == 0 and ("Invalid" in error_msg or "invalid" in error_msg.lower()))
+            )
             if should_deactivate:
-                # Standardiser la raison pour que le frontend puisse détecter les endpoints morts
                 if resp_status in (404, 410):
                     deact_reason = f"HTTP {resp_status}"
+                elif resp_status == 401:
+                    deact_reason = "vapid_key_mismatch"
+                elif resp_status == 403:
+                    deact_reason = "HTTP 403"
                 else:
                     deact_reason = "endpoint_gone"
                 await db.web_push_subscriptions.update_one(
@@ -104,10 +110,10 @@ async def send_web_push_to_user(db, user_id: str, title: str, body: str, data: d
                         "deactivation_reason": deact_reason
                     }}
                 )
+                deactivated += 1
                 logger.info(f"[WEB PUSH] Subscription désactivée ({deact_reason}: {error_msg[:60]})")
 
             errors.append(error_msg[:200])
-            # Log failure for health monitoring
             try:
                 await db.notification_health_logs.insert_one({
                     "type": "failed", "user_id": user_id,
@@ -119,7 +125,7 @@ async def send_web_push_to_user(db, user_id: str, title: str, body: str, data: d
             failed += 1
             errors.append(str(e)[:200])
 
-    return {"sent": sent, "failed": failed, "errors": errors}
+    return {"sent": sent, "failed": failed, "deactivated": deactivated, "errors": errors}
 
 
 async def cleanup_notification_health_logs(db):

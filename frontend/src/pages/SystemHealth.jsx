@@ -754,6 +754,15 @@ function NotificationHealthSection({ notifHealth, notifHistory, notifExpanded, s
     never:   { icon: <BellOff size={13} className="text-gray-400" />, label: 'Jamais abonné',   cls: 'text-gray-400' },
   };
 
+  const deactivationLabel = (reason) => {
+    if (!reason) return null;
+    if (reason === 'vapid_key_changed') return 'Clés VAPID changées → réabonnement requis';
+    if (reason === 'vapid_key_mismatch') return 'Signature VAPID invalide → réabonnement requis';
+    if (reason === 'HTTP 410') return 'Abonnement supprimé par le navigateur → réabonnement requis';
+    if (reason === 'HTTP 404') return 'Endpoint introuvable → réabonnement requis';
+    return reason;
+  };
+
   const browserLabel = (b) => {
     if (!b) return '';
     if (b === 'chrome') return 'Chrome';
@@ -931,6 +940,13 @@ function NotificationHealthSection({ notifHealth, notifHistory, notifExpanded, s
 
                             {/* Statut push */}
                             <span className={`text-xs flex-shrink-0 ${cfg.cls}`}>{cfg.label}</span>
+
+                            {/* Raison de désactivation */}
+                            {user.deactivation_reason && (
+                              <span className="text-[10px] text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded flex-shrink-0 max-w-[200px] truncate" title={deactivationLabel(user.deactivation_reason)}>
+                                {deactivationLabel(user.deactivation_reason) || user.deactivation_reason}
+                              </span>
+                            )}
 
                             {/* Navigateur */}
                             {user.browser && (

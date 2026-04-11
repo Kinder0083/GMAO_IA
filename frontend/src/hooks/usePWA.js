@@ -157,9 +157,15 @@ export function usePushNotifications() {
               await subscription.unsubscribe();
               subscription = null;
             }
+          } else {
+            // Pas d'accès aux options → forcer un nouvel abonnement par sécurité
+            await subscription.unsubscribe();
+            subscription = null;
           }
         } catch {
-          // En cas d'erreur de comparaison, conserver l'abonnement existant
+          // En cas d'erreur de comparaison, forcer un nouvel abonnement par sécurité
+          try { await subscription.unsubscribe(); } catch(e) {}
+          subscription = null;
         }
       }
 

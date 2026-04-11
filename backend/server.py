@@ -1337,6 +1337,23 @@ async def auto_configure_vapid_keys():
     )
     logger.info(f"[VAPID] Nouvelles clés auto-générées et persistées (.env + DB)")
 
+    # IMPORTANT: Les anciens abonnements sont liés aux anciennes clés VAPID.
+    # Les invalider immédiatement pour éviter les faux "Actif" dans la Santé système.
+    try:
+        now_dt = datetime.now(timezone.utc)
+        result = await db.web_push_subscriptions.update_many(
+            {"is_active": True},
+            {"$set": {
+                "is_active": False,
+                "deactivated_at": now_dt,
+                "deactivation_reason": "vapid_key_changed"
+            }}
+        )
+        if result.modified_count > 0:
+            logger.info(f"[VAPID] {result.modified_count} abonnement(s) push invalidé(s) (nouvelles clés VAPID)")
+    except Exception as e:
+        logger.warning(f"[VAPID] Impossible d'invalider les abonnements push: {e}")
+
 
 @app.on_event("startup")
 async def migrate_en_attente_status():

@@ -69,11 +69,14 @@ async def web_push_subscribe(
     now = datetime.now(timezone.utc)
     endpoint = subscription["endpoint"]
 
-    # Vérifier si cet endpoint était précédemment mort (HTTP 410/404)
+    # Vérifier si cet endpoint était précédemment mort (HTTP 410/404/VAPID mismatch)
     # Dans ce cas, signaler au frontend qu'il faut un abonnement frais
     existing_dead = await db.web_push_subscriptions.find_one(
         {"subscription.endpoint": endpoint, "is_active": False,
-         "deactivation_reason": {"$in": ["HTTP 410", "HTTP 404", "endpoint_gone"]}}
+         "deactivation_reason": {"$in": [
+             "HTTP 410", "HTTP 404", "endpoint_gone",
+             "vapid_key_mismatch", "vapid_key_changed"
+         ]}}
     )
     needs_fresh = bool(existing_dead)
     
@@ -183,14 +186,17 @@ async def web_push_users_status(
             push_status = "active"
             browser = active_sub.get("browser", "?")
             last_update = iso(active_sub.get("updated_at"))
+            deactivation_reason = None
         elif inactive_sub:
             push_status = "expired"
             browser = inactive_sub.get("browser", "?")
             last_update = iso(inactive_sub.get("updated_at"))
+            deactivation_reason = inactive_sub.get("deactivation_reason")
         else:
             push_status = "never"
             browser = None
             last_update = None
+            deactivation_reason = None
 
         result.append({
             "user_id": user_id,
@@ -201,6 +207,7 @@ async def web_push_users_status(
             "push_status": push_status,
             "browser": browser,
             "last_update": last_update,
+            "deactivation_reason": deactivation_reason,
         })
 
     # Trier : actifs en premier, puis expirés, puis jamais
