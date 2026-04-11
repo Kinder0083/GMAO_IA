@@ -84,6 +84,7 @@ export default function SystemHealth() {
   const [notifHistory, setNotifHistory] = useState([]);
   const [notifExpanded, setNotifExpanded] = useState(true);
   const [notifChecking, setNotifChecking] = useState(false);
+  const [pushUsersStatus, setPushUsersStatus] = useState([]);
 
   // Alerts state
   const [alertsConfig, setAlertsConfig] = useState(null);
@@ -157,6 +158,15 @@ export default function SystemHealth() {
     }
   }, []);
 
+  const fetchPushUsersStatus = useCallback(async () => {
+    try {
+      const res = await api.get('/web-push/users-status');
+      setPushUsersStatus(res.data?.users || []);
+    } catch (e) {
+      console.error('Erreur fetch push users status:', e);
+    }
+  }, []);
+
   const forceNotifCheck = async () => {
     setNotifChecking(true);
     try {
@@ -164,6 +174,7 @@ export default function SystemHealth() {
       setNotifHealth(res.data);
       toast({ title: 'Verification terminee', description: `Statut: ${res.data.overall === 'ok' ? 'Sain' : res.data.overall === 'warning' ? 'Attention' : 'Erreur'}` });
       fetchNotifHistory();
+      fetchPushUsersStatus();
     } catch (e) {
       toast({ title: 'Erreur', description: 'Impossible de verifier les notifications', variant: 'destructive' });
     } finally {
@@ -232,9 +243,10 @@ export default function SystemHealth() {
     fetchAlertsConfig();
     fetchNotifHealth();
     fetchNotifHistory();
+    fetchPushUsersStatus();
     fetchArchitecture();
     runHealthCheck();
-  }, [fetchStatus, fetchAlertsConfig, fetchNotifHealth, fetchNotifHistory, fetchArchitecture]);
+  }, [fetchStatus, fetchAlertsConfig, fetchNotifHealth, fetchNotifHistory, fetchPushUsersStatus, fetchArchitecture]);
 
   // Auto-refresh every 30s
   useEffect(() => {
@@ -587,6 +599,7 @@ export default function SystemHealth() {
         notifChecking={notifChecking}
         forceNotifCheck={forceNotifCheck}
         purgeInactive={purgeInactive}
+        pushUsersStatus={pushUsersStatus}
       />
 
       {/* ──── Stockage Hors Ligne Section ──── */}
@@ -724,13 +737,31 @@ export default function SystemHealth() {
   );
 }
 
-function NotificationHealthSection({ notifHealth, notifHistory, notifExpanded, setNotifExpanded, notifChecking, forceNotifCheck, purgeInactive }) {
+function NotificationHealthSection({ notifHealth, notifHistory, notifExpanded, setNotifExpanded, notifChecking, forceNotifCheck, purgeInactive, pushUsersStatus }) {
   const statusColor = (s) => s === 'ok' ? 'text-green-600' : s === 'warning' ? 'text-amber-600' : s === 'error' ? 'text-red-600' : 'text-gray-400';
   const statusBg = (s) => s === 'ok' ? 'bg-green-50' : s === 'warning' ? 'bg-amber-50' : s === 'error' ? 'bg-red-50' : 'bg-gray-50';
   const statusIcon = (s) => s === 'ok' ? <CheckCircle2 size={14} className="text-green-500" /> : s === 'warning' ? <AlertTriangle size={14} className="text-amber-500" /> : s === 'error' ? <XCircle size={14} className="text-red-500" /> : <Clock size={14} className="text-gray-400" />;
   const statusLabel = (s) => s === 'ok' ? 'SAIN' : s === 'warning' ? 'ATTENTION' : s === 'error' ? 'ERREUR' : 'INCONNU';
 
   const nh = notifHealth;
+  const activeUsers = pushUsersStatus.filter(u => u.push_status === 'active');
+  const expiredUsers = pushUsersStatus.filter(u => u.push_status === 'expired');
+  const neverUsers = pushUsersStatus.filter(u => u.push_status === 'never');
+
+  const pushStatusConfig = {
+    active:  { icon: <Bell size={13} className="text-green-500" />,   label: 'Actif',           cls: 'text-green-600' },
+    expired: { icon: <AlertTriangle size={13} className="text-amber-500" />, label: 'Expiré',    cls: 'text-amber-600' },
+    never:   { icon: <BellOff size={13} className="text-gray-400" />, label: 'Jamais abonné',   cls: 'text-gray-400' },
+  };
+
+  const browserLabel = (b) => {
+    if (!b) return '';
+    if (b === 'chrome') return 'Chrome';
+    if (b === 'firefox') return 'Firefox';
+    if (b === 'edge') return 'Edge';
+    if (b === 'safari') return 'Safari';
+    return b;
+  };
 
   return (
     <Card data-testid="notification-health-card">
@@ -849,6 +880,73 @@ function NotificationHealthSection({ notifHealth, notifHistory, notifExpanded, s
                         </span>
                       </div>
                     ))}
+                  </div>
+                </div>
+              )}
+
+              {/* ─── Statut push par utilisateur ─── */}
+              {pushUsersStatus.length > 0 && (
+                <div>
+                  <p className="text-sm font-medium mb-2 flex items-center gap-2">
+                    <Bell size={14} className="text-indigo-500" />
+                    Statut push par utilisateur
+                    <span className="text-[11px] bg-green-50 text-green-700 px-1.5 py-0.5 rounded-full font-medium">
+                      {activeUsers.length} actif{activeUsers.length > 1 ? 's' : ''}
+                    </span>
+                    {expiredUsers.length > 0 && (
+                      <span className="text-[11px] bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded-full font-medium">
+                        {expiredUsers.length} expiré{expiredUsers.length > 1 ? 's' : ''}
+                      </span>
+                    )}
+                    <span className="text-[11px] text-gray-400 font-normal">
+                      / {pushUsersStatus.length} utilisateur{pushUsersStatus.length > 1 ? 's' : ''}
+                    </span>
+                  </p>
+                  <div className="rounded-lg border border-gray-100 overflow-hidden">
+                    <div className="max-h-52 overflow-y-auto divide-y divide-gray-50">
+                      {pushUsersStatus.map((user) => {
+                        const cfg = pushStatusConfig[user.push_status] || pushStatusConfig.never;
+                        return (
+                          <div
+                            key={user.user_id}
+                            className="flex items-center gap-2.5 px-3 py-2 hover:bg-gray-50 transition-colors"
+                            data-testid={`push-user-status-${user.user_id}`}
+                          >
+                            {/* Icône statut */}
+                            <span className="flex-shrink-0">{cfg.icon}</span>
+
+                            {/* Nom */}
+                            <span className="text-xs font-medium text-gray-700 min-w-[110px] truncate">
+                              {user.prenom} {user.nom}
+                            </span>
+
+                            {/* Badge rôle */}
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full flex-shrink-0 ${
+                              user.role === 'ADMIN'
+                                ? 'bg-purple-50 text-purple-700'
+                                : 'bg-blue-50 text-blue-700'
+                            }`}>
+                              {user.role}
+                            </span>
+
+                            {/* Statut push */}
+                            <span className={`text-xs flex-shrink-0 ${cfg.cls}`}>{cfg.label}</span>
+
+                            {/* Navigateur */}
+                            {user.browser && (
+                              <span className="text-[11px] text-gray-400 flex-shrink-0">{browserLabel(user.browser)}</span>
+                            )}
+
+                            {/* Date */}
+                            {user.last_update && (
+                              <span className="text-[11px] text-gray-400 ml-auto flex-shrink-0">
+                                <TimeAgo dateStr={user.last_update} />
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
               )}

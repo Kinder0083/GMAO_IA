@@ -141,7 +141,74 @@ async def web_push_test(
     )
     return result
 
-@router.get("/web-push/subscriptions", tags=["Web Push PWA"])
+@router.get("/web-push/users-status", tags=["Web Push PWA"])
+async def web_push_users_status(
+    current_user: dict = Depends(get_current_user),
+):
+    """Retourne le statut d'abonnement push pour tous les utilisateurs (admin only)."""
+    if current_user.get("role") != "ADMIN":
+        raise HTTPException(status_code=403, detail="Admin uniquement")
+
+    users = await db.users.find(
+        {},
+        {"_id": 1, "nom": 1, "prenom": 1, "email": 1, "role": 1}
+    ).to_list(500)
+
+    result = []
+    for user in users:
+        user_id = str(user["_id"])
+
+        # Abonnement actif le plus récent
+        active_sub = await db.web_push_subscriptions.find_one(
+            {"user_id": user_id, "is_active": True},
+            {"_id": 0, "browser": 1, "updated_at": 1}
+        )
+
+        # Si aucun actif, chercher le plus récent inactif pour savoir s'il s'est déjà abonné
+        inactive_sub = None
+        if not active_sub:
+            cursor = db.web_push_subscriptions.find(
+                {"user_id": user_id, "is_active": False},
+                {"_id": 0, "browser": 1, "updated_at": 1, "deactivation_reason": 1}
+            ).sort("updated_at", -1).limit(1)
+            docs = await cursor.to_list(1)
+            inactive_sub = docs[0] if docs else None
+
+        def iso(dt):
+            if not dt:
+                return None
+            return dt.isoformat() if hasattr(dt, 'isoformat') else str(dt)
+
+        if active_sub:
+            push_status = "active"
+            browser = active_sub.get("browser", "?")
+            last_update = iso(active_sub.get("updated_at"))
+        elif inactive_sub:
+            push_status = "expired"
+            browser = inactive_sub.get("browser", "?")
+            last_update = iso(inactive_sub.get("updated_at"))
+        else:
+            push_status = "never"
+            browser = None
+            last_update = None
+
+        result.append({
+            "user_id": user_id,
+            "nom": user.get("nom", ""),
+            "prenom": user.get("prenom", ""),
+            "email": user.get("email", ""),
+            "role": user.get("role", "TECHNICIEN"),
+            "push_status": push_status,
+            "browser": browser,
+            "last_update": last_update,
+        })
+
+    # Trier : actifs en premier, puis expirés, puis jamais
+    order = {"active": 0, "expired": 1, "never": 2}
+    result.sort(key=lambda u: (order.get(u["push_status"], 3), u.get("nom", "")))
+    return {"users": result}
+
+
 async def web_push_list_subscriptions(
     current_user: dict = Depends(get_current_user),
 ):
