@@ -192,6 +192,17 @@ export default function SystemHealth() {
     }
   };
 
+  const cleanupInvalid = async () => {
+    try {
+      toast({ title: 'Nettoyage en cours...', description: 'Test de tous les abonnements actifs.' });
+      const res = await api.post('/health/notifications/cleanup-invalid', {});
+      toast({ title: 'Nettoyage terminé', description: res.data.message });
+      fetchNotifHealth();
+    } catch (e) {
+      toast({ title: 'Erreur', description: 'Impossible de nettoyer', variant: 'destructive' });
+    }
+  };
+
   const runHealthCheck = async () => {
     setChecking(true);
     try {
@@ -758,6 +769,8 @@ function NotificationHealthSection({ notifHealth, notifHistory, notifExpanded, s
     if (!reason) return null;
     if (reason === 'vapid_key_changed') return 'Clés VAPID changées → réabonnement requis';
     if (reason === 'vapid_key_mismatch') return 'Signature VAPID invalide → réabonnement requis';
+    if (reason === 'vapid_pk_hash_mismatch') return 'VAPID key mismatch (Firefox/Edge) → réabonnement requis';
+    if (reason === 'HTTP 400') return 'Requête push refusée (400) → réabonnement requis';
     if (reason === 'HTTP 410') return 'Abonnement supprimé par le navigateur → réabonnement requis';
     if (reason === 'HTTP 404') return 'Endpoint introuvable → réabonnement requis';
     return reason;
@@ -978,6 +991,17 @@ function NotificationHealthSection({ notifHealth, notifHistory, notifExpanded, s
                   <RefreshCw size={13} className={notifChecking ? 'animate-spin' : ''} />
                   {notifChecking ? 'Verification...' : 'Verifier maintenant'}
                 </Button>
+                {/* Bouton de nettoyage — nettoie les abonnements invalides (VapidPkHashMismatch, etc.) */}
+                {nh.web_push_subscriptions?.active > 0 && (
+                  <Button
+                    size="sm" variant="outline" className="gap-1.5 text-amber-600 hover:text-amber-700 hover:bg-amber-50"
+                    onClick={cleanupInvalid}
+                    data-testid="cleanup-invalid-btn"
+                  >
+                    <AlertTriangle size={13} />
+                    Nettoyer les invalides
+                  </Button>
+                )}
                 {nh.web_push_subscriptions?.inactive > 0 && (
                   <Button
                     size="sm" variant="outline" className="gap-1.5 text-red-600 hover:text-red-700 hover:bg-red-50"

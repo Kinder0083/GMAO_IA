@@ -85,21 +85,30 @@ async def send_web_push_to_user(db, user_id: str, title: str, body: str, data: d
             if resp_body:
                 logger.error(f"[WEB PUSH] Response body: {resp_body}")
 
-            # Désactiver les subscriptions définitivement invalides:
-            # 404 = introuvable, 410 = expiré (Gone)
-            # 401 = clé VAPID invalide (changement de clés), 403 = Forbidden
-            # HTTP 0 = erreur locale (ex: Invalid p256dh key)
+            # Désactiver les subscriptions définitivement invalides.
+            # Codes HTTP permanents selon les services push :
+            # - Chrome/FCM   : 404 (introuvable), 410 (Gone/expiré), 401 (VAPID mismatch)
+            # - Firefox/Edge : 400 + {"reason":"VapidPkHashMismatch"} (VAPID key mismatch)
+            #   → Mozilla Autopush retourne 400 pas 401 !
+            # - Generic      : 403 (Forbidden), HTTP 0 = erreur locale (Invalid p256dh key)
+            is_vapid_mismatch = (
+                "VapidPkHashMismatch" in error_msg
+                or "vapid" in error_msg.lower() and "mismatch" in error_msg.lower()
+            )
             should_deactivate = (
                 resp_status in (401, 403, 404, 410)
+                or (resp_status == 400 and (is_vapid_mismatch or "Bad Request" in error_msg))
                 or (resp_status == 0 and ("Invalid" in error_msg or "invalid" in error_msg.lower()))
             )
             if should_deactivate:
                 if resp_status in (404, 410):
                     deact_reason = f"HTTP {resp_status}"
-                elif resp_status == 401:
+                elif resp_status in (401, 403):
                     deact_reason = "vapid_key_mismatch"
-                elif resp_status == 403:
-                    deact_reason = "HTTP 403"
+                elif resp_status == 400 and is_vapid_mismatch:
+                    deact_reason = "vapid_pk_hash_mismatch"  # Spécifique Firefox/Edge
+                elif resp_status == 400:
+                    deact_reason = "HTTP 400"
                 else:
                     deact_reason = "endpoint_gone"
                 await db.web_push_subscriptions.update_one(

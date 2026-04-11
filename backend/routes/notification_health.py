@@ -181,11 +181,15 @@ async def check_notification_health_cron():
             logger.warning(f"[NOTIF HEALTH] Systeme de notification en ERREUR: {result}")
             # Try to send web push alert to admins
             try:
+                # Utiliser _id comme fallback si le champ "id" n'existe pas en DB
                 admin_cursor = db.users.find(
-                    {"role": "ADMIN", "statut": {"$in": ["actif", "ACTIF"]}},
-                    {"_id": 0, "id": 1}
+                    {"role": "ADMIN", "statut": {"$in": ["actif", "ACTIF"]}}
                 )
-                admin_ids = [doc["id"] async for doc in admin_cursor if doc.get("id")]
+                admin_ids = []
+                async for doc in admin_cursor:
+                    uid = str(doc.get("id") or doc["_id"])
+                    if uid:
+                        admin_ids.append(uid)
                 if admin_ids:
                     from web_push import send_web_push_to_users
                     await send_web_push_to_users(
@@ -415,6 +419,47 @@ async def purge_inactive_subscriptions(current_user: dict = Depends(get_current_
         "web_push_deleted": web_result.deleted_count,
         "expo_deleted": expo_result.deleted_count,
         "message": f"{web_result.deleted_count} abonnement(s) web + {expo_result.deleted_count} token(s) mobile supprimes"
+    }
+
+
+@router.post("/health/notifications/cleanup-invalid", tags=["Health"])
+async def cleanup_invalid_subscriptions(current_user: dict = Depends(get_current_admin_user)):
+    """Teste tous les abonnements actifs et nettoie les invalides (VapidPkHashMismatch, 401, 410, etc.).
+    Utile après un changement de clés VAPID."""
+    from web_push import send_web_push_to_user
+    
+    active_subs = []
+    async for doc in db.web_push_subscriptions.find({"is_active": True}):
+        active_subs.append(doc)
+    
+    if not active_subs:
+        return {"tested": 0, "cleaned": 0, "message": "Aucun abonnement actif à tester"}
+    
+    # Regrouper par user_id pour éviter de tester plusieurs fois le même user
+    user_ids_tested = set()
+    total_tested = 0
+    total_cleaned = 0
+    
+    for sub in active_subs:
+        user_id = sub.get("user_id")
+        if not user_id or user_id in user_ids_tested:
+            continue
+        user_ids_tested.add(user_id)
+        result = await send_web_push_to_user(
+            db, user_id,
+            title="Test de connectivité",
+            body="Vérification du système de notifications.",
+            data={"type": "connectivity_check"},
+            tag="cleanup-test"
+        )
+        total_tested += result.get("sent", 0) + result.get("failed", 0)
+        total_cleaned += result.get("deactivated", 0)
+    
+    logger.info(f"[NOTIF CLEANUP] {total_cleaned} abonnement(s) invalide(s) nettoyé(s) sur {total_tested} testé(s)")
+    return {
+        "tested": total_tested,
+        "cleaned": total_cleaned,
+        "message": f"{total_cleaned} abonnement(s) invalide(s) supprimé(s) sur {total_tested} testé(s). Les utilisateurs concernés doivent se réabonner dans Paramètres → Notifications."
     }
 
 
