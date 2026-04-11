@@ -137,23 +137,38 @@ export function usePushNotifications() {
       const { publicKey } = await keyResp.json();
       if (!publicKey) return { permissionGranted: true, subscribed: false, error: 'no_vapid_key' };
 
-      const registration = await registerServiceWorker();
-      if (!registration) return { permissionGranted: true, subscribed: false, error: 'sw_failed' };
+      // Enregistrer SW et attendre qu'il contrôle la page
+      await navigator.serviceWorker.register('/sw.js');
+      const swRegistration = await navigator.serviceWorker.ready;
 
-      await navigator.serviceWorker.ready;
+      // Obtenir l'abonnement existant
+      let subscription = await swRegistration.pushManager.getSubscription();
 
-      // TOUJOURS forcer un nouvel abonnement : désabonner l'ancien en premier
-      // Cela garantit un endpoint valide et frais auprès du service push
-      const existingSub = await registration.pushManager.getSubscription();
-      if (existingSub) {
-        try { await existingSub.unsubscribe(); } catch (e) { /* ignorer */ }
+      if (subscription) {
+        // Vérifier si l'abonnement utilise la même clé VAPID
+        try {
+          const currentKey = subscription.options?.applicationServerKey;
+          const newKey = urlBase64ToUint8Array(publicKey);
+          if (currentKey) {
+            const currentArr = new Uint8Array(currentKey);
+            const keysMatch = currentArr.length === newKey.length && currentArr.every((v, i) => v === newKey[i]);
+            if (!keysMatch) {
+              // Clés différentes → forcer un nouveau abonnement
+              await subscription.unsubscribe();
+              subscription = null;
+            }
+          }
+        } catch {
+          // En cas d'erreur de comparaison, conserver l'abonnement existant
+        }
       }
 
-      // Créer un nouvel abonnement avec la clé VAPID courante
-      const subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(publicKey)
-      });
+      if (!subscription) {
+        subscription = await swRegistration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(publicKey)
+        });
+      }
 
       const browser = navigator.userAgent.includes('Firefox') ? 'firefox' :
         navigator.userAgent.includes('Edg') ? 'edge' :
@@ -165,22 +180,37 @@ export function usePushNotifications() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({
-          subscription: subscription.toJSON(),
-          browser
-        })
+        body: JSON.stringify({ subscription: subscription.toJSON(), browser })
       });
 
       if (!resp.ok) return { permissionGranted: true, subscribed: false, error: 'backend_error' };
+
+      const respData = await resp.json();
+
+      // Si le backend signale un endpoint mort → forcer un abonnement frais
+      if (respData.needs_fresh_subscription) {
+        try {
+          await subscription.unsubscribe();
+          const freshSub = await swRegistration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(publicKey)
+          });
+          await fetch(`${API_URL}/api/web-push/subscribe`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ subscription: freshSub.toJSON(), browser })
+          });
+        } catch { /* ignorer */ }
+      }
 
       subscribedRef.current = true;
       setIsSubscribed(true);
       return { permissionGranted: true, subscribed: true };
     } catch (e) {
-      console.error('[PWA] Push subscription failed:', e);
-      return { permissionGranted: true, subscribed: false, error: e.message };
+      console.error('[PWA] Push subscription failed:', e.name, e.message);
+      return { permissionGranted: true, subscribed: false, error: `${e.name}: ${e.message}` };
     }
-  }, [registerServiceWorker]);
+  }, []);
 
   const unsubscribe = useCallback(async () => {
     const token = localStorage.getItem('token');

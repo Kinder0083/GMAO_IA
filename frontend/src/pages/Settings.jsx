@@ -379,8 +379,15 @@ const Settings = () => {
                           }
                         } else {
                           const result = await subscribe();
-                          if (result.permissionGranted) {
-                            toast({ title: 'Notifications activées', description: result.subscribed ? 'Vous recevrez désormais les notifications push.' : 'Permission accordée.' });
+                          if (result.subscribed) {
+                            toast({ title: 'Notifications activées', description: 'Vous recevrez désormais les notifications push sur cet appareil.' });
+                          } else if (result.permissionGranted) {
+                            const errMsg = result.error?.includes('vapid') || result.error?.includes('VAPID')
+                              ? 'Le serveur n\'a pas de clés VAPID configurées. Contactez l\'administrateur.'
+                              : result.error?.includes('Registration failed')
+                              ? 'Erreur de connexion au service push. Vérifiez votre connexion et réessayez.'
+                              : `Activation impossible : ${result.error || 'erreur inconnue'}`;
+                            toast({ title: 'Activation échouée', description: errMsg, variant: 'destructive' });
                           } else {
                             toast({ title: 'Permission refusée', description: 'Activez les notifications dans les paramètres de votre navigateur.', variant: 'destructive' });
                           }
