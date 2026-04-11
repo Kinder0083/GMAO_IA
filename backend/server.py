@@ -40,6 +40,61 @@ from category_mapping import get_category_from_article_dm6
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
+
+def _auto_configure_vapid():
+    """Auto-génère et persiste les clés VAPID si elles sont absentes du .env.
+    
+    Appelé au démarrage — aucune intervention manuelle requise.
+    Les clés sont sauvegardées dans le .env ET dans MongoDB pour survivre
+    aux mises à jour qui écrasent le fichier .env.
+    """
+    pub = os.environ.get("VAPID_PUBLIC_KEY", "").strip()
+    priv = os.environ.get("VAPID_PRIVATE_KEY", "").strip()
+    if pub and priv:
+        return  # Déjà configurées, rien à faire
+
+    # Essayer de récupérer depuis MongoDB (en cas de .env écrasé par une mise à jour)
+    # Cette partie est asynchrone, on ne peut pas l'appeler ici directement.
+    # Elle sera exécutée au startup FastAPI dans _ensure_vapid_keys_in_db()
+    pass
+
+
+def _generate_vapid_keys():
+    """Génère une nouvelle paire de clés VAPID (EC P-256)."""
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+    from base64 import urlsafe_b64encode
+
+    private_key = ec.generate_private_key(ec.SECP256R1())
+    public_key = private_key.public_key()
+
+    pub_bytes = public_key.public_bytes(Encoding.X962, PublicFormat.UncompressedPoint)
+    vapid_pub = urlsafe_b64encode(pub_bytes).rstrip(b'=').decode()
+
+    priv_val = private_key.private_numbers().private_value
+    vapid_priv = urlsafe_b64encode(priv_val.to_bytes(32, 'big')).rstrip(b'=').decode()
+
+    return vapid_pub, vapid_priv
+
+
+def _write_vapid_to_env(pub: str, priv: str, subject: str):
+    """Écrit/met à jour les clés VAPID dans le fichier .env."""
+    env_path = ROOT_DIR / '.env'
+    try:
+        content = env_path.read_text() if env_path.exists() else ""
+        lines = [l for l in content.splitlines()
+                 if not l.startswith('VAPID_PUBLIC_KEY=')
+                 and not l.startswith('VAPID_PRIVATE_KEY=')
+                 and not l.startswith('VAPID_SUBJECT=')]
+        lines += [f'VAPID_PUBLIC_KEY={pub}', f'VAPID_PRIVATE_KEY={priv}', f'VAPID_SUBJECT={subject}']
+        env_path.write_text('\n'.join(lines) + '\n')
+        logging.info(f"[VAPID] Clés sauvegardées dans .env")
+    except Exception as e:
+        logging.warning(f"[VAPID] Impossible d'écrire dans .env: {e}")
+
+
+_auto_configure_vapid()
+
 # MongoDB connection
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
@@ -1229,6 +1284,58 @@ async def check_llm_versions_job():
         
     except Exception as e:
         logger.error(f"Erreur vérification versions LLM: {e}")
+
+
+@app.on_event("startup")
+async def auto_configure_vapid_keys():
+    """Auto-génère les clés VAPID si absentes — aucune intervention manuelle requise.
+    
+    Stratégie de récupération:
+    1. Si .env a les clés → ok, rien à faire
+    2. Si MongoDB a les clés (survivent aux mises à jour qui écrasent .env) → les recharger
+    3. Si aucune source → générer + sauvegarder dans .env ET MongoDB
+    """
+    pub = os.environ.get("VAPID_PUBLIC_KEY", "").strip()
+    priv = os.environ.get("VAPID_PRIVATE_KEY", "").strip()
+    subject = os.environ.get("VAPID_SUBJECT", "mailto:admin@fsao-iris.fr").strip()
+
+    if pub and priv:
+        # Clés déjà chargées depuis .env → s'assurer qu'elles sont aussi en DB
+        await db.app_config.update_one(
+            {"key": "vapid_keys"},
+            {"$set": {"key": "vapid_keys", "public": pub, "private": priv, "subject": subject}},
+            upsert=True
+        )
+        logger.info(f"[VAPID] Clés chargées depuis .env → synchronisées en DB")
+        return
+
+    # Essayer de récupérer depuis MongoDB (cas: .env écrasé par une mise à jour)
+    stored = await db.app_config.find_one({"key": "vapid_keys"})
+    if stored and stored.get("public") and stored.get("private"):
+        pub = stored["public"]
+        priv = stored["private"]
+        subject = stored.get("subject", subject)
+        os.environ["VAPID_PUBLIC_KEY"] = pub
+        os.environ["VAPID_PRIVATE_KEY"] = priv
+        os.environ["VAPID_SUBJECT"] = subject
+        _write_vapid_to_env(pub, priv, subject)
+        logger.info(f"[VAPID] Clés récupérées depuis MongoDB → restaurées dans .env")
+        return
+
+    # Aucune source → générer de nouvelles clés
+    pub, priv = _generate_vapid_keys()
+    os.environ["VAPID_PUBLIC_KEY"] = pub
+    os.environ["VAPID_PRIVATE_KEY"] = priv
+    os.environ["VAPID_SUBJECT"] = subject
+
+    # Sauvegarder dans .env ET MongoDB
+    _write_vapid_to_env(pub, priv, subject)
+    await db.app_config.update_one(
+        {"key": "vapid_keys"},
+        {"$set": {"key": "vapid_keys", "public": pub, "private": priv, "subject": subject}},
+        upsert=True
+    )
+    logger.info(f"[VAPID] Nouvelles clés auto-générées et persistées (.env + DB)")
 
 
 @app.on_event("startup")
