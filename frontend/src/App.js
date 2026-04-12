@@ -144,19 +144,20 @@ function App() {
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js').then((registration) => {
-        // Verifier les mises a jour du SW toutes les 60 secondes
-        setInterval(() => registration.update(), 60000);
-        // Quand un nouveau SW est detecte, forcer la prise de controle
+        // Verifier les mises a jour du SW toutes les 30 minutes (pas 60s)
+        // pour éviter les rechargements trop fréquents sur mobile PWA
+        setInterval(() => registration.update(), 30 * 60 * 1000);
+
+        // Quand un nouveau SW est detecte, NE PAS recharger automatiquement
+        // pour éviter la déconnexion des utilisateurs mobiles PWA
         registration.addEventListener('updatefound', () => {
           const newWorker = registration.installing;
           if (newWorker) {
             newWorker.addEventListener('statechange', () => {
               if (newWorker.state === 'activated') {
-                console.log('[SW] Nouveau Service Worker active');
-                // Ne pas recharger automatiquement si hors-ligne
-                if (navigator.onLine) {
-                  window.location.reload();
-                }
+                console.log('[SW] Nouveau Service Worker activé — rechargement au prochain lancement');
+                // On ne force plus le reload automatique
+                // L'utilisateur verra la nouvelle version à sa prochaine ouverture de l'app
               }
             });
           }

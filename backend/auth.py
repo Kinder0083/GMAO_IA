@@ -14,7 +14,13 @@ pwd_context = CryptContext(
 
 SECRET_KEY = os.environ.get("SECRET_KEY", "your_jwt_secret_key_change_in_production")
 ALGORITHM = os.environ.get("ALGORITHM", "HS256")
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.environ.get("ACCESS_TOKEN_EXPIRE_MINUTES", "10080"))  # 7 days par défaut
+# Lu dynamiquement à chaque appel pour respecter le .env chargé après l'import du module
+_ACCESS_TOKEN_EXPIRE_MINUTES_DEFAULT = 43200  # 30 jours par défaut pour PWA mobile
+
+
+def _get_token_expire_minutes() -> int:
+    """Lit ACCESS_TOKEN_EXPIRE_MINUTES depuis l'env au moment de l'appel (pas au module load)."""
+    return int(os.environ.get("ACCESS_TOKEN_EXPIRE_MINUTES", str(_ACCESS_TOKEN_EXPIRE_MINUTES_DEFAULT)))
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """
@@ -60,7 +66,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     if expires_delta:
         expire = now + expires_delta
     else:
-        expire = now + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        expire = now + timedelta(minutes=_get_token_expire_minutes())
     to_encode.update({"exp": expire, "iat": now})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt

@@ -59,6 +59,30 @@ api.interceptors.request.use(
     const token = localStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+      // Renouvellement préventif : si le token expire dans moins de 7 jours, en obtenir un nouveau silencieusement
+      try {
+        const payload = JSON.parse(window.atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+        const expiresIn = payload.exp - Math.floor(Date.now() / 1000);
+        const REFRESH_THRESHOLD = 7 * 24 * 3600; // 7 jours avant expiry
+        if (expiresIn > 0 && expiresIn < REFRESH_THRESHOLD && !config._isRefresh) {
+          // Lancer le refresh en arrière-plan (sans bloquer la requête courante)
+          setTimeout(async () => {
+            try {
+              const res = await fetch(`${process.env.REACT_APP_BACKEND_URL}/api/auth/refresh`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` }
+              });
+              if (res.ok) {
+                const data = await res.json();
+                if (data.access_token) {
+                  localStorage.setItem('token', data.access_token);
+                  console.log('[Auth] Token renouvelé automatiquement');
+                }
+              }
+            } catch {}
+          }, 100);
+        }
+      } catch {}
     }
     // Anti-cache : forcer le navigateur a ne jamais utiliser de reponse en cache HTTP
     config.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate';

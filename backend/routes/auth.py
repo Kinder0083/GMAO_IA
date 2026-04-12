@@ -151,10 +151,11 @@ async def login(login_request: LoginRequest):
         entity_name=f"{user.get('prenom', '')} {user.get('nom', '')}".strip()
     )
     
-    # Create access token (valide 1 heure)
+    # Create access token — durée longue pour usage PWA mobile (30 jours)
+    # La durée est configurable via ACCESS_TOKEN_EXPIRE_MINUTES dans .env
     access_token = create_access_token(
-        data={"sub": str(user["_id"])},
-        expires_delta=timedelta(hours=1)
+        data={"sub": str(user["_id"])}
+        # Pas d'expires_delta -> utilise ACCESS_TOKEN_EXPIRE_MINUTES (7 jours par défaut)
     )
     
     return Token(
@@ -162,6 +163,17 @@ async def login(login_request: LoginRequest):
         token_type="bearer",
         user=User(**serialize_doc(user))
     )
+
+@router.post("/auth/refresh", tags=["Authentification"])
+async def refresh_token(current_user: dict = Depends(get_current_user)):
+    """
+    Renouvelle le token JWT de l'utilisateur connecté.
+    Permet aux sessions PWA mobiles de rester connectées sans redemander les identifiants.
+    """
+    new_token = create_access_token(data={"sub": current_user.get("id") or str(current_user.get("_id", ""))})
+    logger.info(f"[AUTH] Token renouvelé pour user_id={current_user.get('id')}")
+    return {"access_token": new_token, "token_type": "bearer"}
+
 
 @router.get("/auth/me", response_model=User, tags=["Authentification"],
     summary="Profil utilisateur connecte",
