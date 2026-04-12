@@ -440,10 +440,16 @@ async def get_user_time_tracking(
                 "data": user_data
             }
         
-        # Récupérer la liste de tous les utilisateurs (pour le filtre)
+        # Récupérer la liste de tous les utilisateurs actifs (pour le filtre - exclure les inactifs)
         all_users = []
         if can_view_others:
-            users_cursor = db.users.find({}, {"_id": 1, "nom": 1, "prenom": 1, "email": 1})
+            users_cursor = db.users.find(
+                {
+                    "actif": {"$ne": False},
+                    "statut": {"$not": {"$regex": "^inactif$", "$options": "i"}}
+                },
+                {"_id": 1, "nom": 1, "prenom": 1, "email": 1}
+            )
             async for user in users_cursor:
                 all_users.append({
                     "id": str(user["_id"]),

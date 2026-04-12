@@ -145,9 +145,13 @@ async def get_service_team_members(user: dict) -> List[Dict[str, Any]]:
     if not managed_services:
         return []
     
-    # Récupérer les utilisateurs de ces services
+    # Récupérer les utilisateurs actifs de ces services (exclure les inactifs)
     team = await _db.users.find(
-        {"service": {"$in": managed_services}},
+        {
+            "service": {"$in": managed_services},
+            "actif": {"$ne": False},
+            "statut": {"$not": {"$regex": "^inactif$", "$options": "i"}}
+        },
         {"_id": 0, "password": 0}
     ).to_list(length=500)
     

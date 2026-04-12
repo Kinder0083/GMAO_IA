@@ -629,7 +629,12 @@ async def _compute_time_widgets(database, now):
     resp_ids = set(r.get("user_id") for r in maint_responsables if r.get("user_id"))
 
     all_maint_users = await database.users.find(
-        {"service": maint_regex, "actif": {"$ne": False}, **NOT_DELETED},
+        {
+            "service": maint_regex,
+            "actif": {"$ne": False},
+            "statut": {"$not": {"$regex": "^inactif$", "$options": "i"}},
+            **NOT_DELETED
+        },
         {"_id": 0, "id": 1}
     ).to_list(500)
     techs = [u for u in all_maint_users if u.get("id") and u["id"] not in resp_ids]

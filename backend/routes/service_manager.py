@@ -99,8 +99,12 @@ async def get_service_manager_stats(current_user: dict = Depends(get_current_use
     # Statistiques des demandes d'intervention (exclure les supprimees)
     di_en_attente = await db.intervention_requests.count_documents({**query, "status": "EN_ATTENTE", **NOT_DELETED})
     
-    # Membres de l'équipe
-    team_count = await db.users.count_documents(query) if service_filter else 0
+    # Membres actifs de l'équipe (exclure les inactifs)
+    ACTIF_FILTER = {
+        "actif": {"$ne": False},
+        "statut": {"$not": {"$regex": "^inactif$", "$options": "i"}}
+    }
+    team_count = await db.users.count_documents({**query, **ACTIF_FILTER}) if service_filter else 0
     
     return {
         "service": service_filter or "Tous",
@@ -142,6 +146,7 @@ async def get_assignment_targets(current_user: dict = Depends(get_current_user))
         member_count = await db.users.count_documents({
             "service": svc_regex,
             "actif": {"$ne": False},
+            "statut": {"$not": {"$regex": "^inactif$", "$options": "i"}},
             **NOT_DELETED
         })
         poles.append({
