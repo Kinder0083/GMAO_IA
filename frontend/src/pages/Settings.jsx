@@ -486,6 +486,41 @@ const Settings = () => {
                     Réinitialiser l'abonnement push
                   </Button>
                 )}
+
+                {/* ── Info notifications selon la plateforme ────────────── */}
+                {isSupported && (() => {
+                  const ua = navigator.userAgent || '';
+                  const isIOS = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
+                  const isAndroid = /Android/.test(ua);
+                  if (!isIOS && !isAndroid) return null;
+                  return (
+                    <div
+                      className={`mt-3 rounded-md border px-3 py-2.5 flex items-start gap-2.5 text-xs ${isIOS ? 'border-blue-200 bg-blue-50 text-blue-800' : 'border-amber-200 bg-amber-50 text-amber-800'}`}
+                      data-testid="platform-push-info"
+                    >
+                      <Info size={14} className="mt-0.5 shrink-0" />
+                      <div className="space-y-1">
+                        {isAndroid && (
+                          <>
+                            <p className="font-semibold">Android — notifications en veille</p>
+                            <p>Si vous ne recevez pas les notifications quand l'écran est éteint, autorisez Chrome à fonctionner en arrière-plan sans restriction :</p>
+                            <p className="font-mono bg-amber-100 rounded px-1.5 py-0.5 text-amber-900 text-[11px]">Paramètres → Applications → Chrome → Batterie → Non restreint</p>
+                          </>
+                        )}
+                        {isIOS && (
+                          <>
+                            <p className="font-semibold">iOS — conditions requises</p>
+                            <ul className="list-disc list-inside space-y-0.5">
+                              <li>iOS 16.4 minimum requis pour les notifications PWA.</li>
+                              <li>L'application doit être <strong>installée sur l'écran d'accueil</strong> depuis Safari (pas un simple onglet).</li>
+                              <li>Aucun réglage de batterie nécessaire — Apple gère la file d'attente nativement.</li>
+                            </ul>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
               <div>
                 {/* ── Panneau d'installation contextuel ────────────────── */}
