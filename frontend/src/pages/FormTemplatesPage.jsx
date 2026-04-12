@@ -28,8 +28,10 @@ import {
   Image,
   X,
   Sparkles,
-  Loader2
+  Loader2,
+  Printer
 } from 'lucide-react';
+import BonDeTravailPrintDialog from '../components/BonDeTravailPrintDialog';
 import { useToast } from '../hooks/use-toast';
 import { useConfirmDialog } from '../components/ui/confirm-dialog';
 import api, { documentationsAPI } from '../services/api';
@@ -115,8 +117,8 @@ function FormTemplatesPage() {
     setShowFormBuilder(true);
   };
 
-  // View state
   const [viewTemplate, setViewTemplate] = useState(null);
+  const [showBonTravailPrint, setShowBonTravailPrint] = useState(false);
 
   // AI generation state
   const [showAIDialog, setShowAIDialog] = useState(false);
@@ -357,7 +359,19 @@ function FormTemplatesPage() {
                         </Badge>
                       </div>
                     </div>
-                    <Eye className="h-4 w-4 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <div className="flex items-center gap-1">
+                      {template.id === 'default-bon-travail' && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setShowBonTravailPrint(true); }}
+                          className="p-1 rounded hover:bg-blue-100 text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                          title="Imprimer un bon de travail"
+                          data-testid="btn-print-bon-travail"
+                        >
+                          <Printer className="h-4 w-4" />
+                        </button>
+                      )}
+                      <Eye className="h-4 w-4 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -370,9 +384,16 @@ function FormTemplatesPage() {
                     <Badge variant="outline" className="text-xs">
                       {(template.fields || []).length} champ(s)
                     </Badge>
-                    <span className="text-xs text-gray-400">
-                      Cliquer pour visualiser
-                    </span>
+                    {template.id === 'default-bon-travail' ? (
+                      <span className="text-xs text-blue-600 flex items-center gap-1">
+                        <Printer className="h-3 w-3" />
+                        Survoler pour imprimer
+                      </span>
+                    ) : (
+                      <span className="text-xs text-gray-400">
+                        Cliquer pour visualiser
+                      </span>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -725,6 +746,12 @@ function FormTemplatesPage() {
       </Dialog>
 
       <ConfirmDialog />
+
+      {/* Dialog d'impression Bon de Travail MAINT/FE/004 V2 */}
+      <BonDeTravailPrintDialog
+        open={showBonTravailPrint}
+        onClose={() => setShowBonTravailPrint(false)}
+      />
     </div>
   );
 }

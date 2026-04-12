@@ -14,6 +14,7 @@ Application GMAO (Gestion de Maintenance Assistée par Ordinateur) complète pou
 /app/backend/
 ├── server.py (setup principal, routers, startup events)
 ├── models.py (modèles Pydantic)
+├── bon_de_travail_reportlab.py (NOUVEAU - générateur PDF ReportLab)
 ├── user_preferences_routes.py (GET/PUT/POST preferences)
 └── routes/
     ├── shared.py (db, serialize_doc, helpers, get_next_work_order_numero)
@@ -32,171 +33,84 @@ Application GMAO (Gestion de Maintenance Assistée par Ordinateur) complète pou
 - Export PDF individuel des OT (jsPDF)
 - Export PDF en masse des OT avec mode sélection
 
-### Session 12 avril 2026
-- **Fix: Widgets dashboard comptaient les utilisateurs inactifs** — 5 fichiers corrigés : `server.py` (maintenance_techs_count), `service_filter.py` (get_service_team_members), `routes/service_manager.py` (team_count + assignment-targets member_count), `routes/reports.py` (all_users). Filtre `statut != 'inactif'` ajouté partout.
-- **Feature: Persistance visite guidée en base de données** — `GuidedTourContext.jsx` synchronise avec `/api/user-preferences/tour-status` et `/api/user-preferences/tour-completed`. "Terminer" ET "Passer" ET bouton ✕ sauvegardent en DB. La visite ne réapparaît plus sur aucun appareil une fois fermée. Endpoints ajoutés dans `routes/settings.py`, champs `tour_completed`/`tour_completed_at` ajoutés dans `models.py`.
-
-- **Fix: Santé notifications "ERREUR" faux positif avec 0 abonnements** (`routes/notification_health.py`) — `sub_status` passait à `"error"` quand 0 abonnements au lieu de `"warning"`. Maintenant `0 abonnements = warning` (utilisateur n'a pas encore activé les notifications).
-- **Fix SSH: Script diagnostic push** (`/app/backend/tools/diagnostic_push.py`) — ajout auto-install `pymongo` + instructions pour environnement Debian externally-managed (venv + export .env).
-- **Feature: Bannière de réabonnement push automatique** (`PWABanner.jsx`) — nouvelle bannière ambrée qui apparaît après 4s si `permission === 'granted'` mais abonnement inactif/expiré. Bouton "Réactiver les notifications" visible sur mobile comme sur desktop. Rediminuable 24h.
-
-- **Fix P0: "Abonnement expiré" faux positif lors du test push (People page)** :
-  - `web_push.py` : HTTP 401 (VAPID key mismatch) ajouté à la liste de nettoyage automatique des subscriptions invalides. Retour du compteur `deactivated` dans les résultats.
-  - `server.py` : Quand de nouvelles clés VAPID sont auto-générées (premier démarrage sans clés), TOUS les abonnements push actifs sont immédiatement invalidés (évite les abonnements "Actif" en DB mais liés aux anciennes clés).
-  - `notifications.py` : Nouveau statut `subscription_cleaned_up` retourné quand des abonnements ont été trouvés mais nettoyés. Message `detail` clair dans chaque statut.
-  - `routes/notifications.py` : `web_push_users_status()` retourne maintenant `deactivation_reason` pour chaque utilisateur.
-  - `routes/notifications.py` : `web_push_subscribe()` inclut `vapid_key_mismatch` et `vapid_key_changed` dans la détection des endpoints morts (`needs_fresh_subscription`).
-  - `usePWA.js` : `subscribe()` force maintenant un nouvel abonnement même quand la comparaison de clés VAPID échoue (au lieu de garder l'ancien).
-  - `People.jsx` : Nouveau statut `subscription_cleaned_up` géré avec message clair invitant l'utilisateur à se réabonner.
-  - `SystemHealth.jsx` : Affichage de la raison de désactivation (ex: "Clés VAPID changées → réabonnement requis") pour chaque abonnement expiré.
-  - **Fix annexe** : `routes/update_management.py` : Import `from pathlib import Path` manquant corrigé (route `/api/maintenance/status` retournait 500).
-  - Tests: iteration_164.json - 100% (25/25 tests)
-- **Fix: VAPID keys lecture dynamique (web_push.py)** — lecture via `_get_vapid()` à chaque appel, plus de lecture statique au moment de l'import.
-- **Fix: Service Worker clone error (sw.js)** — `try/catch` autour de `response.clone()`, vérification `response.type !== 'opaque'`, filtrage cross-origin. Version: `fsao-iris-v2`.
-- **Fix récurrence: Subscribe PWA toujours forcé frais (usePWA.js)** — `subscribe()` désabonne TOUJOURS l'ancien endpoint avant d'en créer un nouveau (élimine le cycle endpoint-mort → réabonnement → endpoint-mort).
-- **Fix: Auto-sync endpoints morts (usePWA.js)** — l'auto-sync au chargement de page gère `needs_fresh_subscription: True` en créant un nouvel abonnement browser si l'endpoint était dead (HTTP 410/404/endpoint_gone).
-- **Fix backend subscribe (routes/notifications.py)** — détection des endpoints morts à la réinscription, retour du flag `needs_fresh_subscription`, nettoyage de `deactivation_reason` lors de la réactivation.
-- **Fix web_push.py** — raisons de désactivation standardisées : `HTTP 410`, `HTTP 404`, `endpoint_gone` (détectables par le frontend).
-- **Fix UX People.jsx** — messages d'erreur précis selon le cas : `no_channel` = l'utilisateur n'a jamais activé les notifs, `all_failed` = abonnement expiré (avec instructions claires).
+### Session 12 avril 2026 (suite 2 — Bon de Travail impression)
+- **Feature: Impression PDF ReportLab — Bon de Travail MAINT/FE/004 V2**
+  - `bon_de_travail_reportlab.py` : générateur ReportLab A4 fidèle au document officiel. En-tête 3 colonnes (logo IRIS + titre + référence), sous-en-tête rédacteur/approbateur, texte introductif, section 1 (Travaux à réaliser), section 2 (Risques - 2 colonnes), section 3 (Précautions - 2 colonnes), section 4 (Engagement + tableau signatures), pied de page. Cases cochées avec ■/□.
+  - `documentations_routes.py` : endpoint `POST /api/documentations/bons-de-travail/generate-pdf` — accepte un dict, génère le PDF, retourne `application/pdf`.
+  - `BonDeTravailPrintDialog.jsx` : dialog React avec 4 sections (Travaux/Risques/Précautions/Engagement), checkboxes, champs texte conditionnels (Autre préciser), boutons "Imprimer vierge" (dict vide → ReportLab) et "Imprimer" (données saisies → ReportLab). S'ouvre dans nouvel onglet + dialogue d'impression système.
+  - `FormTemplatesPage.jsx` : icône Printer bleue sur la carte système "Bon de travail" (visible au survol, à côté de l'œil), `stopPropagation()` pour ne pas ouvrir la vue. Texte "Survoler pour imprimer" dans la carte. Dialog `BonDeTravailPrintDialog` intégré.
 
 ### Session 12 avril 2026 (suite — notifications veille/éteint)
-- **Fix: TTL + Urgency push notifications** (`web_push.py`) — `ttl=604800` (7 jours file d'attente FCM/Apple) + `headers={"Urgency": "high"}` (bypass Doze Android + APNs priority=10 iOS). Les notifications sont maintenant livrées même quand l'appareil est éteint (file d'attente) ou en veille (Doze contourné).
-- **Fix: Service Worker v3** (`sw.js`) — `renotify: true` (vibration même si même tag déjà affiché), `silent: false`, `requireInteraction: true` par défaut. Version cache `fsao-iris-v3`.
+- **Fix: TTL + Urgency push notifications** (`web_push.py`) — `ttl=604800` (7 jours file d'attente FCM/Apple) + `headers={"Urgency": "high"}` (bypass Doze Android + APNs priority=10 iOS).
+- **Fix: Service Worker v3** (`sw.js`) — `renotify: true`, `silent: false`, `requireInteraction: true` par défaut.
+- **Feature: Info notifications plateformes** (`Settings.jsx`) — bloc ambre pour Android (chemin batterie Chrome) et bleu pour iOS (16.4+, installation requise). Détection automatique via `navigator.userAgent`.
 
-### Session 08 avril 2026 (suite)
-- **Feature: Onglet "MongoDB Natif"** dans Import/Export — interface complète de gestion des sauvegardes mongodump sans SSH : état système, sauvegarde manuelle, planification cron, liste/restauration/suppression des sauvegardes, journaux, guide LXC. Backend : `/app/backend/routes/mongodb_backup.py`. Frontend : `MongoDBBackupTab.jsx`.
-- Fichiers script cron générés automatiquement : `/etc/cron.d/gmao_mongodump` et `/root/backup_mongo_auto.sh`.
-- **Fix: Statut CONVERTIE manquant** - `improvements.py` : après conversion d'une DA en Amélioration, le statut passe maintenant à `CONVERTIE` (était resté à `VALIDEE`).
-- **Fix: Erreur MES tzinfo** - `mes_service.py` : coercion `str → datetime` pour `last_pulse_at` après migration DB. Erreur `AttributeError: 'str' has no attribute 'tzinfo'` résolue.
-- **Feature: Formulaire DA (Demandes d'Amélioration) — Équipement parent/enfant** - `ImprovementFormDialog.jsx` refonte complète: équipements parents seulement, sous-équipement conditionnel, auto-remplissage emplacement. Tests: iteration_161.json - 100%.
-- **Fix: Formulaire DI (Demandes d'Intervention) — Submit** - `InterventionRequestFormDialog.jsx` : envoi séparé `equipement_id` (parent) et `sous_equipement_id` (enfant). Mode édition corrigé pour détecter parent vs enfant via `parent_id`.
-- **Fix: Statuts OT "Att Matériel" et "Att Décision"** - Tests: iteration_153.json - 100%
-- **Fix: Numéros OT en doublon** - Compteur atomique MongoDB
-- **Fix: Notifications cloche (Header)** - Compteurs séparés att_materiel / att_decision
-- **Fix: Scroll Dialog Historique IA** - overflow-hidden + min-h-0
-- **Feature: Raccourcis Dashboard** - Tests: iteration_154.json - 100%
-  - Menu contextuel global (CTRL + clic droit) disponible partout
-  - Création raccourci page courante (auto-détection nom + icône)
-  - Création raccourci d'adresse (URL, chemin réseau)
-  - Affichage style Windows sur le dashboard (icône + nom)
+### Session 12 avril 2026
+- **Fix: Widgets dashboard comptaient les utilisateurs inactifs**
+- **Feature: Persistance visite guidée en base de données**
+- **Fix: Santé notifications faux positif 0 abonnements**
+- **Feature: Bannière réabonnement push automatique (PWABanner.jsx)**
+- **Fix P0: Abonnement expiré faux positif VAPID**
+- **Fix: JWT expiry 1h → 30j + intercepteur refresh automatique**
+- **Feature: CRUD pointages Ordres d'Améliorations**
 
-### Session 10 avril 2026 (suite : inactifs dropdowns + PWA guide)
-- **Feature : Exclure les inactifs des dropdowns** — `assignment-targets`, `team/members`, `usersAPI.getActive()` sur 10 composants, historique rapports préservé
-- **Feature: Guide d'installation PWA contextuel** — inline dans Paramètres
-  - `hooks/usePWA.js`: `usePlatformInstall()` — détecte OS/navigateur/mode privé (quota < 120 Mo)
-  - `Settings.jsx`: 7 scénarios : prompt natif, installée, iOS Safari, iOS Chrome, Android/Desktop menu (⊕ + ⋮), Firefox, inconnu. Mode privé → alerte + "Ouvrir fenêtre normale"
+### Session 08 avril 2026
+- Feature: Onglet "MongoDB Natif" (Import/Export)
+- Fix: Statut CONVERTIE manquant
+- Fix: Erreur MES tzinfo
+- Feature: Formulaire DA Équipement parent/enfant
+- Fix: Formulaire DI Submit
 
-  - `routes/service_manager.py`: `/api/assignment-targets` filtre `statut != "inactif"` (regex insensible à la casse pour compatibilité legacy)
-  - `team_management_routes.py`: `/team/members` exclut les permanents inactifs du widget charge d'équipe
-  - `api.js`: ajout `usersAPI.getActive()` qui filtre les inactifs côté frontend
-  - 8 composants mis à jour : `WorkOrderFormDialog`, `WorkOrderDialog`, `ConvertToWorkOrderDialog`, `ConvertToImprovementDialog`, `ImprovementFormDialog`, `PreventiveMaintenanceFormDialog`, `PresquAccidentList`, `SurveillanceItemForm`, `UserPasswordReset`, `ConsignationsLOTO`
-  - Les rapports `/api/reports/user-time-tracking` ne filtrent PAS par statut → heures historiques préservées
-- **Feature: Activation / Désactivation des utilisateurs (Option C)** — Tests: iteration_163.json — 100% (13/13)
-  - `models.py`: `UserUpdate` → ajout `statut: Optional[str] = None`
-  - `dependencies.py`: `get_current_user` → vérifie `statut == "inactif"` → 401 immédiat (invalidation session sans token blacklist)
-  - `routes/auth.py`: login bloqué avec 403 si `statut == "inactif"`
-  - `routes/users.py`: audit log "Compte désactivé/réactivé" + fix imports manquants (`get_default_permissions_by_role`, `get_password_hash`, `email_service`)
-  - `People.jsx`: filtres Tous/Actifs/Inactifs + badge "Inactif" sur les cartes + bouton rapide toggle + `normalizeStatut()` pour compatibilité legacy DB (ACTIF majuscule)
-  - `EditUserDialog.jsx`: Switch statut admin + avertissement invalidation session + `.toLowerCase()` sur init
-- **Feature: Modification du collaborateur d'une entrée de temps (OT)** - Tests: iteration_162.json - 100% (11/11 backend + frontend).
-  - `models.py`: `TimeEntryUpdate` → ajout `user_id: Optional[str] = None`
-  - `routes/work_orders.py`: `update_time_entry` → gestion changement collaborateur (find_user_flexible + update user_id + user_name + audit log "collaborateur: Ancien -> Nouveau")
-  - `services/api.js`: `updateTimeEntry` → passe `user_id` optionnel
-  - `WorkOrderDialog.jsx`: ligne d'édition inline → ajout `<Select>` dropdown liste utilisateurs actifs (data-testid=`edit-time-user-{entry_id}`)
-  - Mode Modifier : drag & drop, édition (taille, icône custom, position label), suppression
-  - Backend: ajout route PUT /api/user-preferences
-  - Fix: PreferencesContext structure aplatie
-
-## Composants Dashboard
-```
-/app/frontend/src/components/Dashboard/
-├── GlobalContextMenu.jsx (Menu CTRL+clic droit)
-├── SortableShortcut.jsx (Rendu raccourci style Windows)
-├── ShortcutEditDialog.jsx (Dialog édition raccourci)
-├── DashboardEditToolbar.jsx (Barre d'outils mode édition)
-└── MaintenanceStatusPendingAlert.jsx
-```
-
-### Session 22 mars 2026 (suite - fork)
-- **Fix P0: Admins absents des listes d'assignation** - Tests: iteration_155.json - 100%
-  - Cause racine: filtre MongoDB `deleted_at` trop restrictif pour données legacy
-  - Nouveau filtre global: `NOT_DELETED = {"deleted_at": {"$in": [None, "", False, 0]}}` dans `routes/shared.py`
-  - Appliqué dans: `users.py`, `service_manager.py`, `work_orders.py`, `equipments.py`, `intervention_requests.py`, `improvements.py`, `reports.py`, `server.py`
-- **Fix tri OT** : tri descendant (récent → ancien) avec gestion types mixtes datetime/string
-- **Mise à jour README.md** v1.10.0 → v1.11.0 : documentation complète des nouvelles fonctionnalités
+### Session 10 avril 2026
+- Feature: Exclure inactifs des dropdowns (10 composants)
+- Feature: Guide PWA contextuel dans Paramètres
+- Feature: Activation/Désactivation utilisateurs
+- Feature: Modification collaborateur entrée de temps (OT)
 
 ### Session 23 mars 2026
-- **Édition temps passé : date de pointage + permissions étendues** - Tests: iteration_156.json - 100%
-  - Ajout champ date de pointage éditable (CalendarPicker shadcn, navigation libre entre mois)
-  - Backend: `TimeEntryUpdate` accepte `timestamp` optionnel, **sauvegardé en datetime** (pas string) pour compatibilité rapports
-  - Permission étendue: `require_permission("workOrders", "delete")` au lieu de `get_current_admin_user`
-  - Frontend: `canManageTimeEntries = isAdmin() || (canEdit('workOrders') && canDelete('workOrders'))`
-- **Fix date pointage dans rapports** : timestamps sauvegardés en `datetime` Python (pas string ISO) pour compatibilité `$gte/$lte` MongoDB
-- **Tri OT** : filtre par défaut "Ouvert" au lieu de "Tous"
-- **Permissions visibilité widgets dashboard** - Tests: iteration_157.json - 100%
-  - Bouton bouclier (Shield) sur chaque widget en mode édition admin
-  - Dialog avec liste d'utilisateurs + cases à cocher (admins cochés/grisés, non-admins modifiables)
-  - Collection `widget_permissions` : `{widget_id, allowed_user_ids}`
-  - Non-admins ne voient que les widgets autorisés
+- Édition temps passé : date de pointage + permissions étendues
+- Fix date pointage dans rapports
+- Tri OT filtre par défaut "Ouvert"
+- Permissions visibilité widgets dashboard
+
+### Session 22 mars 2026 (fork)
+- Fix P0: Admins absents des listes d'assignation
+- Fix tri OT (gestion types mixtes datetime/string)
+
+### Session 24 mars 2026 (fork)
+- Fix P0: Écran blanc (crash React) technicien avec consignes
+- Feature: Push notifications Consignes
+- Feature: Push notifications OT assignés + alertes équipements
+- Feature: Formulaire DI — Sous-équipement + Emplacement automatique
+
+### Session 25 mars 2026 (fork)
+- Migration DB complète (ObjectId → String, dates ISO → datetime)
+
+### Session 10 avril 2026 (suite 2 — correctifs prod)
+- Fix: DI invalides en boucle (work_order_numero float)
+- Fix: OT créateur "PUBLIC" erreur boucle
+- Script migration prod
+
+## Fichiers Clés
+- `bon_de_travail_reportlab.py` — Générateur ReportLab (NOUVEAU)
+- `documentations_routes.py` — Routes documentation + PDF
+- `BonDeTravailPrintDialog.jsx` — Dialog impression (NOUVEAU)
+- `FormTemplatesPage.jsx` — Page modèles formulaires
+- `web_push.py` — Notifications Push VAPID
+- `sw.js` — Service Worker PWA (v3)
+- `Settings.jsx` — Page paramètres avec info push mobile
 
 ## Schéma DB Clé
-- `work_orders`: `{_id, id, numero, statut, att_materiel_info, att_decision_info, ...}`
+- `work_orders`: `{_id, id, numero, statut, ...}`
 - `counters`: `{_id: "work_order_numero", seq: <dernier_numero>}`
 - `user_preferences`: `{user_id, preferences: {dashboard_layout: {items: [...]}, ...}}`
 - `equipments`: `{_id, id, nom, parent_id, ...}`
-
-## Credentials de Test
-- Admin: `buenogy@gmail.com` / `TestAdmin2026!`
-
-### Session 24 mars 2026 (fork)
-- **Fix P0: Écran blanc (crash React) à la connexion d'un technicien avec consignes en attente**
-  - **Bug 1 (ConsignePopup.jsx)**: `currentConsigne` dans les dépendances `useCallback` → `loadPendingConsignes` recréée à chaque changement de consigne → `useEffect` ré-exécuté → boucle API. Corrigé via `useRef` pour lire l'état courant sans dépendance.
-  - **Bug 2 (usePermissions.js - ROOT CAUSE)**: `isAdmin`, `canView`, `canEdit`, `canDelete` créées inline à chaque render → nouvelle référence à chaque render → `visibleWidgets` (useMemo dans Dashboard.jsx) recalculé à chaque render → `useEffect([preferences, visibleWidgets])` se déclenchait à chaque render → `setLayoutItems(nouveau_tableau)` → re-render → boucle infinie ("Maximum update depth exceeded"). Corrigé en stabilisant toutes les fonctions avec `useCallback` dans `usePermissions.js`.
-  - Résultat: 0 "Maximum update depth exceeded" en console, popup de consigne s'affiche et s'acquitte correctement.
-
-### Session 24 mars 2026 (suite 3) — DI : Sous-équipement + Emplacement automatique
-- **Feature: Dissociation équipement/sous-équipement dans les DI** - Tests: iteration_160.json - 11/11
-  - `InterventionRequestFormDialog.jsx`: restructuration layout (Équipement + Sous-équipement + Emplacement hors du grid Priorité/Date), suppression du guard `hasChildren` (toujours charger les enfants), Emplacement comme SELECT éditable avec label '(rempli automatiquement)', préservation `sous_equipement_id` en mode édition, reset emplacement quand équipement change
-  - `models.py`: ajout `sous_equipement_id` + `sous_equipement: Optional[Dict]` dans les 3 modèles `InterventionRequest`, `InterventionRequestCreate`, `InterventionRequestUpdate`
-  - `routes/intervention_requests.py`: ajout import `get_equipment_by_id` + `get_location_by_id` depuis `routes/shared.py`, résolution du sous-équipement à la création et à l'update, propagation `sous_equipement_id` + `sous_equipement` lors de la conversion DI → OT
-  - Comportement aligné avec les OT : l'équipement feuille (sous-équipement si sélectionné) devient l'équipement principal, emplacement auto-rempli depuis le parent
-
-
-- **Feature: Push notifications pour OT assignés + alertes équipements** - Tests: iteration_159.json - 20/20
-  - `web_push.py`: fix `notify_work_order_status_changed_web` (champ `assigne_a_id` au lieu de `assignedTo`)
-  - `web_push.py`: fix `notify_equipment_alert_web` (filtre statut `$in: ['ACTIF', 'actif']`, libellés français)
-  - `routes/equipments.py`: ajout `import asyncio` + import inline `notify_equipment_alert_web` dans PATCH `/status` (existait) + dans PUT `/equipments` (ajouté)
-  - `web_push.py`: déactivation automatique subscriptions invalides (HTTP 0 + "Invalid" dans message, en plus de 404/410)
-  - Nettoyage: désactivation manuelle de 2 subscriptions p256dh invalides en DB (user 69924657cdcae11ec6b0776e)
-  - Tests: push déclenché pour 11 utilisateurs actifs lors d'une alerte équipement; OT assignation et changement statut vérifiés
-- **Feature: Notifications Push PWA** - Tests: iteration_158.json - 100%
-  - `routes/notifications.py`: ajout `import os` manquant (fix endpoint `/api/web-push/vapid-key`)
-  - `consignes_routes.py`: `send_web_push_to_user()` après création consigne
-  - `sw.js`: clic notification `new_consigne` → naviguer vers `/chat-live`
-  - `ConsignePopup.jsx`: bannière "Activer les notifications" (BellRing + bouton Activer/Non)
-  - `Header.jsx`: bouton toggle Bell/BellOff avec tooltip, masqué si permission refusée
-
-## Schéma DB Clé
-- `work_orders`, `counters`, `user_preferences`, `equipments` (inchangés)
 - `web_push_subscriptions`: `{user_id, subscription: {endpoint, keys}, browser, is_active}`
 - `widget_permissions`: `{widget_id, allowed_user_ids: []}`
 
 ## Credentials de Test
 - Admin: `buenogy@gmail.com` / `TestAdmin2026!`
-- Technicien local: `axel@gmail.com` / `TestTech2026!`
-
-### Session 25 mars 2026 (fork - normalisation DB)
-- **Migration DB complète** - Script `/app/backend/migrate_db.py` exécuté localement
-  - Phase 1 : 741 documents mis à jour (dates ISO string -> datetime) dans 50+ collections
-  - Phase 2 : 13 OTs normalisés (ObjectId-string -> UUID), 21 entrées audit_logs mises à jour
-  - Phase 3 : 43 documents (consignes, preventive_maintenances, checklist_templates, checklists) avec champ `id` ajouté
-  - Vérification : 23/23 work_orders en UUID, tous les champs dates en type datetime
-  - Script fourni à l'utilisateur pour la production Proxmox
-
-### Session 10 avril 2026 (suite 2 — fork correctifs prod)
-- **Fix : DI invalides en boucle** (`routes/intervention_requests.py`) — `work_order_numero` stocké en float en prod (ex: `5811.0`) → normalisation `int(float) → str` avant validation Pydantic. Plus d'erreurs `définitivement invalide` en log.
-- **Fix : OT créateur "PUBLIC" erreur en boucle** (`routes/work_orders.py`) — `ObjectId("PUBLIC")` → `InvalidId` loggé en ERROR à chaque requête OT. Code rendu robuste : essai ObjectId silencieux, fallback par champ `id`, affichage "Public" si `createdBy == "PUBLIC"`.
-- **Script migration prod** — `/app/backend/tests/migrate_prod_fix.py` : convertit `work_order_numero` et `numero` float → string en MongoDB (idempotent, safe à relancer). Validé localement (4 OT corrigés, 0 erreur).
+- Technicien: `axel@gmail.com` / `TestTech2026!`
 
 ## Backlog
 - P1: Migration DB normalisation IDs (UUID vs ObjectId → String) — en attente approbation utilisateur

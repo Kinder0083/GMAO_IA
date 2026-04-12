@@ -1472,6 +1472,30 @@ async def delete_custom_form(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/bons-de-travail/generate-pdf")
+async def generate_bon_de_travail_pdf_endpoint(
+    data: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Génère un PDF ReportLab du Bon de Travail MAINT/FE/004 V2.
+    Accepte un dict avec tous les champs du formulaire.
+    Fonctionne pour un bon vierge (dict vide) ou pré-rempli.
+    """
+    try:
+        from bon_de_travail_reportlab import generate_bon_travail_pdf
+        pdf_bytes = generate_bon_travail_pdf(data)
+        from fastapi.responses import Response
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": "inline; filename=bon_de_travail_MAINT_FE_004.pdf"}
+        )
+    except Exception as e:
+        logger.error(f"Erreur génération PDF bon de travail: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/custom-forms/{form_id}/pdf")
 async def generate_custom_form_pdf(
     form_id: str,
