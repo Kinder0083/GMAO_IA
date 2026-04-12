@@ -12,24 +12,38 @@ import { Button } from '../ui/button';
 import { Textarea } from '../ui/textarea';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
-import { Calendar, Clock, User, MapPin, Wrench, FileText, MessageSquare } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
+import { Calendar as CalendarPicker } from '../ui/calendar';
+import { Calendar, Clock, User, MapPin, Wrench, FileText, MessageSquare, Pencil, Trash2, Check, X, CalendarDays } from 'lucide-react';
 import AttachmentsList from './AttachmentsList';
 import AttachmentUploader from './AttachmentUploader';
 import StatusChangeDialog from './StatusChangeDialog';
-import { improvementsAPI } from '../../services/api';
+import { improvementsAPI, usersAPI } from '../../services/api';
 import { useToast } from '../../hooks/use-toast';
+import { usePermissions } from '../../hooks/usePermissions';
 import { formatTimeToHoursMinutes } from '../../utils/timeFormat';
 
 const ImprovementDialog = ({ open, onOpenChange, workOrder, onSuccess }) => {
   const { toast } = useToast();
+  const { canEdit, canDelete, isAdmin } = usePermissions();
+  const canManageTimeEntries = isAdmin() || (canEdit('improvements') && canDelete('improvements'));
+
   const [refreshAttachments, setRefreshAttachments] = useState(0);
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState('');
   const [loadingComments, setLoadingComments] = useState(false);
   const [showStatusDialog, setShowStatusDialog] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
-  const [timeInput, setTimeInput] = useState(''); // Champ unique pour le temps
+  const [timeInput, setTimeInput] = useState('');
   const [validating, setValidating] = useState(false);
+
+  // États édition des pointages
+  const [editingTimeId, setEditingTimeId] = useState(null);
+  const [editingTimeValue, setEditingTimeValue] = useState('');
+  const [editingTimeDate, setEditingTimeDate] = useState('');
+  const [editingTimeUserId, setEditingTimeUserId] = useState('');
+  const [activeUsers, setActiveUsers] = useState([]);
 
   // Fonction pour parser le temps saisi dans différents formats
   const parseTimeInput = (input) => {
@@ -153,7 +167,62 @@ const ImprovementDialog = ({ open, onOpenChange, workOrder, onSuccess }) => {
   const handleCancel = () => {
     setNewComment('');
     setTimeInput('');
+    setEditingTimeId(null);
     onOpenChange(false);
+  };
+
+  // === Édition / suppression des pointages ===
+  const handleEditTimeEntry = async (entry) => {
+    setEditingTimeId(entry.id);
+    const h = Math.floor(entry.hours);
+    const m = Math.round((entry.hours - h) * 60);
+    setEditingTimeValue(`${h}h${m.toString().padStart(2, '0')}`);
+    setEditingTimeUserId(entry.user_id || '');
+    const ts = entry.timestamp || '';
+    if (ts) {
+      const d = new Date(ts);
+      if (!isNaN(d.getTime())) setEditingTimeDate(d.toISOString().slice(0, 10));
+      else setEditingTimeDate('');
+    } else {
+      setEditingTimeDate('');
+    }
+    if (activeUsers.length === 0) {
+      try {
+        const res = await usersAPI.getAll();
+        setActiveUsers((res.data || []).filter(u => (u.statut || 'actif').toLowerCase() !== 'inactif'));
+      } catch {}
+    }
+  };
+
+  const handleSaveTimeEntry = async () => {
+    const parsed = parseTimeInput(editingTimeValue);
+    if (!parsed || (parsed.hours === 0 && parsed.minutes === 0)) {
+      toast({ title: 'Erreur', description: 'Temps invalide', variant: 'destructive' });
+      return;
+    }
+    try {
+      const newHours = parsed.hours + parsed.minutes / 60;
+      const timestamp = editingTimeDate ? new Date(editingTimeDate + 'T12:00:00').toISOString() : undefined;
+      await improvementsAPI.updateTimeEntry(workOrder.id, editingTimeId, newHours, timestamp, editingTimeUserId || undefined);
+      toast({ title: 'Succès', description: 'Pointage modifié' });
+      setEditingTimeId(null);
+      setEditingTimeDate('');
+      setEditingTimeUserId('');
+      if (onSuccess) onSuccess();
+    } catch {
+      toast({ title: 'Erreur', description: 'Impossible de modifier le pointage', variant: 'destructive' });
+    }
+  };
+
+  const handleDeleteTimeEntry = async (entryId) => {
+    if (!window.confirm('Supprimer ce pointage ?')) return;
+    try {
+      await improvementsAPI.deleteTimeEntry(workOrder.id, entryId);
+      toast({ title: 'Succès', description: 'Pointage supprimé' });
+      if (onSuccess) onSuccess();
+    } catch {
+      toast({ title: 'Erreur', description: 'Impossible de supprimer', variant: 'destructive' });
+    }
   };
 
 
@@ -401,9 +470,123 @@ const ImprovementDialog = ({ open, onOpenChange, workOrder, onSuccess }) => {
               <h3 className="text-lg font-semibold text-gray-900">Temps Passé</h3>
             </div>
 
+            {/* Historique des pointages avec édition inline */}
+            {workOrder.time_entries && workOrder.time_entries.length > 0 && (
+              <div className="bg-orange-50 rounded-lg p-3 mb-4 border border-orange-200 space-y-2" data-testid="improvement-time-entries-list">
+                <h4 className="text-xs font-semibold text-orange-900 mb-1">Historique des pointages</h4>
+                {workOrder.time_entries.map((entry) => (
+                  <div key={entry.id} className="flex items-center justify-between text-sm bg-white rounded px-3 py-1.5 shadow-sm">
+                    {editingTimeId === entry.id ? (
+                      <div className="flex items-center gap-2 flex-1 flex-wrap">
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <button
+                              type="button"
+                              data-testid={`edit-impr-time-date-${entry.id}`}
+                              className="h-7 text-sm border rounded px-2 bg-white flex items-center gap-1 hover:bg-gray-50 min-w-[130px]"
+                            >
+                              <CalendarDays size={13} className="text-gray-500" />
+                              {editingTimeDate || 'Choisir date'}
+                            </button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start" side="bottom" sideOffset={4}>
+                            <CalendarPicker
+                              mode="single"
+                              selected={editingTimeDate ? new Date(editingTimeDate + 'T12:00:00') : undefined}
+                              onSelect={(date) => {
+                                if (date) {
+                                  const y = date.getFullYear();
+                                  const mo = String(date.getMonth() + 1).padStart(2, '0');
+                                  const d = String(date.getDate()).padStart(2, '0');
+                                  setEditingTimeDate(`${y}-${mo}-${d}`);
+                                }
+                              }}
+                              initialFocus
+                            />
+                          </PopoverContent>
+                        </Popover>
+                        <Input
+                          data-testid={`edit-impr-time-input-${entry.id}`}
+                          type="text"
+                          value={editingTimeValue}
+                          onChange={(e) => setEditingTimeValue(e.target.value)}
+                          className="max-w-[100px] h-7 text-sm"
+                          placeholder="Ex: 1h30"
+                        />
+                        <Select
+                          value={editingTimeUserId || 'unchanged'}
+                          onValueChange={(val) => setEditingTimeUserId(val === 'unchanged' ? '' : val)}
+                        >
+                          <SelectTrigger
+                            data-testid={`edit-impr-time-user-${entry.id}`}
+                            className="h-7 text-sm min-w-[130px] max-w-[180px]"
+                          >
+                            <SelectValue placeholder="Collaborateur" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="unchanged">
+                              <span className="text-gray-400 italic">— Inchangé —</span>
+                            </SelectItem>
+                            {activeUsers.map(u => (
+                              <SelectItem key={u.id} value={u.id}>
+                                {u.prenom} {u.nom}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <button
+                          data-testid={`save-impr-time-${entry.id}`}
+                          onClick={handleSaveTimeEntry}
+                          className="p-1 text-green-600 hover:bg-green-50 rounded"
+                          title="Enregistrer"
+                        >
+                          <Check size={14} />
+                        </button>
+                        <button
+                          onClick={() => { setEditingTimeId(null); setEditingTimeDate(''); setEditingTimeUserId(''); }}
+                          className="p-1 text-gray-400 hover:bg-gray-100 rounded"
+                          title="Annuler"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <span className="text-gray-700">
+                          <span className="font-semibold">{formatTimeToHoursMinutes(entry.hours)}</span>
+                          {' — '}{entry.user_name}
+                          <span className="text-xs text-gray-400 ml-2">{formatDate(entry.timestamp)}</span>
+                        </span>
+                        {canManageTimeEntries && (
+                          <div className="flex items-center gap-0.5 ml-2">
+                            <button
+                              data-testid={`edit-impr-time-${entry.id}`}
+                              onClick={() => handleEditTimeEntry(entry)}
+                              className="p-1 text-gray-400 hover:text-blue-600 rounded"
+                              title="Modifier"
+                            >
+                              <Pencil size={13} />
+                            </button>
+                            <button
+                              data-testid={`delete-impr-time-${entry.id}`}
+                              onClick={() => handleDeleteTimeEntry(entry.id)}
+                              className="p-1 text-gray-400 hover:text-red-600 rounded"
+                              title="Supprimer"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
             {/* Zone de saisie du temps - champ unique */}
             <div className="space-y-2">
-              <Label>Temps passé sur cette amélioration *</Label>
+              <Label>Ajouter un pointage *</Label>
               <Input
                 type="text"
                 placeholder="Ex: 1:30, 1h30, 1.5"

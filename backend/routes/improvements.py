@@ -15,7 +15,7 @@ import aiofiles
 import logging
 
 from models import (
-    ActionType, EntityType, AddTimeSpent, MessageResponse,
+    ActionType, EntityType, AddTimeSpent, TimeEntryUpdate, MessageResponse,
     Improvement, ImprovementCreate, ImprovementUpdate,
     ImprovementRequest, ImprovementRequestCreate,
     ImprovementRequestUpdate, ImprovementRequestStatusUpdate
@@ -1363,7 +1363,129 @@ async def add_time_to_improvement(imp_id: str, time_data: AddTimeSpent, current_
         logger.error(f"Erreur lors de l'ajout de temps : {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
 
-    if not imp:
+
+@router.put("/improvements/{imp_id}/time-entries/{entry_id}",
+    summary="Modifier une entrée de temps d'une amélioration")
+async def update_improvement_time_entry(
+    imp_id: str, entry_id: str,
+    update_data: TimeEntryUpdate,
+    current_user: dict = Depends(require_permission("improvements", "delete"))
+):
+    """Modifier une entrée de temps (heures, date, collaborateur) — admin ou permission edit+delete improvements."""
+    try:
+        improvement = await db.improvements.find_one({"id": imp_id})
+        if not improvement:
+            raise HTTPException(status_code=404, detail="Amélioration non trouvée")
+
+        time_entries = improvement.get("time_entries", [])
+        old_entry = next((e for e in time_entries if e.get("id") == entry_id), None)
+        if not old_entry:
+            raise HTTPException(status_code=404, detail="Entrée de temps non trouvée")
+
+        old_hours = old_entry.get("hours", 0)
+        new_hours = update_data.hours
+        diff = new_hours - old_hours
+        current_total = improvement.get("tempsReel", 0) or 0
+        new_total = max(0, current_total + diff)
+
+        update_set = {"time_entries.$.hours": new_hours, "tempsReel": new_total}
+        details_parts = [f"temps: {old_hours:.2f}h -> {new_hours:.2f}h"]
+
+        if update_data.timestamp:
+            try:
+                new_ts = datetime.fromisoformat(update_data.timestamp.replace('Z', '+00:00').replace('+00:00', ''))
+            except Exception:
+                new_ts = datetime.fromisoformat(update_data.timestamp[:19])
+            update_set["time_entries.$.timestamp"] = new_ts
+            old_ts = old_entry.get("timestamp", "?")
+            if isinstance(old_ts, datetime):
+                old_ts = old_ts.strftime("%d/%m/%Y")
+            elif isinstance(old_ts, str):
+                old_ts = old_ts[:10]
+            details_parts.append(f"date: {old_ts} -> {new_ts.strftime('%d/%m/%Y')}")
+
+        if update_data.user_id and update_data.user_id != old_entry.get("user_id"):
+            new_user = await find_user_flexible(update_data.user_id)
+            if not new_user:
+                raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+            canonical_user_id = str(new_user["_id"])
+            old_canonical = old_entry.get("user_id", "")
+            if canonical_user_id != old_canonical:
+                new_user_name = f"{new_user.get('prenom', '')} {new_user.get('nom', '')}".strip()
+                old_user_name = old_entry.get("user_name", "?")
+                update_set["time_entries.$.user_id"] = canonical_user_id
+                update_set["time_entries.$.user_name"] = new_user_name
+                details_parts.append(f"collaborateur: {old_user_name} -> {new_user_name}")
+
+        await db.improvements.update_one(
+            {"id": imp_id, "time_entries.id": entry_id},
+            {"$set": update_set}
+        )
+
+        await audit_service.log_action(
+            user_id=current_user["id"],
+            user_name=f"{current_user['prenom']} {current_user['nom']}",
+            user_email=current_user["email"],
+            action=ActionType.UPDATE,
+            entity_type=EntityType_Audit.IMPROVEMENT,
+            entity_id=imp_id,
+            entity_name=improvement.get("titre", ""),
+            details=f"Modification pointage: {', '.join(details_parts)}"
+        )
+
+        return {"message": "Entrée de temps modifiée", "new_total": new_total}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erreur modification time entry amélioration: {e}")
+        raise HTTPException(status_code=500, detail="Erreur lors de la modification")
+
+
+@router.delete("/improvements/{imp_id}/time-entries/{entry_id}",
+    summary="Supprimer une entrée de temps d'une amélioration")
+async def delete_improvement_time_entry(
+    imp_id: str, entry_id: str,
+    current_user: dict = Depends(require_permission("improvements", "delete"))
+):
+    """Supprimer une entrée de temps — admin ou permission edit+delete improvements."""
+    try:
+        improvement = await db.improvements.find_one({"id": imp_id})
+        if not improvement:
+            raise HTTPException(status_code=404, detail="Amélioration non trouvée")
+
+        time_entries = improvement.get("time_entries", [])
+        old_entry = next((e for e in time_entries if e.get("id") == entry_id), None)
+        if not old_entry:
+            raise HTTPException(status_code=404, detail="Entrée de temps non trouvée")
+
+        old_hours = old_entry.get("hours", 0)
+        current_total = improvement.get("tempsReel", 0) or 0
+        new_total = max(0, current_total - old_hours)
+
+        await db.improvements.update_one(
+            {"id": imp_id},
+            {"$pull": {"time_entries": {"id": entry_id}}, "$set": {"tempsReel": new_total}}
+        )
+
+        await audit_service.log_action(
+            user_id=current_user["id"],
+            user_name=f"{current_user['prenom']} {current_user['nom']}",
+            user_email=current_user["email"],
+            action=ActionType.DELETE,
+            entity_type=EntityType_Audit.IMPROVEMENT,
+            entity_id=imp_id,
+            entity_name=improvement.get("titre", ""),
+            details=f"Suppression pointage: {old_hours:.2f}h de {old_entry.get('user_name', '?')}"
+        )
+
+        return {"message": "Entrée de temps supprimée", "new_total": new_total}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erreur suppression time entry amélioration: {e}")
+        raise HTTPException(status_code=500, detail="Erreur lors de la suppression")
         raise HTTPException(status_code=404, detail="Amélioration non trouvée")
     
     await db.improvements.delete_one({"id": imp_id})

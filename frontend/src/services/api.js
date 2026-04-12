@@ -603,6 +603,16 @@ export const improvementsAPI = {
   // Add time spent
   addTimeSpent: (improvementId, hours, minutes) => 
     api.post(`/improvements/${improvementId}/add-time`, { hours, minutes }),
+
+  // Edit/Delete time entries (admin ou permission)
+  updateTimeEntry: (improvementId, entryId, hours, timestamp, userId) =>
+    api.put(`/improvements/${improvementId}/time-entries/${entryId}`, {
+      hours,
+      ...(timestamp ? { timestamp } : {}),
+      ...(userId ? { user_id: userId } : {})
+    }),
+  deleteTimeEntry: (improvementId, entryId) =>
+    api.delete(`/improvements/${improvementId}/time-entries/${entryId}`),
   
   // Attachments
   uploadAttachment: (id, file) => {

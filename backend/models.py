@@ -1525,6 +1525,7 @@ class Improvement(BaseModel):
     createdByName: Optional[str] = None
     attachments: Optional[List[Dict]] = []
     comments: Optional[List[Dict]] = []
+    time_entries: Optional[List[Dict]] = []
 
 class ImprovementCreate(BaseModel):
     titre: str
