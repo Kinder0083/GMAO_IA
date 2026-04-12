@@ -59,7 +59,14 @@ async def send_web_push_to_user(db, user_id: str, title: str, body: str, data: d
                 subscription_info=subscription_info,
                 data=payload,
                 vapid_private_key=VAPID_PRIVATE_KEY,
-                vapid_claims={"sub": VAPID_SUBJECT}
+                vapid_claims={"sub": VAPID_SUBJECT},
+                # TTL=7 jours : FCM/Apple met le message en file d'attente
+                # si l'appareil est éteint ou hors ligne.
+                ttl=604800,
+                # Urgency=high : contourne le mode Doze Android (veille écran)
+                # et force la livraison immédiate même quand le téléphone est en veille.
+                # Sur iOS, cela équivaut à apns-priority=10 (livraison immédiate).
+                headers={"Urgency": "high"}
             )
             sent += 1
             logger.info(f"[WEB PUSH] OK -> user {user_id} ({sub.get('browser', '?')})")

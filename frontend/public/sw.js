@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fsao-iris-v2';
+const CACHE_NAME = 'fsao-iris-v3';
 const OFFLINE_URL = '/offline.html';
 
 // Fichiers a mettre en cache pour le mode hors-ligne
@@ -93,7 +93,11 @@ self.addEventListener('push', (event) => {
     tag: data.tag || 'fsao-notification',
     data: data.data || {},
     vibrate: [200, 100, 200],
-    requireInteraction: data.requireInteraction || false,
+    requireInteraction: data.requireInteraction !== undefined ? data.requireInteraction : true,
+    // renotify=true : rejouer son + vibration même si une notif avec le même tag existe déjà
+    renotify: true,
+    // silent=false : toujours jouer le son système (ne pas envoyer silencieusement)
+    silent: false,
     actions: data.actions || []
   };
 

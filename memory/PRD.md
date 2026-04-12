@@ -59,6 +59,10 @@ Application GMAO (Gestion de Maintenance Assistée par Ordinateur) complète pou
 - **Fix web_push.py** — raisons de désactivation standardisées : `HTTP 410`, `HTTP 404`, `endpoint_gone` (détectables par le frontend).
 - **Fix UX People.jsx** — messages d'erreur précis selon le cas : `no_channel` = l'utilisateur n'a jamais activé les notifs, `all_failed` = abonnement expiré (avec instructions claires).
 
+### Session 12 avril 2026 (suite — notifications veille/éteint)
+- **Fix: TTL + Urgency push notifications** (`web_push.py`) — `ttl=604800` (7 jours file d'attente FCM/Apple) + `headers={"Urgency": "high"}` (bypass Doze Android + APNs priority=10 iOS). Les notifications sont maintenant livrées même quand l'appareil est éteint (file d'attente) ou en veille (Doze contourné).
+- **Fix: Service Worker v3** (`sw.js`) — `renotify: true` (vibration même si même tag déjà affiché), `silent: false`, `requireInteraction: true` par défaut. Version cache `fsao-iris-v3`.
+
 ### Session 08 avril 2026 (suite)
 - **Feature: Onglet "MongoDB Natif"** dans Import/Export — interface complète de gestion des sauvegardes mongodump sans SSH : état système, sauvegarde manuelle, planification cron, liste/restauration/suppression des sauvegardes, journaux, guide LXC. Backend : `/app/backend/routes/mongodb_backup.py`. Frontend : `MongoDBBackupTab.jsx`.
 - Fichiers script cron générés automatiquement : `/etc/cron.d/gmao_mongodump` et `/root/backup_mongo_auto.sh`.
@@ -195,5 +199,7 @@ Application GMAO (Gestion de Maintenance Assistée par Ordinateur) complète pou
 - **Script migration prod** — `/app/backend/tests/migrate_prod_fix.py` : convertit `work_order_numero` et `numero` float → string en MongoDB (idempotent, safe à relancer). Validé localement (4 OT corrigés, 0 erreur).
 
 ## Backlog
+- P1: Migration DB normalisation IDs (UUID vs ObjectId → String) — en attente approbation utilisateur
+- P2: Ajouter colonne "Sous-équipement" dans la liste des DI
+- P2: Page paramètres préférences de notifications Push
 - P2: Tester le script `MAJ_FSAO.sh`
-- EN ATTENTE consignes utilisateur
