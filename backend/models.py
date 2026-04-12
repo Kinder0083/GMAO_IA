@@ -2535,6 +2535,10 @@ class UserPreferences(BaseModel):
     # Preference onglet Dashboard Service
     service_dashboard_tab: Optional[str] = None
     
+    # Visite guidée
+    tour_completed: bool = False
+    tour_completed_at: Optional[str] = None
+    
     # Métadonnées
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
@@ -2614,6 +2618,9 @@ class UserPreferencesUpdate(BaseModel):
     ai_llm_model: Optional[str] = None
     # Preference onglet Dashboard Service
     service_dashboard_tab: Optional[str] = None
+    # Visite guidée
+    tour_completed: Optional[bool] = None
+    tour_completed_at: Optional[str] = None
 
 # ==================== SUPPORT HELP REQUEST ====================
 

@@ -32,7 +32,10 @@ Application GMAO (Gestion de Maintenance Assistée par Ordinateur) complète pou
 - Export PDF individuel des OT (jsPDF)
 - Export PDF en masse des OT avec mode sélection
 
-### Session 11 avril 2026 (Suite - Fork 3)
+### Session 12 avril 2026
+- **Fix: Widgets dashboard comptaient les utilisateurs inactifs** — 5 fichiers corrigés : `server.py` (maintenance_techs_count), `service_filter.py` (get_service_team_members), `routes/service_manager.py` (team_count + assignment-targets member_count), `routes/reports.py` (all_users). Filtre `statut != 'inactif'` ajouté partout.
+- **Feature: Persistance visite guidée en base de données** — `GuidedTourContext.jsx` synchronise avec `/api/user-preferences/tour-status` et `/api/user-preferences/tour-completed`. "Terminer" ET "Passer" ET bouton ✕ sauvegardent en DB. La visite ne réapparaît plus sur aucun appareil une fois fermée. Endpoints ajoutés dans `routes/settings.py`, champs `tour_completed`/`tour_completed_at` ajoutés dans `models.py`.
+
 - **Fix: Santé notifications "ERREUR" faux positif avec 0 abonnements** (`routes/notification_health.py`) — `sub_status` passait à `"error"` quand 0 abonnements au lieu de `"warning"`. Maintenant `0 abonnements = warning` (utilisateur n'a pas encore activé les notifications).
 - **Fix SSH: Script diagnostic push** (`/app/backend/tools/diagnostic_push.py`) — ajout auto-install `pymongo` + instructions pour environnement Debian externally-managed (venv + export .env).
 - **Feature: Bannière de réabonnement push automatique** (`PWABanner.jsx`) — nouvelle bannière ambrée qui apparaît après 4s si `permission === 'granted'` mais abonnement inactif/expiré. Bouton "Réactiver les notifications" visible sur mobile comme sur desktop. Rediminuable 24h.

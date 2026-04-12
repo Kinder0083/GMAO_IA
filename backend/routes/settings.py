@@ -328,9 +328,44 @@ async def update_user_preferences(
         logger.error(f"Traceback complet: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Erreur serveur: {str(e)}")
 
+
+@router.get("/user-preferences/tour-status")
+async def get_tour_status(current_user: dict = Depends(get_current_user)):
+    """Retourne si l'utilisateur a déjà complété (ou passé) la visite guidée."""
+    user_id = current_user.get("id")
+    prefs = await db.user_preferences.find_one({"user_id": user_id}, {"_id": 0, "tour_completed": 1})
+    completed = bool(prefs.get("tour_completed")) if prefs else False
+    return {"tour_completed": completed}
+
+
+@router.post("/user-preferences/tour-completed")
+async def mark_tour_completed(current_user: dict = Depends(get_current_user)):
+    """Marque la visite guidée comme terminée pour l'utilisateur (Terminer ou Passer)."""
+    user_id = current_user.get("id")
+    now = datetime.now(timezone.utc).isoformat()
+    await db.user_preferences.update_one(
+        {"user_id": user_id},
+        {"$set": {"tour_completed": True, "tour_completed_at": now, "updated_at": now}},
+        upsert=True
+    )
+    logger.info(f"[TOUR] Visite guidée complétée/passée pour user_id={user_id}")
+    return {"success": True, "tour_completed": True}
+
+
+@router.delete("/user-preferences/tour-completed")
+async def reset_tour_completed(current_user: dict = Depends(get_current_user)):
+    """Réinitialise la visite guidée pour l'utilisateur (depuis Paramètres)."""
+    user_id = current_user.get("id")
+    now = datetime.now(timezone.utc).isoformat()
+    await db.user_preferences.update_one(
+        {"user_id": user_id},
+        {"$set": {"tour_completed": False, "tour_completed_at": None, "updated_at": now}}
+    )
+    return {"success": True, "tour_completed": False}
+
+
 @router.post("/user-preferences/reset")
 async def reset_user_preferences(current_user: dict = Depends(get_current_user)):
-    """Réinitialiser les préférences aux valeurs par défaut"""
     try:
         user_id = current_user.get("id")
         
