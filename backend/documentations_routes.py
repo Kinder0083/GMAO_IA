@@ -1076,7 +1076,9 @@ async def delete_form_template(
             raise HTTPException(status_code=404, detail="Modèle non trouvé")
 
         if existing.get("is_system"):
-            raise HTTPException(status_code=400, detail="Les modèles système ne peuvent pas être supprimés")
+            # Soft-delete autorisé même pour les modèles système (admin uniquement)
+            if not is_admin:
+                raise HTTPException(status_code=403, detail="Seul un administrateur peut supprimer un modèle système")
 
         # Soft-delete : déplacer vers la corbeille
         now = datetime.now(timezone.utc)

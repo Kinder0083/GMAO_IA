@@ -189,26 +189,16 @@ function FormTemplatesPage() {
   };
 
   const handleDelete = (template) => {
-    if (template.is_system) {
-      toast({
-        title: 'Action non autorisée',
-        description: 'Les modèles système ne peuvent pas être supprimés',
-        variant: 'destructive'
-      });
-      return;
-    }
     if (!canDelete('documentations')) {
-      toast({
-        title: 'Permission refusée',
-        description: 'Vous n\'avez pas les droits pour supprimer ce modèle',
-        variant: 'destructive'
-      });
+      toast({ title: 'Permission refusée', description: 'Vous n\'avez pas les droits pour supprimer ce modèle', variant: 'destructive' });
       return;
     }
 
     confirm({
       title: 'Déplacer vers la corbeille',
-      description: `Voulez-vous déplacer "${template.nom}" dans la corbeille ? Il sera définitivement supprimé après le délai de rétention paramétré.`,
+      description: template.is_system
+        ? `"${template.nom}" est un modèle système. Le déplacer dans la corbeille le rendra indisponible. Continuer ?`
+        : `Voulez-vous déplacer "${template.nom}" dans la corbeille ? Il sera définitivement supprimé après le délai de rétention paramétré.`,
       confirmText: 'Déplacer dans la corbeille',
       cancelText: 'Annuler',
       variant: 'destructive',
@@ -218,11 +208,7 @@ function FormTemplatesPage() {
           toast({ title: 'Déplacé dans la corbeille', description: `"${template.nom}" sera définitivement supprimé après le délai de rétention.` });
           loadTemplates();
         } catch (error) {
-          toast({
-            title: 'Erreur',
-            description: 'Erreur lors de la suppression',
-            variant: 'destructive'
-          });
+          toast({ title: 'Erreur', description: error?.response?.data?.detail || 'Erreur lors de la suppression', variant: 'destructive' });
         }
       }
     });
@@ -470,7 +456,7 @@ function FormTemplatesPage() {
                       </div>
                     </div>
                         <div className="flex items-center gap-1">
-                          {canDelete('documentations') && !template.is_system && (
+                          {canDelete('documentations') && (
                             <button
                               data-testid={`btn-delete-template-${template.id}`}
                               onClick={(e) => { e.stopPropagation(); handleDelete(template); }}
@@ -636,7 +622,7 @@ function FormTemplatesPage() {
                   <Button variant="outline" onClick={() => { setViewTemplate(null); handleEdit(viewTemplate); }}>
                     <Edit className="h-4 w-4 mr-1" /> Modifier
                   </Button>
-                  {canDelete('documentations') && !viewTemplate?.is_system && (
+                  {canDelete('documentations') && (
                     <Button variant="destructive" onClick={() => { setViewTemplate(null); handleDelete(viewTemplate); }}>
                       <Trash2 className="h-4 w-4 mr-1" /> Corbeille
                     </Button>
