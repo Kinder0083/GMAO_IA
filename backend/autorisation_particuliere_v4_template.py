@@ -321,7 +321,7 @@ textarea{{
                font-size:8pt;line-height:1.7;">
       MAINT/FE/003<br>
       Version&nbsp;4<br>
-      Date&nbsp;:&nbsp;{_date(date_v)}<br>
+      Date&nbsp;:&nbsp;13/04/2026<br>
       Page&nbsp;1/1
     </td>
   </tr>
