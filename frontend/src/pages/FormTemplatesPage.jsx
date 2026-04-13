@@ -32,6 +32,7 @@ import {
   Printer
 } from 'lucide-react';
 import BonDeTravailPrintDialog from '../components/BonDeTravailPrintDialog';
+import AutorisationParticulierePrintDialog from '../components/AutorisationParticulierePrintDialog';
 import { useToast } from '../hooks/use-toast';
 import { useConfirmDialog } from '../components/ui/confirm-dialog';
 import api, { documentationsAPI } from '../services/api';
@@ -121,6 +122,7 @@ function FormTemplatesPage() {
 
   const [viewTemplate, setViewTemplate] = useState(null);
   const [showBonTravailPrint, setShowBonTravailPrint] = useState(false);
+  const [showAutorisationPrint, setShowAutorisationPrint] = useState(false);
 
   // AI generation state
   const [showAIDialog, setShowAIDialog] = useState(false);
@@ -372,6 +374,16 @@ function FormTemplatesPage() {
                           <Printer className="h-4 w-4" />
                         </button>
                       )}
+                      {template.id === 'default-autorisation' && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setShowAutorisationPrint(true); }}
+                          className="p-1 rounded hover:bg-yellow-100 text-yellow-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                          title="Remplir une autorisation particulière"
+                          data-testid="btn-print-autorisation"
+                        >
+                          <Printer className="h-4 w-4" />
+                        </button>
+                      )}
                       {canDelete('documentations') && (
                         <button
                           data-testid={`btn-delete-template-${template.id}`}
@@ -400,6 +412,11 @@ function FormTemplatesPage() {
                       <span className="text-xs text-blue-600 flex items-center gap-1">
                         <Printer className="h-3 w-3" />
                         Survoler pour imprimer
+                      </span>
+                    ) : template.id === 'default-autorisation' ? (
+                      <span className="text-xs text-yellow-600 flex items-center gap-1">
+                        <Printer className="h-3 w-3" />
+                        Survoler pour remplir
                       </span>
                     ) : (
                       <span className="text-xs text-gray-400">
@@ -779,6 +796,13 @@ function FormTemplatesPage() {
       <BonDeTravailPrintDialog
         open={showBonTravailPrint}
         onClose={() => setShowBonTravailPrint(false)}
+      />
+
+      {/* Dialog Autorisation Particulière MAINT/FE/003 V4 */}
+      <AutorisationParticulierePrintDialog
+        open={showAutorisationPrint}
+        onClose={() => setShowAutorisationPrint(false)}
+        poleId={null}
       />
     </div>
   );

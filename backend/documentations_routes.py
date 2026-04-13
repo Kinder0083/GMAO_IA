@@ -1568,6 +1568,81 @@ async def generate_bon_de_travail_pdf_endpoint(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ==================== AUTORISATION PARTICULIÈRE V4 ====================
+
+@router.post("/autorisations-particulieres/save")
+async def save_autorisation_v4(
+    payload: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Sauvegarde une Autorisation Particulière au format MAINT/FE/003 V4.
+    Compatible avec l'explorateur documentations (pole_id obligatoire).
+    """
+    import uuid as _uuid
+    try:
+        pole_id = payload.get("pole_id")
+        if not pole_id:
+            raise HTTPException(status_code=400, detail="pole_id est requis")
+
+        auto_id = payload.get("id") or str(_uuid.uuid4())
+        now = datetime.now(timezone.utc).isoformat()
+
+        # Titre automatique basé sur le contenu
+        titre = (
+            payload.get("titre")
+            or (payload.get("detail_travaux", "")[:50] if payload.get("detail_travaux") else None)
+            or "Autorisation particulière"
+        )
+
+        doc = {
+            "id": auto_id,
+            "pole_id": pole_id,
+            "form_version": 4,
+            "titre": titre,
+            "type_autorisation": "MAINT/FE/003 V4",
+            "lieu_travaux": payload.get("lieu_intervention", ""),
+            "statut": payload.get("statut", "BROUILLON"),
+            "form_data": {k: v for k, v in payload.items() if k not in ("pole_id", "id", "titre")},
+            "created_at": payload.get("created_at", now),
+            "updated_at": now,
+            "created_by": current_user.get("id"),
+        }
+
+        existing = await db.autorisations_particulieres.find_one({"id": auto_id})
+        if existing:
+            await db.autorisations_particulieres.update_one({"id": auto_id}, {"$set": doc})
+        else:
+            await db.autorisations_particulieres.insert_one(doc)
+
+        doc.pop("_id", None)
+        return {"id": auto_id, "status": "ok", "titre": doc["titre"]}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erreur sauvegarde autorisation v4: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/autorisations-particulieres/generate-html")
+async def generate_autorisation_v4_html_endpoint(
+    data: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Génère un HTML A4 pour l'Autorisation Particulière MAINT/FE/003 V4.
+    Accepte un dict avec tous les champs du formulaire.
+    Fonctionne pour un formulaire vierge (dict vide) ou pré-rempli.
+    """
+    try:
+        from autorisation_particuliere_v4_template import generate_autorisation_v4_html
+        html_content = generate_autorisation_v4_html(data)
+        return HTMLResponse(content=html_content)
+    except Exception as e:
+        logger.error(f"Erreur génération HTML autorisation v4: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/custom-forms/{form_id}/pdf")
 async def generate_custom_form_pdf(
     form_id: str,

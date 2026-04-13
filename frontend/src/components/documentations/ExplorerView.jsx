@@ -18,6 +18,7 @@ import { useConfirmDialog } from '../ui/confirm-dialog';
 import { getBackendURL } from '../../utils/config';
 import CustomFormFiller from '../CustomFormFiller';
 import BonDeTravailPrintDialog from '../BonDeTravailPrintDialog';
+import AutorisationParticulierePrintDialog from '../AutorisationParticulierePrintDialog';
 
 const getFileIcon = (type) => {
   if (type?.includes('pdf')) return { icon: FileText, color: '#ef4444' };
@@ -61,6 +62,9 @@ export default function ExplorerView({ poles, onRefresh }) {
 
   // Nouveau Bon de Travail V2 (dialog intégré)
   const [showBonTravailDialog, setShowBonTravailDialog] = useState(false);
+
+  // Autorisation Particulière V4 (dialog intégré)
+  const [showAutorisationDialog, setShowAutorisationDialog] = useState(false);
 
   // Share email form
   const [emailForm, setEmailForm] = useState({ recipient: '', subject: '', message: '' });
@@ -627,7 +631,8 @@ export default function ExplorerView({ poles, onRefresh }) {
               // Nouveau : ouvre le dialog MAINT/FE/004 V2 (remplace l'ancien formulaire)
               setShowBonTravailDialog(true);
             } else if (tpl.type === 'AUTORISATION') {
-              navigate('/autorisations-particulieres/new');
+              // Nouveau : ouvre le dialog MAINT/FE/003 V4 (remplace l'ancienne navigation)
+              setShowAutorisationDialog(true);
             } else {
               // Template custom : ouvrir le CustomFormFiller
               setCustomFormTemplate(tpl);
@@ -646,6 +651,14 @@ export default function ExplorerView({ poles, onRefresh }) {
         poleId={currentPoleId}
         prefillData={editBonData}
         onSaved={() => { setShowBonTravailDialog(false); setEditBonData(null); if (currentPoleId) loadExplorerContents(currentPoleId, currentFolderId); }}
+      />
+
+      {/* Dialog Autorisation Particulière MAINT/FE/003 V4 */}
+      <AutorisationParticulierePrintDialog
+        open={showAutorisationDialog}
+        onClose={() => setShowAutorisationDialog(false)}
+        poleId={currentPoleId}
+        onSaved={() => { setShowAutorisationDialog(false); if (currentPoleId) loadExplorerContents(currentPoleId, currentFolderId); }}
       />
 
       {/* New Folder Dialog */}

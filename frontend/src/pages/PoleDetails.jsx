@@ -21,6 +21,7 @@ import { formatErrorMessage } from '../utils/errorFormatter';
 import api from '../services/api';
 import CustomFormFiller from '../components/CustomFormFiller';
 import BonDeTravailPrintDialog from '../components/BonDeTravailPrintDialog';
+import AutorisationParticulierePrintDialog from '../components/AutorisationParticulierePrintDialog';
 
 // Petit composant item de menu contextuel
 const CtxItem = ({ icon: Icon, label, onClick, destructive }) => (
@@ -81,6 +82,10 @@ function PoleDetails() {
   // Dialog Bon de Travail MAINT/FE/004 V2
   const [showBonTravailDialog, setShowBonTravailDialog] = useState(false);
   const [editBonData, setEditBonData] = useState(null);
+
+  // Dialog Autorisation Particulière MAINT/FE/003 V4
+  const [showAutorisationDialog, setShowAutorisationDialog] = useState(false);
+  const [editAutoData, setEditAutoData] = useState(null);
 
   // Menu contextuel clic-droit (documents)
   const [ctxMenu, setCtxMenu] = useState(null);
@@ -324,7 +329,8 @@ function PoleDetails() {
       setEditBonData(null);
       setShowBonTravailDialog(true);
     } else if (selectedFormType === 'AUTORISATION' || template?.type === 'AUTORISATION') {
-      navigate('/autorisations-particulieres/new', { state: { fromPoleId: poleId } });
+      setEditAutoData(null);
+      setShowAutorisationDialog(true);
     }
   };
 
@@ -861,7 +867,11 @@ function PoleDetails() {
                                   <Button
                                     variant="ghost"
                                     size="sm"
-                                    onClick={() => navigate(`/autorisations-particulieres/edit/${auto.id}`)}
+                                    onClick={() => {
+                                      const prefill = auto.form_data || auto;
+                                      setEditAutoData({ id: auto.id, ...prefill });
+                                      setShowAutorisationDialog(true);
+                                    }}
                                   >
                                     <Edit className="h-4 w-4" />
                                   </Button>
@@ -1250,7 +1260,12 @@ function PoleDetails() {
 
           {ctxMenu.type === 'autorisation' && (
             <>
-              <CtxItem icon={Eye} label="Voir l'autorisation" onClick={() => { navigate(`/autorisations-particulieres/edit/${ctxMenu.item.id}`); setCtxMenu(null); }} />
+              <CtxItem icon={Eye} label="Voir / Modifier l'autorisation" onClick={() => {
+                const prefill = ctxMenu.item.form_data || ctxMenu.item;
+                setEditAutoData({ id: ctxMenu.item.id, ...prefill });
+                setShowAutorisationDialog(true);
+                setCtxMenu(null);
+              }} />
               <CtxItem icon={Printer} label="Imprimer" onClick={() => { handlePrint('autorisation', ctxMenu.item.id); setCtxMenu(null); }} />
               <div className="border-t border-gray-100 my-1" />
               <CtxItem icon={Trash2} label="Supprimer" onClick={() => { handleDeleteAutorisation(ctxMenu.item.id); setCtxMenu(null); }} destructive />
@@ -1297,6 +1312,15 @@ function PoleDetails() {
         poleId={poleId}
         prefillData={editBonData}
         onSaved={() => { setShowBonTravailDialog(false); setEditBonData(null); loadData(); }}
+      />
+
+      {/* Dialog Autorisation Particulière MAINT/FE/003 V4 */}
+      <AutorisationParticulierePrintDialog
+        open={showAutorisationDialog}
+        onClose={() => { setShowAutorisationDialog(false); setEditAutoData(null); }}
+        poleId={poleId}
+        prefillData={editAutoData}
+        onSaved={() => { setShowAutorisationDialog(false); setEditAutoData(null); loadData(); }}
       />
 
       <ConfirmDialog />
