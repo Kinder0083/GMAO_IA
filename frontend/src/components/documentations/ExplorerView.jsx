@@ -246,6 +246,7 @@ export default function ExplorerView({ poles, onRefresh }) {
     try {
       if (renameDialog.type === 'folder') await documentationsAPI.updateFolder(renameDialog.id, { name: renameName.trim() });
       else if (renameDialog.type === 'document') await documentationsAPI.updateDocument(renameDialog.id, { titre: renameName.trim() });
+      else if (renameDialog.type === 'bon') await documentationsAPI.updateBonTravail(renameDialog.id, { titre: renameName.trim() });
       setRenameDialog(null); setRenameName('');
       loadExplorerContents(currentPoleId, currentFolderId);
       toast({ title: 'Renommé avec succès' });
@@ -255,14 +256,16 @@ export default function ExplorerView({ poles, onRefresh }) {
   };
 
   const handleDelete = (item, itemType) => {
+    const label = itemType === 'folder' ? 'le dossier' : itemType === 'bon' ? 'le bon de travail' : 'le document';
     confirm({
-      title: itemType === 'folder' ? 'Supprimer le dossier' : 'Supprimer le document',
+      title: `Supprimer ${label}`,
       description: `Êtes-vous sûr de vouloir supprimer "${item.name || item.titre || item.fichier_nom}" ?`,
       confirmText: 'Supprimer', cancelText: 'Annuler', variant: 'destructive',
       onConfirm: async () => {
         try {
           if (itemType === 'folder') await documentationsAPI.deleteFolder(item.id);
           else if (itemType === 'document') await documentationsAPI.deleteDocument(item.id);
+          else if (itemType === 'bon') await documentationsAPI.deleteBonTravail(item.id);
           loadExplorerContents(currentPoleId, currentFolderId);
           toast({ title: 'Supprimé' });
         } catch {
@@ -1034,6 +1037,37 @@ function FullContextMenu({
         <>
           <MenuItem icon={Eye} label="Voir / Modifier le bon" onClick={() => onOpen(item, 'bon')} />
           <MenuItem icon={Printer} label="Imprimer" onClick={() => onPrint(item, 'bon')} />
+          <Separator />
+          <MenuItem icon={Copy} label="Copier" onClick={() => onCopy(item, 'bon')} />
+          <MenuItem icon={Scissors} label="Couper" onClick={() => onCut(item, 'bon')} />
+          {clipboard && <MenuItem icon={ClipboardPaste} label="Coller" onClick={onPaste} />}
+          <Separator />
+          <MenuItem icon={Send} label="Envoyer vers..." children={
+            poles?.filter(p => p.id !== currentPoleId).map(pole => (
+              <button key={pole.id} className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-100"
+                onClick={() => onSendTo(item, 'bon')}>
+                <Folder className="h-4 w-4" style={{ color: pole.couleur }} />{pole.nom}
+              </button>
+            ))
+          } />
+          <MenuItem icon={Mail} label="Partager par email" onClick={() => {
+            const mailto = `mailto:?subject=Bon de travail: ${item.titre || 'Bon de travail'}&body=Veuillez consulter le bon de travail "${item.titre || ''}"`;
+            window.location.href = mailto;
+            onClose();
+          }} />
+          <MenuItem icon={Send} label="Partager par FSAO" onClick={() => onShareFSAO(item)} />
+          <Separator />
+          {isAdmin && (
+            <>
+              <MenuItem icon={Lock} label={item.hidden_for_external ? 'Visible aux Services Ext.' : 'Masquer aux Services Ext.'}
+                onClick={() => onToggleHiddenExternal(item, 'bon')} />
+              <MenuItem icon={UserX} label={item.hidden_for_users ? 'Visible aux Utilisateurs' : 'Masquer aux Utilisateurs'}
+                onClick={() => onToggleHiddenUsers(item, 'bon')} />
+              <Separator />
+            </>
+          )}
+          <MenuItem icon={Edit} label="Renommer" onClick={() => onRename(item, 'bon')} />
+          {canDelete && <MenuItem icon={Trash2} label="Supprimer" onClick={() => onDelete(item, 'bon')} destructive />}
         </>
       ) : null}
     </div>

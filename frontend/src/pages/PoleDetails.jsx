@@ -12,7 +12,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../com
 import {
   ArrowLeft, Plus, Upload, FileText, Download, Trash2, Edit, File,
   FileSpreadsheet, FileImage, FileVideo, Printer, Eye, Shield, 
-  ChevronDown, ChevronRight, Search, FolderOpen, ClipboardList
+  ChevronDown, ChevronRight, Search, FolderOpen, ClipboardList, Mail
 } from 'lucide-react';
 import { documentationsAPI, autorisationsAPI, rolesAPI } from '../services/api';
 import { useToast } from '../hooks/use-toast';
@@ -21,6 +21,17 @@ import { formatErrorMessage } from '../utils/errorFormatter';
 import api from '../services/api';
 import CustomFormFiller from '../components/CustomFormFiller';
 import BonDeTravailPrintDialog from '../components/BonDeTravailPrintDialog';
+
+// Petit composant item de menu contextuel
+const CtxItem = ({ icon: Icon, label, onClick, destructive }) => (
+  <button
+    className={`w-full flex items-center gap-2.5 px-3 py-2 text-sm transition-colors ${destructive ? 'text-red-600 hover:bg-red-50' : 'text-gray-700 hover:bg-gray-100'}`}
+    onClick={onClick}
+  >
+    <Icon className="h-4 w-4 flex-shrink-0" />
+    {label}
+  </button>
+);
 
 const FILE_ICONS = {
   'application/pdf': FileText,
@@ -73,6 +84,9 @@ function PoleDetails() {
 
   // Menu contextuel clic-droit (documents)
   const [ctxMenu, setCtxMenu] = useState(null);
+  // Renommer
+  const [renameDialog, setRenameDialog] = useState(null);
+  const [renameName, setRenameName] = useState('');
 
   // Fermer le menu contextuel sur clic gauche ou scroll
   useEffect(() => {
@@ -167,9 +181,58 @@ function PoleDetails() {
     if (!canEdit(doc)) return;
     e.preventDefault();
     e.stopPropagation();
-    const x = Math.min(e.clientX, window.innerWidth - 180);
-    const y = Math.min(e.clientY, window.innerHeight - 60);
+    const x = Math.min(e.clientX, window.innerWidth - 200);
+    const y = Math.min(e.clientY, window.innerHeight - 220);
     setCtxMenu({ x, y, item: doc, type: 'document' });
+  };
+
+  // Handler clic-droit — bons de travail
+  const handleBonCtxMenu = (e, bon) => {
+    if (!canEdit(bon)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const x = Math.min(e.clientX, window.innerWidth - 200);
+    const y = Math.min(e.clientY, window.innerHeight - 180);
+    setCtxMenu({ x, y, item: bon, type: 'bon' });
+  };
+
+  // Handler clic-droit — autorisations
+  const handleAutoCtxMenu = (e, auto) => {
+    if (!canEdit(auto)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const x = Math.min(e.clientX, window.innerWidth - 200);
+    const y = Math.min(e.clientY, window.innerHeight - 140);
+    setCtxMenu({ x, y, item: auto, type: 'autorisation' });
+  };
+
+  // Handler clic-droit — formulaires personnalisés
+  const handleFormCtxMenu = (e, form) => {
+    if (!canEdit(form)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const x = Math.min(e.clientX, window.innerWidth - 200);
+    const y = Math.min(e.clientY, window.innerHeight - 140);
+    setCtxMenu({ x, y, item: form, type: 'form' });
+  };
+
+  // Renommer un document ou un bon
+  const handleRenameItem = async () => {
+    if (!renameDialog || !renameName.trim()) return;
+    try {
+      if (renameDialog.type === 'document') {
+        await documentationsAPI.updateDocument(renameDialog.id, { titre: renameName.trim() });
+      } else if (renameDialog.type === 'bon') {
+        await documentationsAPI.updateBonTravail(renameDialog.id, { titre: renameName.trim() });
+      }
+      toast({ title: 'Renommé avec succès' });
+      loadData();
+    } catch {
+      toast({ title: 'Erreur', description: 'Impossible de renommer', variant: 'destructive' });
+    } finally {
+      setRenameDialog(null);
+      setRenameName('');
+    }
   };
 
   const isAdmin = () => currentUser?.role === 'ADMIN';
@@ -661,7 +724,8 @@ function PoleDetails() {
                     {filteredBons.map((bon) => (
                       <div
                         key={bon.id}
-                        className="flex items-center gap-3 p-3 pl-16 hover:bg-blue-100 transition-colors"
+                        className="flex items-center gap-3 p-3 pl-16 hover:bg-blue-100 transition-colors cursor-default"
+                        onContextMenu={(e) => handleBonCtxMenu(e, bon)}
                       >
                         <FileText className="h-5 w-5 text-blue-600 flex-shrink-0" />
                         <div className="flex-1 min-w-0">
@@ -776,7 +840,8 @@ function PoleDetails() {
                     {filteredAutorisations.map((auto) => (
                       <div
                         key={auto.id}
-                        className="flex items-center gap-3 p-3 pl-16 hover:bg-yellow-100 transition-colors"
+                        className="flex items-center gap-3 p-3 pl-16 hover:bg-yellow-100 transition-colors cursor-default"
+                        onContextMenu={(e) => handleAutoCtxMenu(e, auto)}
                       >
                         <Shield className="h-5 w-5 text-yellow-600 flex-shrink-0" />
                         <div className="flex-1 min-w-0">
@@ -879,7 +944,8 @@ function PoleDetails() {
                     {group.forms.map((form) => (
                       <div
                         key={form.id}
-                        className="flex items-center gap-3 p-3 pl-16 hover:bg-purple-100 transition-colors"
+                        className="flex items-center gap-3 p-3 pl-16 hover:bg-purple-100 transition-colors cursor-default"
+                        onContextMenu={(e) => handleFormCtxMenu(e, form)}
                       >
                         <ClipboardList className="h-5 w-5 text-purple-600 flex-shrink-0" />
                         <div className="flex-1 min-w-0">
@@ -1144,29 +1210,85 @@ function PoleDetails() {
         onSaved={() => loadData()}
       />
 
-      {/* Menu contextuel clic-droit — documents */}
+      {/* Menu contextuel clic-droit — documents, bons, autorisations, formulaires */}
       {ctxMenu && (
         <div
           style={{ position: 'fixed', top: ctxMenu.y, left: ctxMenu.x, zIndex: 9999 }}
-          className="bg-white rounded-lg shadow-xl border border-gray-200 py-1 min-w-[180px] select-none"
+          className="bg-white rounded-lg shadow-xl border border-gray-200 py-1 min-w-[210px] select-none"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="px-3 py-1.5 text-xs font-semibold text-gray-400 uppercase tracking-wide border-b border-gray-100 mb-1 truncate max-w-[180px]">
-            {ctxMenu.item?.fichier_nom || ctxMenu.item?.titre || 'Document'}
+          {/* En-tête : nom de l'élément */}
+          <div className="px-3 py-1.5 text-xs font-semibold text-gray-400 uppercase tracking-wide border-b border-gray-100 mb-1 truncate max-w-[210px]">
+            {ctxMenu.item?.fichier_nom || ctxMenu.item?.titre || ctxMenu.item?.numero || 'Élément'}
           </div>
-          <button
-            data-testid="ctx-menu-delete-doc"
-            className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
-            onClick={() => {
-              handleDeleteDocument(ctxMenu.item.id);
-              setCtxMenu(null);
-            }}
-          >
-            <Trash2 className="h-4 w-4 flex-shrink-0" />
-            Supprimer
-          </button>
+
+          {/* Actions selon le type */}
+          {ctxMenu.type === 'document' && (
+            <>
+              <CtxItem icon={Eye} label="Visualiser" onClick={() => { window.open(`${process.env.REACT_APP_BACKEND_URL}/api/documentations/documents/${ctxMenu.item.id}/view?token=${localStorage.getItem('token')}`, '_blank'); setCtxMenu(null); }} />
+              <CtxItem icon={Download} label="Télécharger" onClick={() => { window.open(`${process.env.REACT_APP_BACKEND_URL}/api/documentations/documents/${ctxMenu.item.id}/download?token=${localStorage.getItem('token')}`, '_blank'); setCtxMenu(null); }} />
+              <CtxItem icon={Printer} label="Imprimer" onClick={() => { handlePrint('document', ctxMenu.item.id); setCtxMenu(null); }} />
+              <div className="border-t border-gray-100 my-1" />
+              <CtxItem icon={Mail} label="Partager par email" onClick={() => { window.location.href = `mailto:?subject=Document: ${ctxMenu.item.fichier_nom || ctxMenu.item.titre || 'Document'}&body=Document disponible dans le système FSAO Iris.`; setCtxMenu(null); }} />
+              <div className="border-t border-gray-100 my-1" />
+              <CtxItem icon={Edit} label="Renommer" onClick={() => { setRenameName(ctxMenu.item.fichier_nom || ctxMenu.item.titre || ''); setRenameDialog({ id: ctxMenu.item.id, type: 'document' }); setCtxMenu(null); }} />
+              <CtxItem icon={Trash2} label="Supprimer" onClick={() => { handleDeleteDocument(ctxMenu.item.id); setCtxMenu(null); }} destructive />
+            </>
+          )}
+
+          {ctxMenu.type === 'bon' && (
+            <>
+              <CtxItem icon={Eye} label="Voir / Modifier le bon" onClick={() => { const prefill = ctxMenu.item.form_data || { localisation: ctxMenu.item.localisation_ligne || '', description: ctxMenu.item.description_travaux || '', intervenants: ctxMenu.item.nom_intervenants || '' }; setEditBonData({ id: ctxMenu.item.id, ...prefill }); setShowBonTravailDialog(true); setCtxMenu(null); }} />
+              <CtxItem icon={Printer} label="Imprimer" onClick={() => { handlePrint('bon', ctxMenu.item.id); setCtxMenu(null); }} />
+              <div className="border-t border-gray-100 my-1" />
+              <CtxItem icon={Mail} label="Partager par email" onClick={() => { window.location.href = `mailto:?subject=Bon de travail: ${ctxMenu.item.titre || 'Bon de travail'}&body=Bon de travail disponible dans le système FSAO Iris.`; setCtxMenu(null); }} />
+              <div className="border-t border-gray-100 my-1" />
+              <CtxItem icon={Edit} label="Renommer" onClick={() => { setRenameName(ctxMenu.item.titre || ''); setRenameDialog({ id: ctxMenu.item.id, type: 'bon' }); setCtxMenu(null); }} />
+              <CtxItem icon={Trash2} label="Supprimer" onClick={() => { handleDeleteBon(ctxMenu.item.id); setCtxMenu(null); }} destructive />
+            </>
+          )}
+
+          {ctxMenu.type === 'autorisation' && (
+            <>
+              <CtxItem icon={Eye} label="Voir l'autorisation" onClick={() => { navigate(`/autorisations-particulieres/edit/${ctxMenu.item.id}`); setCtxMenu(null); }} />
+              <CtxItem icon={Printer} label="Imprimer" onClick={() => { handlePrint('autorisation', ctxMenu.item.id); setCtxMenu(null); }} />
+              <div className="border-t border-gray-100 my-1" />
+              <CtxItem icon={Trash2} label="Supprimer" onClick={() => { handleDeleteAutorisation(ctxMenu.item.id); setCtxMenu(null); }} destructive />
+            </>
+          )}
+
+          {ctxMenu.type === 'form' && (
+            <>
+              <CtxItem icon={Eye} label="Voir le formulaire" onClick={() => { handleEditCustomForm(ctxMenu.item); setCtxMenu(null); }} />
+              <div className="border-t border-gray-100 my-1" />
+              <CtxItem icon={Trash2} label="Supprimer" onClick={() => { handleDeleteCustomForm(ctxMenu.item.id); setCtxMenu(null); }} destructive />
+            </>
+          )}
         </div>
       )}
+
+      {/* Dialog de renommage */}
+      <Dialog open={!!renameDialog} onOpenChange={() => setRenameDialog(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Renommer</DialogTitle>
+          </DialogHeader>
+          <div className="py-2">
+            <Label>Nouveau nom</Label>
+            <Input
+              value={renameName}
+              onChange={(e) => setRenameName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleRenameItem()}
+              autoFocus
+              className="mt-1"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRenameDialog(null)}>Annuler</Button>
+            <Button onClick={handleRenameItem} disabled={!renameName.trim()}>Renommer</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Dialog Bon de Travail MAINT/FE/004 V2 */}
       <BonDeTravailPrintDialog

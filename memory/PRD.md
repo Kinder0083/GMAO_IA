@@ -33,6 +33,10 @@ Application GMAO (Gestion de Maintenance Assistée par Ordinateur) complète pou
 - Export PDF individuel des OT (jsPDF)
 - Export PDF en masse des OT avec mode sélection
 
+### Session 13 avril 2026 — Menu contextuel clic-droit complet (Documentations)
+- **Feature: Menu clic-droit complet** pour tous les éléments dans PoleDetails.jsx : Documents (Visualiser, Télécharger, Imprimer, Partager par email, Renommer, Supprimer), Bons de travail (Voir/Modifier, Imprimer, Partager par email, Renommer, Supprimer), Autorisations (Voir, Imprimer, Supprimer), Formulaires (Voir, Supprimer). Dialog de renommage intégré. Accès restreint aux admins/créateurs.
+- **ExplorerView**: Bons de travail ont maintenant le menu complet identique aux documents (Copier, Couper, Envoyer vers, Partager, Masquer, Renommer, Supprimer). `handleDelete` et `handleRename` étendus pour le type 'bon'. `canDelete` restreint admins/créateurs.
+
 ### Session 13 avril 2026 — Clic-droit suppression (Documentations)
 - **Feature: Menu contextuel clic-droit** sur les documents dans `PoleDetails.jsx` — seulement visible pour admins et créateurs (`canEdit`), affiche le nom du fichier + bouton "Supprimer" rouge → ouvre la boîte de dialogue de confirmation existante.
 - **Fix ExplorerView**: option "Supprimer" du menu clic-droit désormais restreinte aux admins et créateurs du document/dossier (`canDelete = isAdmin || created_by === currentUser.id`).
