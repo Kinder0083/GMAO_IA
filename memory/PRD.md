@@ -33,6 +33,9 @@ Application GMAO (Gestion de Maintenance Assistée par Ordinateur) complète pou
 - Export PDF individuel des OT (jsPDF)
 - Export PDF en masse des OT avec mode sélection
 
+### Session 13 avril 2026 — Suppression modèles formulaires vers corbeille
+- **Feature: Suppression soft** des modèles de formulaires personnalisés. Icône Trash2 au survol de la carte (côté Eye icon), visible uniquement pour admin ou `canDelete('documentations')`. Les modèles système ne peuvent pas être supprimés. Dialog de confirmation "Déplacer dans la corbeille". Le modèle disparaît de la liste et apparaît dans la page Corbeille avec le label "Modèle de formulaire" jusqu'à l'expiration du délai de rétention configuré. Backend: soft-delete (`deleted_at`) + `form_templates` ajouté à `TRASH_COLLECTIONS`. Permission étendue : admin OU `documentations.delete`.
+
 ### Session 13 avril 2026 — Menu contextuel clic-droit complet (Documentations)
 - **Feature: Menu clic-droit complet** pour tous les éléments dans PoleDetails.jsx : Documents (Visualiser, Télécharger, Imprimer, Partager par email, Renommer, Supprimer), Bons de travail (Voir/Modifier, Imprimer, Partager par email, Renommer, Supprimer), Autorisations (Voir, Imprimer, Supprimer), Formulaires (Voir, Supprimer). Dialog de renommage intégré. Accès restreint aux admins/créateurs.
 - **ExplorerView**: Bons de travail ont maintenant le menu complet identique aux documents (Copier, Couper, Envoyer vers, Partager, Masquer, Renommer, Supprimer). `handleDelete` et `handleRename` étendus pour le type 'bon'. `canDelete` restreint admins/créateurs.

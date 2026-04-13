@@ -40,6 +40,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import { usePermissions } from '../hooks/usePermissions';
 
 // Types de formulaires disponibles (système)
 const SYSTEM_FORM_TYPES = [
@@ -77,6 +78,7 @@ function FormTemplatesPage() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { confirm, ConfirmDialog } = useConfirmDialog();
+  const { canDelete } = usePermissions();
   
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -195,17 +197,25 @@ function FormTemplatesPage() {
       });
       return;
     }
-    
+    if (!canDelete('documentations')) {
+      toast({
+        title: 'Permission refusée',
+        description: 'Vous n\'avez pas les droits pour supprimer ce modèle',
+        variant: 'destructive'
+      });
+      return;
+    }
+
     confirm({
-      title: 'Supprimer le modèle',
-      description: `Êtes-vous sûr de vouloir supprimer "${template.nom}" ? Les formulaires déjà remplis ne seront pas affectés.`,
-      confirmText: 'Supprimer',
+      title: 'Déplacer vers la corbeille',
+      description: `Voulez-vous déplacer "${template.nom}" dans la corbeille ? Il sera définitivement supprimé après le délai de rétention paramétré.`,
+      confirmText: 'Déplacer dans la corbeille',
       cancelText: 'Annuler',
       variant: 'destructive',
       onConfirm: async () => {
         try {
           await api.delete(`/documentations/form-templates/${template.id}`);
-          toast({ title: 'Succès', description: 'Modèle supprimé' });
+          toast({ title: 'Déplacé dans la corbeille', description: `"${template.nom}" sera définitivement supprimé après le délai de rétention.` });
           loadTemplates();
         } catch (error) {
           toast({
@@ -459,7 +469,19 @@ function FormTemplatesPage() {
                         </div>
                       </div>
                     </div>
-                    <Eye className="h-4 w-4 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        <div className="flex items-center gap-1">
+                          {canDelete('documentations') && !template.is_system && (
+                            <button
+                              data-testid={`btn-delete-template-${template.id}`}
+                              onClick={(e) => { e.stopPropagation(); handleDelete(template); }}
+                              className="p-1 rounded hover:bg-red-100 text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                              title="Déplacer dans la corbeille"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )}
+                          <Eye className="h-4 w-4 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </div>
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -524,6 +546,7 @@ function FormTemplatesPage() {
                           <p className="font-medium">Modifier le modèle</p>
                         </TooltipContent>
                       </Tooltip>
+                      {canDelete('documentations') && (
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Button
@@ -539,6 +562,7 @@ function FormTemplatesPage() {
                           <p className="font-medium">Supprimer le modèle</p>
                         </TooltipContent>
                       </Tooltip>
+                      )}
                     </div>
                   </TooltipProvider>
                 </CardContent>
@@ -612,9 +636,11 @@ function FormTemplatesPage() {
                   <Button variant="outline" onClick={() => { setViewTemplate(null); handleEdit(viewTemplate); }}>
                     <Edit className="h-4 w-4 mr-1" /> Modifier
                   </Button>
-                  <Button variant="destructive" onClick={() => { setViewTemplate(null); handleDelete(viewTemplate); }}>
-                    <Trash2 className="h-4 w-4 mr-1" /> Supprimer
-                  </Button>
+                  {canDelete('documentations') && !viewTemplate?.is_system && (
+                    <Button variant="destructive" onClick={() => { setViewTemplate(null); handleDelete(viewTemplate); }}>
+                      <Trash2 className="h-4 w-4 mr-1" /> Corbeille
+                    </Button>
+                  )}
                 </DialogFooter>
               )}
             </div>

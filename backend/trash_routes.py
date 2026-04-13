@@ -19,6 +19,7 @@ TRASH_COLLECTIONS = {
     "presqu_accident_items": {"label": "Presqu'accident", "name_field": "titre"},
     "users": {"label": "Utilisateur", "name_field": "email"},
     "surveillance_items": {"label": "Plan de surveillance", "name_field": "titre"},
+    "form_templates": {"label": "Modèle de formulaire", "name_field": "nom"},
 }
 
 class TrashSettingsUpdate(BaseModel):

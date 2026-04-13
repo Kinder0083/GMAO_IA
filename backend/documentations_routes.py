@@ -899,9 +899,13 @@ async def send_bon_email(
 
 @router.get("/form-templates")
 async def get_form_templates(current_user: dict = Depends(get_current_user)):
-    """Récupérer tous les modèles de formulaires"""
+    """Récupérer tous les modèles de formulaires (hors corbeille)"""
     try:
-        templates = await db.form_templates.find({}, {"_id": 0}).to_list(length=None)
+        # Exclure les templates en corbeille (soft-deleted)
+        templates = await db.form_templates.find(
+            {"$or": [{"deleted_at": None}, {"deleted_at": {"$exists": False}}]},
+            {"_id": 0}
+        ).to_list(length=None)
         
         # Templates système par défaut avec leurs champs
         BON_TRAVAIL_FIELDS = [
@@ -1056,20 +1060,35 @@ async def update_form_template(
 @router.delete("/form-templates/{template_id}", response_model=SuccessResponse)
 async def delete_form_template(
     template_id: str,
-    current_user: dict = Depends(get_current_admin_user)
+    current_user: dict = Depends(get_current_user)
 ):
-    """Supprimer un modèle de formulaire (admin uniquement, non-système)"""
+    """Supprimer un modèle de formulaire vers la corbeille (admin ou permission suppression documentations)"""
     try:
+        # Vérification des droits : admin ou permission delete sur documentations
+        is_admin = current_user.get("role") == "ADMIN"
+        perms = current_user.get("permissions", {})
+        can_delete = is_admin or perms.get("documentations", {}).get("delete", False)
+        if not can_delete:
+            raise HTTPException(status_code=403, detail="Permission refusée")
+
         existing = await db.form_templates.find_one({"id": template_id})
         if not existing:
             raise HTTPException(status_code=404, detail="Modèle non trouvé")
-        
+
         if existing.get("is_system"):
             raise HTTPException(status_code=400, detail="Les modèles système ne peuvent pas être supprimés")
-        
-        await db.form_templates.delete_one({"id": template_id})
-        
-        return {"success": True, "message": "Modèle supprimé"}
+
+        # Soft-delete : déplacer vers la corbeille
+        now = datetime.now(timezone.utc)
+        await db.form_templates.update_one(
+            {"id": template_id},
+            {"$set": {
+                "deleted_at": now,
+                "deleted_by": current_user.get("id"),
+            }}
+        )
+
+        return {"success": True, "message": "Modèle déplacé dans la corbeille"}
     except HTTPException:
         raise
     except Exception as e:
