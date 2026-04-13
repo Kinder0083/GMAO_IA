@@ -14,6 +14,7 @@ from models import AutorisationParticuliere, AutorisationParticuliereCreate, Aut
 from dependencies import get_current_user, get_current_user_optional
 from auth import decode_access_token
 from autorisation_template import generate_autorisation_html
+from autorisation_particuliere_v4_template import generate_autorisation_v4_html
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/autorisations", tags=["autorisations"])
@@ -222,8 +223,17 @@ async def generate_autorisation_pdf(
         if not autorisation:
             raise HTTPException(status_code=404, detail="Autorisation non trouvée")
         
-        # Générer le HTML avec le template
-        html_content = generate_autorisation_html(autorisation)
+        # Sélectionner le bon template selon la version
+        if autorisation.get("form_version") == 4 and autorisation.get("form_data"):
+            # Nouvelle autorisation V4 — utiliser le template MAINT/FE/003 V4
+            html_content = generate_autorisation_v4_html(autorisation["form_data"])
+        elif autorisation.get("form_version") == 4:
+            # V4 sans form_data (format de sauvegarde direct)
+            clean = {k: v for k, v in autorisation.items() if k not in ("_id", "id", "pole_id", "form_version", "created_at", "updated_at", "created_by", "titre", "statut")}
+            html_content = generate_autorisation_v4_html(clean)
+        else:
+            # Ancienne autorisation — conserver l'ancien template
+            html_content = generate_autorisation_html(autorisation)
         
         return HTMLResponse(content=html_content)
     except HTTPException:
