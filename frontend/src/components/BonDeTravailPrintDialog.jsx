@@ -75,10 +75,11 @@ function CbRow({ id, label, checked, onChange, withText, textValue, textPlacehol
 }
 
 // ─── Composant principal ──────────────────────────────────────────────────────
-export default function BonDeTravailPrintDialog({ open, onClose, prefillData = null }) {
+export default function BonDeTravailPrintDialog({ open, onClose, prefillData = null, poleId = null, onSaved = null }) {
   const { toast } = useToast();
   const [data, setData] = useState(() => prefillData ? { ...EMPTY_DATA, ...prefillData } : { ...EMPTY_DATA });
   const [printing, setPrinting] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const set = useCallback((field, value) => {
     setData(prev => ({ ...prev, [field]: value }));
@@ -93,17 +94,33 @@ export default function BonDeTravailPrintDialog({ open, onClose, prefillData = n
       });
       const url = URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
       const win = window.open(url, '_blank');
-      if (win) {
-        win.addEventListener('load', () => {
-          setTimeout(() => win.print(), 500);
-        });
-      }
+      if (win) win.addEventListener('load', () => setTimeout(() => win.print(), 500));
       toast({ title: 'PDF généré', description: vierge ? 'Bon vierge prêt à imprimer.' : 'Bon pré-rempli prêt à imprimer.' });
     } catch (err) {
       console.error('Erreur génération PDF:', err);
       toast({ title: 'Erreur', description: 'Impossible de générer le PDF.', variant: 'destructive' });
     } finally {
       setPrinting(false);
+    }
+  };
+
+  const handleSave = async (andPrint = false) => {
+    if (!poleId) {
+      toast({ title: 'Impossible d\'enregistrer', description: 'Aucun pôle sélectionné.', variant: 'destructive' });
+      return;
+    }
+    setSaving(true);
+    try {
+      await api.post('/documentations/bons-de-travail/save', { ...data, pole_id: poleId });
+      toast({ title: 'Bon de travail enregistré' });
+      if (onSaved) onSaved();
+      if (andPrint) await handlePrint(false);
+      else onClose();
+    } catch (err) {
+      console.error('Erreur sauvegarde:', err);
+      toast({ title: 'Erreur', description: 'Impossible d\'enregistrer.', variant: 'destructive' });
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -277,15 +294,28 @@ export default function BonDeTravailPrintDialog({ open, onClose, prefillData = n
         </div>
 
         <DialogFooter className="px-6 py-3 border-t bg-gray-50 flex-row justify-between">
-          <Button variant="outline" size="sm" onClick={onClose} disabled={printing}>
+          <Button variant="outline" size="sm" onClick={onClose} disabled={printing || saving}>
             Annuler
           </Button>
           <div className="flex gap-2">
+            {/* Bouton Enregistrer — visible uniquement quand poleId est fourni (contexte Documentations) */}
+            {poleId && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleSave(false)}
+                disabled={printing || saving}
+                data-testid="btn-save-bon"
+              >
+                {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+                Enregistrer
+              </Button>
+            )}
             <Button
               variant="outline"
               size="sm"
               onClick={() => handlePrint(true)}
-              disabled={printing}
+              disabled={printing || saving}
               data-testid="btn-print-vierge"
             >
               {printing ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Printer className="h-4 w-4 mr-1" />}
@@ -294,12 +324,12 @@ export default function BonDeTravailPrintDialog({ open, onClose, prefillData = n
             <Button
               size="sm"
               className="bg-blue-700 hover:bg-blue-800 text-white"
-              onClick={() => handlePrint(false)}
-              disabled={printing}
+              onClick={() => poleId ? handleSave(true) : handlePrint(false)}
+              disabled={printing || saving}
               data-testid="btn-print-filled"
             >
-              {printing ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Printer className="h-4 w-4 mr-1" />}
-              Imprimer
+              {(printing || saving) ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Printer className="h-4 w-4 mr-1" />}
+              {poleId ? 'Enregistrer & Imprimer' : 'Imprimer'}
             </Button>
           </div>
         </DialogFooter>

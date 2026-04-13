@@ -345,7 +345,13 @@ function FormTemplatesPage() {
             const Icon = typeInfo.icon;
             return (
               <Card key={template.id} className="hover:shadow-lg transition-shadow cursor-pointer group"
-                onClick={() => handleViewTemplate(template)}>
+                onClick={() => {
+                  if (template.id === 'default-bon-travail') {
+                    setShowBonTravailPrint(true);
+                  } else {
+                    handleViewTemplate(template);
+                  }
+                }}>
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-3">

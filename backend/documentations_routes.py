@@ -33,7 +33,6 @@ from dependencies import get_current_user, get_current_admin_user, get_current_u
 from audit_service import AuditService
 from auth import decode_access_token
 from bon_travail_template_final import generate_bon_travail_html
-import os
 
 logger = logging.getLogger(__name__)
 
@@ -1469,6 +1468,58 @@ async def delete_custom_form(
         raise
     except Exception as e:
         logger.error(f"Erreur suppression custom form: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/bons-de-travail/save")
+async def save_bon_de_travail_v2(
+    payload: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Sauvegarde un Bon de Travail au format MAINT/FE/004 V2 (champs booléens individuels).
+    Compatible avec l'explorateur documentations (pole_id obligatoire).
+    Retourne l'id du bon créé ou mis à jour.
+    """
+    import uuid as _uuid
+    try:
+        pole_id = payload.get("pole_id")
+        if not pole_id:
+            raise HTTPException(status_code=400, detail="pole_id est requis pour enregistrer un bon de travail")
+
+        bon_id = payload.get("id") or str(_uuid.uuid4())
+        now = datetime.now(timezone.utc).isoformat()
+
+        doc = {
+            "id": bon_id,
+            "pole_id": pole_id,
+            "form_version": 2,
+            # ── Champs affichés dans l'explorateur ──────────────────
+            "localisation_ligne": payload.get("localisation", ""),
+            "description_travaux": payload.get("description", ""),
+            "nom_intervenants": payload.get("intervenants", ""),
+            "titre": payload.get("titre") or payload.get("localisation") or "Bon de travail",
+            "statut": payload.get("statut", "BROUILLON"),
+            "entreprise": payload.get("entreprise", "Non assignée"),
+            # ── Champs booléens complets (pour régénérer le PDF) ────
+            "form_data": {k: v for k, v in payload.items() if k not in ("pole_id", "id", "titre")},
+            "created_at": payload.get("created_at", now),
+            "updated_at": now,
+            "created_by": current_user.get("id"),
+        }
+
+        existing = await db.bons_travail.find_one({"id": bon_id})
+        if existing:
+            await db.bons_travail.update_one({"id": bon_id}, {"$set": doc})
+        else:
+            await db.bons_travail.insert_one(doc)
+
+        doc.pop("_id", None)
+        return {"id": bon_id, "status": "ok", "titre": doc["titre"]}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erreur sauvegarde bon de travail v2: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 

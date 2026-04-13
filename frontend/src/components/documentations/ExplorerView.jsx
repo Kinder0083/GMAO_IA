@@ -17,6 +17,7 @@ import { useToast } from '../../hooks/use-toast';
 import { useConfirmDialog } from '../ui/confirm-dialog';
 import { getBackendURL } from '../../utils/config';
 import CustomFormFiller from '../CustomFormFiller';
+import BonDeTravailPrintDialog from '../BonDeTravailPrintDialog';
 
 const getFileIcon = (type) => {
   if (type?.includes('pdf')) return { icon: FileText, color: '#ef4444' };
@@ -57,6 +58,9 @@ export default function ExplorerView({ poles, onRefresh }) {
 
   // Custom form filler for templates
   const [customFormTemplate, setCustomFormTemplate] = useState(null);
+
+  // Nouveau Bon de Travail V2 (dialog intégré)
+  const [showBonTravailDialog, setShowBonTravailDialog] = useState(false);
 
   // Share email form
   const [emailForm, setEmailForm] = useState({ recipient: '', subject: '', message: '' });
@@ -171,11 +175,23 @@ export default function ExplorerView({ poles, onRefresh }) {
     }
   };
 
+  // ── État pour éditer un bon existant ─────────────────────────────────────
+  const [editBonData, setEditBonData] = useState(null);
+
   const handleDoubleClick = (item, itemType) => {
     if (itemType === 'pole') openPole(item.id);
     else if (itemType === 'folder') openFolder(item.id);
     else if (itemType === 'document') openViewer(item);
-    else if (itemType === 'bon') navigate(`/documentations/${currentPoleId}/bon-de-travail/${item.id}/view`);
+    else if (itemType === 'bon') {
+      // Ouvrir le nouveau dialog pré-rempli avec les données du bon
+      const prefill = item.form_data || {
+        localisation: item.localisation_ligne || '',
+        description: item.description_travaux || '',
+        intervenants: item.nom_intervenants || '',
+      };
+      setEditBonData({ id: item.id, ...prefill });
+      setShowBonTravailDialog(true);
+    }
   };
 
   // ==================== ACTIONS ====================
@@ -605,7 +621,8 @@ export default function ExplorerView({ poles, onRefresh }) {
           onNewFromTemplate={(tpl) => {
             // Router vers la bonne page selon le type de template
             if (tpl.type === 'BON_TRAVAIL') {
-              navigate(`/documentations/${currentPoleId}/bon-de-travail`);
+              // Nouveau : ouvre le dialog MAINT/FE/004 V2 (remplace l'ancien formulaire)
+              setShowBonTravailDialog(true);
             } else if (tpl.type === 'AUTORISATION') {
               navigate('/autorisations-particulieres/new');
             } else {
@@ -618,6 +635,15 @@ export default function ExplorerView({ poles, onRefresh }) {
       )}
 
       {/* ==================== DIALOGS ==================== */}
+
+      {/* Dialog Bon de Travail MAINT/FE/004 V2 */}
+      <BonDeTravailPrintDialog
+        open={showBonTravailDialog}
+        onClose={() => { setShowBonTravailDialog(false); setEditBonData(null); }}
+        poleId={currentPoleId}
+        prefillData={editBonData}
+        onSaved={() => { setShowBonTravailDialog(false); setEditBonData(null); if (currentPoleId) loadExplorer(currentPoleId, currentFolderId); }}
+      />
 
       {/* New Folder Dialog */}
       <Dialog open={newFolderDialog} onOpenChange={setNewFolderDialog}>
@@ -1005,7 +1031,7 @@ function FullContextMenu({
 
       ) : itemType === 'bon' ? (
         <>
-          <MenuItem icon={Eye} label="Voir le bon" onClick={() => onOpen(item, 'bon')} />
+          <MenuItem icon={Eye} label="Voir / Modifier le bon" onClick={() => onOpen(item, 'bon')} />
           <MenuItem icon={Printer} label="Imprimer" onClick={() => onPrint(item, 'bon')} />
         </>
       ) : null}
