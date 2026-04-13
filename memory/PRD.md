@@ -33,6 +33,22 @@ Application GMAO (Gestion de Maintenance Assistée par Ordinateur) complète pou
 - Export PDF individuel des OT (jsPDF)
 - Export PDF en masse des OT avec mode sélection
 
+### Session 13 avril 2026 (fork) — AutorisationParticulière MAINT/FE/003 V4 — Révision 2
+- **Correction template HTML (14 points)** selon comparaison PDF généré vs PDF cible :
+  - En-tête : structure correcte 4 colonnes × 4 lignes (Date col1, MAINT/FE/003 col2+3, Version4 col4)
+  - Séparateur gris (#CCCCCC, colspan=4) présent en ligne 3
+  - Cases à cocher natives (`<input type="checkbox" checked>`) au lieu des symboles Unicode ●○
+  - Types de travaux : flex `space-between` sur 2 lignes (3 checkboxes + autre cas)
+  - Champs texte inline (`<input type="text" value="...">`) au lieu de textarea blocs
+  - En-tête tableau précautions : `PRECAUTIONS A PRENDRE` (colspan=8) | `EQUIPEMENT COMPLEMENTAIRE` (colspan=3)
+  - Tous les libellés du tableau **SANS ACCENTS** (ex: DECONTAMINATION, EGOUTS ET CABLES PROTEGES...)
+  - Précautions supplémentaires : ligne pied de tableau fond gris (#f0f0f0)
+  - Validation : layout flex inline (2 colonnes sur même ligne)
+  - Visa AM : tableau 50/50 avec zone textarea
+  - Vérification post-travaux : lignes hauteur 15mm
+  - @page A4 portrait avec marges 8mm/10mm
+  - Compact (espacements 2-4px) pour tenir sur 1 page A4
+
 ### Session 13 avril 2026 (fork) — AutorisationParticulière MAINT/FE/003 V4
 - **Feature: Dialog AutorisationParticulierePrintDialog** — Nouveau composant React intégré pour l'Autorisation Particulière de Travaux (MAINT/FE/003 V4). Même pattern que `BonDeTravailPrintDialog`. Sections complètes : Types de travaux (checkboxes), Informations travaux (6 champs), Tableau précautions 3 sections × 9 lignes (boutons NON/OUI/FAIT compact), Précautions supplémentaires, Validation, Vérification post-travaux (30min/1h/2h).
 - **Backend: `/api/documentations/autorisations-particulieres/save`** — POST, enregistre dans la collection `autorisations_particulieres` avec `form_version: 4`, `pole_id` requis (400 si absent), retourne `{id, status, titre}`.
