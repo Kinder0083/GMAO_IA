@@ -336,8 +336,9 @@ export default function AutorisationParticulierePrintDialog({
             <Button
               size="sm"
               onClick={handleSave}
-              disabled={saving}
-              className="bg-yellow-600 hover:bg-yellow-700"
+              disabled={saving || !poleId}
+              title={!poleId ? "Ouvrez ce formulaire depuis un Pôle documentaire pour pouvoir l'enregistrer" : "Enregistrer"}
+              className="bg-yellow-600 hover:bg-yellow-700 disabled:opacity-50"
               data-testid="auto-save-btn"
             >
               {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}

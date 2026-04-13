@@ -33,6 +33,15 @@ Application GMAO (Gestion de Maintenance Assistée par Ordinateur) complète pou
 - Export PDF individuel des OT (jsPDF)
 - Export PDF en masse des OT avec mode sélection
 
+### Session 13 avril 2026 (fork) — AutorisationParticulière MAINT/FE/003 V4
+- **Feature: Dialog AutorisationParticulierePrintDialog** — Nouveau composant React intégré pour l'Autorisation Particulière de Travaux (MAINT/FE/003 V4). Même pattern que `BonDeTravailPrintDialog`. Sections complètes : Types de travaux (checkboxes), Informations travaux (6 champs), Tableau précautions 3 sections × 9 lignes (boutons NON/OUI/FAIT compact), Précautions supplémentaires, Validation, Vérification post-travaux (30min/1h/2h).
+- **Backend: `/api/documentations/autorisations-particulieres/save`** — POST, enregistre dans la collection `autorisations_particulieres` avec `form_version: 4`, `pole_id` requis (400 si absent), retourne `{id, status, titre}`.
+- **Backend: `/api/documentations/autorisations-particulieres/generate-html`** — POST, génère HTML A4 complet (MAINT/FE/003 V4) depuis `autorisation_particuliere_v4_template.py`. Utilisé pour impression/export PDF via `window.print()`.
+- **Intégration FormTemplatesPage**: Bouton `Printer` au survol de la carte "Autorisation particulière" (data-testid: `btn-print-autorisation`). Label "Survoler pour remplir".
+- **Intégration PoleDetails**: Remplace `navigate('/autorisations-particulieres/new')` par ouverture du dialog. Menu clic-droit "Voir/Modifier l'autorisation" charge les données existantes dans le dialog via `form_data`.
+- **Intégration ExplorerView**: Remplace `navigate('/autorisations-particulieres/new')` par ouverture du dialog.
+- **Tests**: iteration_166.json — 100% (14/14 backend, tous scénarios frontend).
+
 ### Session 13 avril 2026 — Suppression modèles formulaires vers corbeille
 - **Feature: Suppression soft** des modèles de formulaires personnalisés. Icône Trash2 au survol de la carte (côté Eye icon), visible uniquement pour admin ou `canDelete('documentations')`. Les modèles système ne peuvent pas être supprimés. Dialog de confirmation "Déplacer dans la corbeille". Le modèle disparaît de la liste et apparaît dans la page Corbeille avec le label "Modèle de formulaire" jusqu'à l'expiration du délai de rétention configuré. Backend: soft-delete (`deleted_at`) + `form_templates` ajouté à `TRASH_COLLECTIONS`. Permission étendue : admin OU `documentations.delete`.
 
