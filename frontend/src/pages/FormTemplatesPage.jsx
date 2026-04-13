@@ -372,6 +372,16 @@ function FormTemplatesPage() {
                           <Printer className="h-4 w-4" />
                         </button>
                       )}
+                      {canDelete('documentations') && (
+                        <button
+                          data-testid={`btn-delete-template-${template.id}`}
+                          onClick={(e) => { e.stopPropagation(); handleDelete(template); }}
+                          className="p-1 rounded hover:bg-red-100 text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                          title="Déplacer dans la corbeille"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
                       <Eye className="h-4 w-4 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
                     </div>
                   </div>
