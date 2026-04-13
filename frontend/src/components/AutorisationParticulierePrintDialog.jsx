@@ -357,10 +357,10 @@ export default function AutorisationParticulierePrintDialog({
             <div className="flex-1">
               <Label className="text-xs font-medium text-gray-600">Date du formulaire</Label>
               <Input
-                type="date"
-                value={data.date_formulaire || today}
-                onChange={e => handleChange('date_formulaire', e.target.value)}
-                className="text-sm h-8 w-48 mt-1"
+                type="text"
+                value="13/04/2026"
+                readOnly
+                className="text-sm h-8 w-48 mt-1 bg-gray-100 cursor-not-allowed"
                 data-testid="auto-date-field"
               />
             </div>
