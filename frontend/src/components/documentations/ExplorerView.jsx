@@ -642,7 +642,7 @@ export default function ExplorerView({ poles, onRefresh }) {
         onClose={() => { setShowBonTravailDialog(false); setEditBonData(null); }}
         poleId={currentPoleId}
         prefillData={editBonData}
-        onSaved={() => { setShowBonTravailDialog(false); setEditBonData(null); if (currentPoleId) loadExplorer(currentPoleId, currentFolderId); }}
+        onSaved={() => { setShowBonTravailDialog(false); setEditBonData(null); if (currentPoleId) loadExplorerContents(currentPoleId, currentFolderId); }}
       />
 
       {/* New Folder Dialog */}

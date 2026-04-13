@@ -33,6 +33,9 @@ Application GMAO (Gestion de Maintenance Assistée par Ordinateur) complète pou
 - Export PDF individuel des OT (jsPDF)
 - Export PDF en masse des OT avec mode sélection
 
+### Session 13 avril 2026 (fork — correctif enregistrement Bon de Travail)
+- **Fix P0: "Impossible d'enregistrer"** dans `BonDeTravailPrintDialog.jsx` — Faute de frappe dans `ExplorerView.jsx` ligne 645 : callback `onSaved` appelait `loadExplorer(...)` (inexistant) au lieu de `loadExplorerContents(...)`. Le bug déclenchait une `ReferenceError` catchée qui affichait le toast d'erreur à l'utilisateur même si la sauvegarde DB avait réussi. Correction : une seule ligne.
+
 ### Session 12 avril 2026 (suite 2 — Bon de Travail impression)
 - **Feature: Impression PDF ReportLab — Bon de Travail MAINT/FE/004 V2**
   - `bon_de_travail_reportlab.py` : générateur ReportLab A4 fidèle au document officiel. En-tête 3 colonnes (logo IRIS + titre + référence), sous-en-tête rédacteur/approbateur, texte introductif, section 1 (Travaux à réaliser), section 2 (Risques - 2 colonnes), section 3 (Précautions - 2 colonnes), section 4 (Engagement + tableau signatures), pied de page. Cases cochées avec ■/□.
