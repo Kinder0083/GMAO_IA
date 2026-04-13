@@ -5,7 +5,6 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
 import { Checkbox } from '../components/ui/checkbox';
-import { ScrollArea } from '../components/ui/scroll-area';
 import { Printer, FileText, Loader2 } from 'lucide-react';
 import { useToast } from '../hooks/use-toast';
 import api from '../services/api';
@@ -110,7 +109,7 @@ export default function BonDeTravailPrintDialog({ open, onClose, prefillData = n
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col p-0" data-testid="bon-travail-print-dialog">
+      <DialogContent className="max-w-3xl h-[90vh] flex flex-col p-0 overflow-hidden" data-testid="bon-travail-print-dialog">
         <DialogHeader className="px-6 pt-5 pb-3 border-b">
           <DialogTitle className="flex items-center gap-2">
             <FileText className="h-5 w-5 text-blue-700" />
@@ -121,7 +120,7 @@ export default function BonDeTravailPrintDialog({ open, onClose, prefillData = n
           </p>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 px-6 py-2">
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-2">
           {/* ── Section 1 : Travaux à réaliser ──────────────────────────── */}
           <SectionTitle>1. Travaux à réaliser</SectionTitle>
           <div className="space-y-2">
@@ -275,7 +274,7 @@ export default function BonDeTravailPrintDialog({ open, onClose, prefillData = n
             </div>
           </div>
           <div className="h-4" />
-        </ScrollArea>
+        </div>
 
         <DialogFooter className="px-6 py-3 border-t bg-gray-50 flex-row justify-between">
           <Button variant="outline" size="sm" onClick={onClose} disabled={printing}>

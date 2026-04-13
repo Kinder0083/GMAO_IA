@@ -103,7 +103,7 @@ const Sidebar = ({
         transform: (!sidebarOpen && isMobile) ? 'translateX(-100%)' : 'translateX(0)'
       }}
     >
-      {/* Zone scrollable — navigation principale */}
+      {/* Zone scrollable unique — navigation + admin + déconnexion */}
       <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-1">
         {/* Rendu des catégories avec sous-menus */}
         {menuCategories
@@ -245,13 +245,8 @@ const Sidebar = ({
             );
           })}
         
-      </div>{/* Fin zone scrollable */}
-
-      {/* Zone FIXE en bas — toujours visible sans scroll */}
-      <div
-        className="flex-shrink-0 p-3 space-y-0.5"
-        style={{ borderTop: '1px solid rgba(255,255,255,0.1)', backgroundColor: preferences?.sidebar_bg_color || '#1f2937' }}
-      >
+        {/* ── Séparateur + éléments admin/paramètres (dans le scroll) ── */}
+        <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: '8px', paddingTop: '8px' }} className="space-y-0.5">
           <button
             onClick={() => navigate('/settings')}
             className={`w-full flex items-center gap-3 px-4 py-2 rounded-lg transition-all ${!sidebarOpen ? 'justify-center px-2' : ''}`}
@@ -392,7 +387,9 @@ const Sidebar = ({
             <LogOut size={20} className="flex-shrink-0" />
             {sidebarOpen && <span className="text-sm font-medium">Déconnexion</span>}
           </button>
-      </div>
+        </div>
+
+      </div>{/* Fin zone scrollable unique */}
     </div>
   );
 };
