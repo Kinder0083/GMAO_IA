@@ -54,7 +54,8 @@ class CheckboxItem(Flowable):
     """
     BOX_SIZE = 3.5 * mm
     FONT_SIZE = 7.5
-    LINE_HEIGHT = 5.5 * mm
+    # Réduction de 5.5→4.5mm : économise ~19mm sur l'ensemble du document (tient sur 1 page A4)
+    LINE_HEIGHT = 4.5 * mm
 
     def __init__(self, label: str, checked: bool = False):
         super().__init__()
