@@ -1,7 +1,7 @@
 """
 Générateur PDF ReportLab pour le Bon de Travail MAINT/FE/004 Version 2
 Reproduit fidèlement le document officiel COSMEVA/IRIS
-Marges : haut 12mm, bas 10mm, gauche 18mm, droite 14mm
+Marges : haut 8mm, bas 8mm, gauche 12mm, droite 10mm
 """
 from io import BytesIO
 import os
@@ -9,6 +9,7 @@ import logging
 
 from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Table, TableStyle, Spacer, Image
+from reportlab.platypus.flowables import Flowable
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.lib import colors
@@ -19,7 +20,6 @@ logger = logging.getLogger(__name__)
 # ─── Couleurs ──────────────────────────────────────────────────────────────────
 BLUE_DARK    = colors.HexColor('#1F4E79')   # Fond titres de section (texte blanc)
 BLUE_SECTION = colors.HexColor('#D9E2F3')   # Fond léger (tableau signature)
-BLUE_LOGO    = colors.HexColor('#1F5C99')   # Fond cellule logo
 GRAY_LIGHT   = colors.HexColor('#F2F2F2')   # Fond labels tableau travaux
 BLACK        = colors.black
 WHITE        = colors.white
@@ -33,7 +33,8 @@ LOGO_PATH = next((p for p in _LOGO_CANDIDATES if os.path.exists(p)), None)
 
 # ─── Dimensions ────────────────────────────────────────────────────────────────
 PAGE_W, PAGE_H = A4
-M_TOP, M_BOT, M_LEFT, M_RIGHT = 12*mm, 10*mm, 18*mm, 14*mm
+# Correction 3 : marges réduites pour plus d'espace utile
+M_TOP, M_BOT, M_LEFT, M_RIGHT = 8*mm, 8*mm, 12*mm, 10*mm
 CONTENT_W = PAGE_W - M_LEFT - M_RIGHT
 COL_W = CONTENT_W / 2
 
@@ -43,13 +44,58 @@ def _s(parent, **kw) -> ParagraphStyle:
     return ParagraphStyle('_', parent=parent, **kw)
 
 
-def _cb(label: str, checked: bool) -> Paragraph:
-    """Case à cocher avec libellé."""
-    mark = '<b>■</b>' if checked else '□'
-    return Paragraph(f'{mark} {label}', _s(
-        getSampleStyleSheet()['Normal'],
-        fontSize=7.5, leading=10
-    ))
+# ─── Correction 2 : Case à cocher dessinée via canvas (fiable, sans Unicode) ──
+class CheckboxItem(Flowable):
+    """
+    Case à cocher + libellé rendue via canvas.draw() :
+    - Carré vide (contour noir) si checked=False
+    - Carré plein noir à l'intérieur si checked=True
+    Évite tout problème de police Unicode (□/■ non supportés en Helvetica).
+    """
+    BOX_SIZE = 3.5 * mm
+    FONT_SIZE = 7.5
+    LINE_HEIGHT = 5.5 * mm
+
+    def __init__(self, label: str, checked: bool = False):
+        super().__init__()
+        self.label = label
+        self.checked = checked
+        self._w = None
+        self._h = self.LINE_HEIGHT
+
+    def wrap(self, avail_width, avail_height):
+        self._w = avail_width
+        return self._w, self._h
+
+    def draw(self):
+        c = self.canv
+        box = self.BOX_SIZE
+        y_mid = self._h / 2
+        y_box = y_mid - box / 2
+
+        # Toujours dessiner le contour carré vide
+        c.setStrokeColor(colors.black)
+        c.setLineWidth(0.5)
+        c.setFillColor(colors.white)
+        c.rect(0, y_box, box, box, stroke=1, fill=1)
+
+        # Si cochée, remplir l'intérieur en noir
+        if self.checked:
+            margin = 0.6 * mm
+            c.setFillColor(colors.black)
+            c.rect(margin, y_box + margin,
+                   box - 2 * margin, box - 2 * margin,
+                   stroke=0, fill=1)
+
+        # Libellé à droite de la case
+        c.setFillColor(colors.black)
+        c.setFont('Helvetica', self.FONT_SIZE)
+        c.drawString(box + 1.5 * mm, y_mid - self.FONT_SIZE * 0.36, self.label)
+
+
+def _cb(label: str, checked: bool) -> CheckboxItem:
+    """Retourne un CheckboxItem propre (carré dessiné, pas Unicode)."""
+    return CheckboxItem(label=label, checked=bool(checked))
 
 
 def _sub_title(text: str) -> Paragraph:
@@ -127,7 +173,8 @@ def generate_bon_travail_pdf(data: dict) -> bytes:
         ('LINEAFTER',  (1, 0), (1, 0),   0.5, BLACK),
         ('VALIGN',     (0, 0), (-1, -1), 'MIDDLE'),
         ('PADDING',    (0, 0), (-1, -1), 4),
-        ('BACKGROUND', (0, 0), (0, 0),   BLUE_LOGO),
+        # Correction 1 : fond blanc derrière le logo (le PNG est déjà sur fond blanc)
+        ('BACKGROUND', (0, 0), (0, 0),   WHITE),
     ]))
     story.append(header_table)
 
@@ -210,7 +257,8 @@ def generate_bon_travail_pdf(data: dict) -> bytes:
         _cb('Alimenté (électricité, air comprimé,...) ;',            data.get('risque_alimente', False)),
         _cb('Présentant des pièces en mouvements ;',                 data.get('risque_pieces_mouvements', False)),
         _cb('En hauteur (> 2 m) ;',                                  data.get('risque_en_hauteur', False)),
-        Paragraph(f'□ Autre (préciser) : <u>{autre_mat_text}</u>', _s(N, fontSize=7.5, leading=10)),
+        _cb(f'Autre (préciser) : {autre_mat_text}' if autre_mat_text else 'Autre (préciser) :',
+            data.get('risque_autre_materiel', False)),
         Spacer(1, 2*mm),
         _sub_title('Travaux nécessitant une autorisation particulière :'),
         _cb('Point chaud ;',      data.get('risque_point_chaud', False)),
@@ -229,7 +277,8 @@ def generate_bon_travail_pdf(data: dict) -> bytes:
         _cb('Passage de chariot à proximité ;',         data.get('env_chariot', False)),
         _cb('Tuyauterie ou ligne électrique à proximité ;', data.get('env_tuyauterie', False)),
         _cb('Poussières sensibles à l\'explosion ;',     data.get('env_poussieres', False)),
-        Paragraph(f'□ Autre (préciser) : <u>{env_autre_text}</u>', _s(N, fontSize=7.5, leading=10)),
+        _cb(f'Autre (préciser) : {env_autre_text}' if env_autre_text else 'Autre (préciser) :',
+            data.get('env_autre', False)),
     ]
 
     # Égaliser la hauteur des colonnes
@@ -272,7 +321,8 @@ def generate_bon_travail_pdf(data: dict) -> bytes:
         _cb('Consignation électrique et/ou mécanique ;',      data.get('prec_consignation', False)),
         _cb('Utilisation d\'un échafaudage ;',                data.get('prec_echafaudage', False)),
         _cb('Utilisation d\'un chariot ou d\'une nacelle ;',  data.get('prec_chariot_nacelle', False)),
-        Paragraph(f'□ Autre (préciser) : <u>{autre_mat2_text}</u>', _s(N, fontSize=7.5, leading=10)),
+        _cb(f'Autre (préciser) : {autre_mat2_text}' if autre_mat2_text else 'Autre (préciser) :',
+            data.get('prec_autre_mat', False)),
         Spacer(1, 2*mm),
         Paragraph(note_chariot, s_note),
     ]
@@ -283,7 +333,8 @@ def generate_bon_travail_pdf(data: dict) -> bytes:
         _cb('Gants adaptés ;',                   data.get('prec_gants', False)),
         _cb('Combinaison ;',                     data.get('prec_combinaison', False)),
         _cb('Masque à gaz ou à poussière ;',     data.get('prec_masque', False)),
-        Paragraph(f'□ Autre (préciser) : <u>{autre_hom_text}</u>', _s(N, fontSize=7.5, leading=10)),
+        _cb(f'Autre (préciser) : {autre_hom_text}' if autre_hom_text else 'Autre (préciser) :',
+            data.get('prec_autre_hom', False)),
         Spacer(1, 2*mm),
         _sub_title('Sur l\'environnement des travaux :'),
         _cb('Balisage de la zone de travaux ;',              data.get('prec_balisage', False)),
