@@ -20,6 +20,7 @@ import { useConfirmDialog } from '../components/ui/confirm-dialog';
 import { formatErrorMessage } from '../utils/errorFormatter';
 import api from '../services/api';
 import CustomFormFiller from '../components/CustomFormFiller';
+import BonDeTravailPrintDialog from '../components/BonDeTravailPrintDialog';
 
 const FILE_ICONS = {
   'application/pdf': FileText,
@@ -65,6 +66,10 @@ function PoleDetails() {
   const [showCustomFormFiller, setShowCustomFormFiller] = useState(false);
   const [selectedCustomTemplate, setSelectedCustomTemplate] = useState(null);
   const [editingCustomForm, setEditingCustomForm] = useState(null);
+  
+  // Dialog Bon de Travail MAINT/FE/004 V2
+  const [showBonTravailDialog, setShowBonTravailDialog] = useState(false);
+  const [editBonData, setEditBonData] = useState(null);
   
   // Dialog pour ajouter un document
   const [openDocDialog, setOpenDocDialog] = useState(false);
@@ -228,7 +233,8 @@ function PoleDetails() {
       setEditingCustomForm(null);
       setShowCustomFormFiller(true);
     } else if (selectedFormType === 'BON_TRAVAIL' || template?.type === 'BON_TRAVAIL') {
-      navigate(`/documentations/${poleId}/bon-de-travail`);
+      setEditBonData(null);
+      setShowBonTravailDialog(true);
     } else if (selectedFormType === 'AUTORISATION' || template?.type === 'AUTORISATION') {
       navigate('/autorisations-particulieres/new', { state: { fromPoleId: poleId } });
     }
@@ -649,7 +655,15 @@ function PoleDetails() {
                                   <Button
                                     variant="ghost"
                                     size="sm"
-                                    onClick={() => navigate(`/documentations/${poleId}/bon-de-travail/${bon.id}/edit`)}
+                                    onClick={() => {
+                                      const prefill = bon.form_data || {
+                                        localisation: bon.localisation_ligne || '',
+                                        description: bon.description_travaux || '',
+                                        intervenants: bon.nom_intervenants || '',
+                                      };
+                                      setEditBonData({ id: bon.id, ...prefill });
+                                      setShowBonTravailDialog(true);
+                                    }}
                                   >
                                     <Edit className="h-4 w-4" />
                                   </Button>
@@ -1102,6 +1116,15 @@ function PoleDetails() {
         poleId={poleId}
         existingForm={editingCustomForm}
         onSaved={() => loadData()}
+      />
+
+      {/* Dialog Bon de Travail MAINT/FE/004 V2 */}
+      <BonDeTravailPrintDialog
+        open={showBonTravailDialog}
+        onClose={() => { setShowBonTravailDialog(false); setEditBonData(null); }}
+        poleId={poleId}
+        prefillData={editBonData}
+        onSaved={() => { setShowBonTravailDialog(false); setEditBonData(null); loadData(); }}
       />
 
       <ConfirmDialog />

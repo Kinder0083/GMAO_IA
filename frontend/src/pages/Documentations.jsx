@@ -16,6 +16,7 @@ import { formatErrorMessage } from '../utils/errorFormatter';
 import { getBackendURL } from '../utils/config';
 import { useDocumentations } from '../hooks/useDocumentations';
 import ExplorerView from '../components/documentations/ExplorerView';
+import BonDeTravailPrintDialog from '../components/BonDeTravailPrintDialog';
 
 const POLE_COLORS = {
   MAINTENANCE: '#f97316',
@@ -61,6 +62,11 @@ function Documentations() {
   const [previewDocument, setPreviewDocument] = useState(null);
   const [openPreview, setOpenPreview] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
+
+  // Dialog Bon de Travail MAINT/FE/004 V2
+  const [showBonTravailDialog, setShowBonTravailDialog] = useState(false);
+  const [bonTravailPoleId, setBonTravailPoleId] = useState(null);
+  const [editBonData, setEditBonData] = useState(null);
 
   // Charger l'utilisateur actuel
   useEffect(() => {
@@ -518,37 +524,19 @@ function Documentations() {
                                     <Button
                                       variant="ghost"
                                       size="sm"
-                                      onClick={() => navigate(`/documentations/${pole.id}/bon-de-travail/${bon.id}/view`)}
-                                      title="Voir le bon"
+                                      onClick={() => {
+                                        const prefill = bon.form_data || {
+                                          localisation: bon.localisation_ligne || '',
+                                          description: bon.description_travaux || '',
+                                          intervenants: bon.nom_intervenants || '',
+                                        };
+                                        setEditBonData({ id: bon.id, ...prefill });
+                                        setBonTravailPoleId(pole.id);
+                                        setShowBonTravailDialog(true);
+                                      }}
+                                      title="Voir / Imprimer le bon"
                                     >
                                       <Eye className="h-4 w-4" />
-                                    </Button>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() => {
-                                        const token = localStorage.getItem('token');
-                                        const printWindow = window.open(`${getBackendURL()}/api/documentations/bons-travail/${bon.id}/pdf?token=${token}`, '_blank');
-                                        if (printWindow) {
-                                          printWindow.onload = () => {
-                                            printWindow.print();
-                                          };
-                                        }
-                                      }}
-                                      title="Imprimer le bon"
-                                    >
-                                      <Printer className="h-4 w-4" />
-                                    </Button>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() => {
-                                        const token = localStorage.getItem('token');
-                                        window.open(`${getBackendURL()}/api/documentations/bons-travail/${bon.id}/pdf?token=${token}`, '_blank');
-                                      }}
-                                      title="Télécharger PDF"
-                                    >
-                                      <Download className="h-4 w-4" />
                                     </Button>
                                   </div>
                                 </div>
@@ -761,6 +749,15 @@ function Documentations() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Dialog Bon de Travail MAINT/FE/004 V2 */}
+      <BonDeTravailPrintDialog
+        open={showBonTravailDialog}
+        onClose={() => { setShowBonTravailDialog(false); setEditBonData(null); setBonTravailPoleId(null); }}
+        poleId={bonTravailPoleId}
+        prefillData={editBonData}
+        onSaved={() => { setShowBonTravailDialog(false); setEditBonData(null); setBonTravailPoleId(null); refresh(); }}
+      />
     </div>
   );
 }
