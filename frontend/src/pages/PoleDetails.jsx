@@ -70,6 +70,21 @@ function PoleDetails() {
   // Dialog Bon de Travail MAINT/FE/004 V2
   const [showBonTravailDialog, setShowBonTravailDialog] = useState(false);
   const [editBonData, setEditBonData] = useState(null);
+
+  // Menu contextuel clic-droit (documents)
+  const [ctxMenu, setCtxMenu] = useState(null);
+
+  // Fermer le menu contextuel sur clic gauche ou scroll
+  useEffect(() => {
+    if (!ctxMenu) return;
+    const close = () => setCtxMenu(null);
+    window.addEventListener('click', close);
+    window.addEventListener('scroll', close, true);
+    return () => {
+      window.removeEventListener('click', close);
+      window.removeEventListener('scroll', close, true);
+    };
+  }, [ctxMenu]);
   
   // Dialog pour ajouter un document
   const [openDocDialog, setOpenDocDialog] = useState(false);
@@ -145,6 +160,16 @@ function PoleDetails() {
     const responsable = serviceResponsables.find(r => r.service === poleService);
     if (responsable && responsable.user_id === currentUser.id) return true;
     return false;
+  };
+
+  // Handler clic-droit — documents uniquement pour les utilisateurs autorisés
+  const handleDocCtxMenu = (e, doc) => {
+    if (!canEdit(doc)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const x = Math.min(e.clientX, window.innerWidth - 180);
+    const y = Math.min(e.clientY, window.innerHeight - 60);
+    setCtxMenu({ x, y, item: doc, type: 'document' });
   };
 
   const isAdmin = () => currentUser?.role === 'ADMIN';
@@ -544,7 +569,8 @@ function PoleDetails() {
                       return (
                         <div
                           key={doc.id}
-                          className="flex items-center gap-3 p-3 pl-16 hover:bg-gray-100 transition-colors"
+                          className="flex items-center gap-3 p-3 pl-16 hover:bg-gray-100 transition-colors cursor-default"
+                          onContextMenu={(e) => handleDocCtxMenu(e, doc)}
                         >
                           <FileIcon className="h-5 w-5 text-green-600 flex-shrink-0" />
                           <div className="flex-1 min-w-0">
@@ -1117,6 +1143,30 @@ function PoleDetails() {
         existingForm={editingCustomForm}
         onSaved={() => loadData()}
       />
+
+      {/* Menu contextuel clic-droit — documents */}
+      {ctxMenu && (
+        <div
+          style={{ position: 'fixed', top: ctxMenu.y, left: ctxMenu.x, zIndex: 9999 }}
+          className="bg-white rounded-lg shadow-xl border border-gray-200 py-1 min-w-[180px] select-none"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="px-3 py-1.5 text-xs font-semibold text-gray-400 uppercase tracking-wide border-b border-gray-100 mb-1 truncate max-w-[180px]">
+            {ctxMenu.item?.fichier_nom || ctxMenu.item?.titre || 'Document'}
+          </div>
+          <button
+            data-testid="ctx-menu-delete-doc"
+            className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+            onClick={() => {
+              handleDeleteDocument(ctxMenu.item.id);
+              setCtxMenu(null);
+            }}
+          >
+            <Trash2 className="h-4 w-4 flex-shrink-0" />
+            Supprimer
+          </button>
+        </div>
+      )}
 
       {/* Dialog Bon de Travail MAINT/FE/004 V2 */}
       <BonDeTravailPrintDialog

@@ -33,6 +33,10 @@ Application GMAO (Gestion de Maintenance Assistée par Ordinateur) complète pou
 - Export PDF individuel des OT (jsPDF)
 - Export PDF en masse des OT avec mode sélection
 
+### Session 13 avril 2026 — Clic-droit suppression (Documentations)
+- **Feature: Menu contextuel clic-droit** sur les documents dans `PoleDetails.jsx` — seulement visible pour admins et créateurs (`canEdit`), affiche le nom du fichier + bouton "Supprimer" rouge → ouvre la boîte de dialogue de confirmation existante.
+- **Fix ExplorerView**: option "Supprimer" du menu clic-droit désormais restreinte aux admins et créateurs du document/dossier (`canDelete = isAdmin || created_by === currentUser.id`).
+
 ### Session 13 avril 2026 (fork — correctif Bon de Travail dialog unifié)
 - **Fix P0: "Impossible d'enregistrer"** — Faute de frappe `loadExplorer` → `loadExplorerContents` dans `ExplorerView.jsx` (ligne 645)
 - **Fix P0: Mauvais formulaire** — `PoleDetails.jsx` et `Documentations.jsx` utilisaient les vieilles routes (`BonDeTravailForm.jsx`/`BonDeTravailView.jsx`). Toutes les entrées (Ajouter formulaire, Modifier, Voir) ouvrent maintenant le bon dialog `BonDeTravailPrintDialog` (MAINT/FE/004 V2) sans navigation. Testé 5/5 scénarios OK.

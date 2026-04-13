@@ -897,6 +897,7 @@ function FullContextMenu({
   }, [x, y]);
 
   const isAdmin = currentUser?.role === 'ADMIN';
+  const canDelete = isAdmin || (item && item.created_by && currentUser && item.created_by === currentUser.id);
 
   const MenuItem = ({ icon: Icon, label, onClick: action, destructive, disabled, children }) => (
     <div className="relative">
@@ -986,7 +987,7 @@ function FullContextMenu({
             </>
           )}
           <MenuItem icon={Edit} label="Renommer" onClick={() => onRename(item, 'folder')} />
-          <MenuItem icon={Trash2} label="Supprimer" onClick={() => onDelete(item, 'folder')} destructive />
+          {canDelete && <MenuItem icon={Trash2} label="Supprimer" onClick={() => onDelete(item, 'folder')} destructive />}
         </>
 
       ) : itemType === 'document' ? (
@@ -1026,7 +1027,7 @@ function FullContextMenu({
           <MenuItem icon={Link2} label="Insérer dans..." onClick={() => onInsertInto(item)} />
           <Separator />
           <MenuItem icon={Edit} label="Renommer" onClick={() => onRename(item, 'document')} />
-          <MenuItem icon={Trash2} label="Supprimer" onClick={() => onDelete(item, 'document')} destructive />
+          {canDelete && <MenuItem icon={Trash2} label="Supprimer" onClick={() => onDelete(item, 'document')} destructive />}
         </>
 
       ) : itemType === 'bon' ? (
