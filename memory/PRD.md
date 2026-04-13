@@ -33,6 +33,10 @@ Application GMAO (Gestion de Maintenance Assistée par Ordinateur) complète pou
 - Export PDF individuel des OT (jsPDF)
 - Export PDF en masse des OT avec mode sélection
 
+### Session 13 avril 2026 (fork — correctif Bon de Travail dialog unifié)
+- **Fix P0: "Impossible d'enregistrer"** — Faute de frappe `loadExplorer` → `loadExplorerContents` dans `ExplorerView.jsx` (ligne 645)
+- **Fix P0: Mauvais formulaire** — `PoleDetails.jsx` et `Documentations.jsx` utilisaient les vieilles routes (`BonDeTravailForm.jsx`/`BonDeTravailView.jsx`). Toutes les entrées (Ajouter formulaire, Modifier, Voir) ouvrent maintenant le bon dialog `BonDeTravailPrintDialog` (MAINT/FE/004 V2) sans navigation. Testé 5/5 scénarios OK.
+
 ### Session 13 avril 2026 (fork — correctif enregistrement Bon de Travail)
 - **Fix P0: "Impossible d'enregistrer"** dans `BonDeTravailPrintDialog.jsx` — Faute de frappe dans `ExplorerView.jsx` ligne 645 : callback `onSaved` appelait `loadExplorer(...)` (inexistant) au lieu de `loadExplorerContents(...)`. Le bug déclenchait une `ReferenceError` catchée qui affichait le toast d'erreur à l'utilisateur même si la sauvegarde DB avait réussi. Correction : une seule ligne.
 
