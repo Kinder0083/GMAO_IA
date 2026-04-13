@@ -259,7 +259,7 @@ input[type="checkbox"] {{
 
   <!-- Ligne 3 : séparateur gris -->
   <tr>
-    <td colspan="4" style="background:#CCCCCC;height:5px;border:1px solid #000;padding:0;"></td>
+    <td colspan="4" style="background:#CCCCCC;height:4mm;border-top:1px solid #000;border-bottom:1px solid #000;border-left:1px solid #000;border-right:1px solid #000;padding:0;line-height:0;font-size:0;">&nbsp;</td>
   </tr>
 
   <!-- Ligne 4 : Rédigée par | Approuvée par -->
@@ -285,15 +285,23 @@ input[type="checkbox"] {{
 <!-- ══ ZONE 3 — INFORMATIONS TRAVAUX ═════════════════════════════════ -->
 <p style="font-weight:bold;margin:2px 0;">Cette autorisation particuli&#232;re de travail concerne des travaux&#160;:</p>
 
-<!-- Ligne 1 : 3 checkboxes flex -->
-<div style="display:flex;justify-content:space-between;margin-bottom:2px;">
-  <span>{_cb(d.get('type_point_chaud'))}&#160;par point chaud</span>
-  <span>{_cb(d.get('type_fouille'))}&#160;de fouille</span>
-  <span>{_cb(d.get('type_espace_clos'))}&#160;en espace clos ou confin&#233;</span>
+<!-- Ligne 1 : 3 checkboxes flex sur toute la largeur -->
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;width:100%;">
+  <label style="display:inline-flex;align-items:center;gap:3px;font-size:8pt;cursor:pointer;">
+    {_cb(d.get('type_point_chaud'))}&nbsp;par point chaud
+  </label>
+  <label style="display:inline-flex;align-items:center;gap:3px;font-size:8pt;cursor:pointer;">
+    {_cb(d.get('type_fouille'))}&nbsp;de fouille
+  </label>
+  <label style="display:inline-flex;align-items:center;gap:3px;font-size:8pt;cursor:pointer;">
+    {_cb(d.get('type_espace_clos'))}&nbsp;en espace clos ou confin&#233;
+  </label>
 </div>
 <!-- Ligne 2 : autre cas -->
 <div class="field-line" style="display:flex;align-items:baseline;margin-bottom:4px;">
-  {_cb(d.get('type_autre_cas'))}<span style="white-space:nowrap;margin:0 4px;">autre cas&#160;:</span>
+  <label style="display:inline-flex;align-items:center;gap:3px;white-space:nowrap;margin-right:4px;font-size:8pt;cursor:pointer;">
+    {_cb(d.get('type_autre_cas'))}&nbsp;autre cas&#160;:
+  </label>
   {inl('detail_autre_cas','calc(100% - 90px)')}
 </div>
 

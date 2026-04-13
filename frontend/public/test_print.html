@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Autorisation Particulière de Travaux — MAINT/FE/003 V4</title>
+<style>
+/* ─── IMPRESSION A4 ─────────────────────────────────────── */
+@page {
+  size: A4 portrait;
+  margin: 8mm 10mm 8mm 10mm;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  font-family: Arial, sans-serif;
+  font-size: 8pt;
+  color: #000;
+  background: #fff;
+}
+.container { width:100%; page-break-inside:avoid; }
+table { width:100%; border-collapse:collapse; }
+th, td { border:1px solid #000; vertical-align:middle; padding:1px 3px; }
+p { margin:2px 0; font-size:8pt; }
+.flex-row { display:flex; align-items:baseline; margin-bottom:2px; }
+.flex-row span { white-space:nowrap; margin-right:4px; font-size:8pt; }
+.field-line { margin-bottom:2px; }
+input[type="text"], input[type="date"] {
+  font-family: Arial, sans-serif;
+  font-size: 8pt;
+  border: none;
+  border-bottom: 1px solid #444;
+  background: transparent;
+  outline: none;
+  padding: 0 2px;
+}
+input[type="checkbox"] {
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+  width: 11px;
+  height: 11px;
+  margin: 0 2px;
+  vertical-align: middle;
+  cursor: pointer;
+}
+/* ─── @media print ──────────────────────────────────────── */
+@media print {
+  .no-print { display:none !important; }
+  body { font-size:8pt; margin:0; padding:0; }
+  .container { width:100%; max-width:100%; box-shadow:none; margin:0; padding:0; }
+  p, div, tr { line-height:1.2; }
+  input[type="text"], input[type="date"] {
+    border:none !important;
+    border-bottom:1px solid #000 !important;
+    background:transparent !important;
+    padding:0 !important;
+  }
+  input[type="checkbox"] {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    width:10px;
+    height:10px;
+  }
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+<!-- ══ ZONE 1 — EN-TÊTE ══════════════════════════════════════════════ -->
+<table style="margin-bottom:3px;">
+  <colgroup>
+    <col style="width:22%;">
+    <col style="width:30%;">
+    <col style="width:31%;">
+    <col style="width:17%;">
+  </colgroup>
+
+  <!-- Ligne 1 : Logo | Titre (col 2+3) | Page 1/1 -->
+  <tr style="height:18mm;">
+    <td style="text-align:center;padding:4px;">
+      <svg width="82" height="38" xmlns="http://www.w3.org/2000/svg">
+        <path d="M8,34 Q13,9 32,4 Q19,19 28,34 Z" fill="#4CAF50"/>
+        <text x="36" y="28" font-family="Arial" font-size="21" font-weight="bold" fill="#003366">IRIS</text>
+      </svg>
+    </td>
+    <td colspan="2" style="text-align:center;padding:4px;">
+      <div style="font-size:11pt;">FORMULAIRE / ENREGISTREMENT</div>
+      <div style="font-size:14pt;font-weight:bold;">Autorisation particuli&#232;re de travaux</div>
+    </td>
+    <td style="text-align:center;font-size:9pt;">Page 1/1</td>
+  </tr>
+
+  <!-- Ligne 2 : Date | MAINT/FE/003 (col 2+3) | Version 4 -->
+  <tr style="height:10mm;">
+    <td style="font-size:8pt;padding:3px;">
+      Date&#160;:&#160;<input type="date" value="2026-04-13" style="border:none;border-bottom:1px solid #444;background:transparent;font-family:Arial,sans-serif;font-size:8pt;padding:0 2px;">
+    </td>
+    <td colspan="2" style="text-align:center;font-weight:bold;font-size:13pt;">MAINT/FE/003</td>
+    <td style="text-align:center;font-size:9pt;">Version 4</td>
+  </tr>
+
+  <!-- Ligne 3 : séparateur gris -->
+  <tr>
+    <td colspan="4" style="background:#CCCCCC;height:4mm;border-top:1px solid #000;border-bottom:1px solid #000;border-left:1px solid #000;border-right:1px solid #000;padding:0;line-height:0;font-size:0;">&nbsp;</td>
+  </tr>
+
+  <!-- Ligne 4 : Rédigée par | Approuvée par -->
+  <tr style="height:12mm;">
+    <td colspan="2" style="font-size:8pt;padding:3px;">
+      R&#233;dig&#233;e par&#160;: <strong>G.BUENO</strong><br>
+      <em style="font-size:7pt;">Responsable Maintenance</em>
+    </td>
+    <td colspan="2" style="font-size:8pt;padding:3px;">
+      Approuv&#233;e par&#160;: <strong>T.GARNIER</strong><br>
+      <em style="font-size:7pt;">Directeur d&rsquo;Activit&#233;</em>
+    </td>
+  </tr>
+</table>
+
+<!-- ══ ZONE 2 — AVERTISSEMENT ════════════════════════════════════════ -->
+<p style="font-weight:bold;margin:3px 0 2px;">A r&#233;diger par l&rsquo;agent de ma&#238;trise avant le d&#233;but des travaux&#160;:</p>
+<div style="border:2px solid #000;text-align:center;padding:3px 6px;font-weight:bold;font-size:9pt;margin-bottom:4px;">
+  A LIRE ATTENTIVEMENT<br>
+  A CONSERVER PAR L&rsquo;EXECUTANT PENDANT L&rsquo;INTERVENTION
+</div>
+
+<!-- ══ ZONE 3 — INFORMATIONS TRAVAUX ═════════════════════════════════ -->
+<p style="font-weight:bold;margin:2px 0;">Cette autorisation particuli&#232;re de travail concerne des travaux&#160;:</p>
+
+<!-- Ligne 1 : 3 checkboxes flex sur toute la largeur -->
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;width:100%;">
+  <label style="display:inline-flex;align-items:center;gap:3px;font-size:8pt;cursor:pointer;">
+    <input type="checkbox" checked style="width:11px;height:11px;margin:0 2px;vertical-align:middle;-webkit-print-color-adjust:exact;print-color-adjust:exact;">&nbsp;par point chaud
+  </label>
+  <label style="display:inline-flex;align-items:center;gap:3px;font-size:8pt;cursor:pointer;">
+    <input type="checkbox"  style="width:11px;height:11px;margin:0 2px;vertical-align:middle;-webkit-print-color-adjust:exact;print-color-adjust:exact;">&nbsp;de fouille
+  </label>
+  <label style="display:inline-flex;align-items:center;gap:3px;font-size:8pt;cursor:pointer;">
+    <input type="checkbox" checked style="width:11px;height:11px;margin:0 2px;vertical-align:middle;-webkit-print-color-adjust:exact;print-color-adjust:exact;">&nbsp;en espace clos ou confin&#233;
+  </label>
+</div>
+<!-- Ligne 2 : autre cas -->
+<div class="field-line" style="display:flex;align-items:baseline;margin-bottom:4px;">
+  <label style="display:inline-flex;align-items:center;gap:3px;white-space:nowrap;margin-right:4px;font-size:8pt;cursor:pointer;">
+    <input type="checkbox"  style="width:11px;height:11px;margin:0 2px;vertical-align:middle;-webkit-print-color-adjust:exact;print-color-adjust:exact;">&nbsp;autre cas&#160;:
+  </label>
+  <input type="text" value="" style="width:calc(100% - 90px);border:none;border-bottom:1px solid #444;background:transparent;font-family:Arial,sans-serif;font-size:8pt;padding:0 2px;box-sizing:border-box;">
+</div>
+
+<!-- Champs d'information -->
+<div class="field-line" style="display:flex;align-items:baseline;margin-bottom:2px;">
+  <span style="white-space:nowrap;margin-right:4px;">D&#233;tail des travaux &#224; r&#233;aliser&#160;:</span>
+  <input type="text" value="Remplacement joint sur canalisation gaz" style="width:calc(100% - 210px);border:none;border-bottom:1px solid #444;background:transparent;font-family:Arial,sans-serif;font-size:8pt;padding:0 2px;box-sizing:border-box;">
+</div>
+<div class="field-line" style="margin-bottom:2px;"><input type="text" value="" style="width:100%;border:none;border-bottom:1px solid #444;background:transparent;font-family:Arial,sans-serif;font-size:8pt;padding:0 2px;box-sizing:border-box;"></div>
+<div class="field-line" style="margin-bottom:3px;"><input type="text" value="" style="width:100%;border:none;border-bottom:1px solid #444;background:transparent;font-family:Arial,sans-serif;font-size:8pt;padding:0 2px;box-sizing:border-box;"></div>
+
+<div class="field-line" style="display:flex;align-items:baseline;margin-bottom:2px;">
+  <span style="white-space:nowrap;margin-right:4px;">Lieu d&rsquo;intervention&#160;:</span>
+  <input type="text" value="Zone B - Atelier 3" style="width:calc(100% - 130px);border:none;border-bottom:1px solid #444;background:transparent;font-family:Arial,sans-serif;font-size:8pt;padding:0 2px;box-sizing:border-box;">
+</div>
+
+<div class="field-line" style="display:flex;align-items:baseline;margin-bottom:2px;">
+  <span style="white-space:nowrap;margin-right:4px;">Mat&#233;riel ou appareillage utilis&#233; par l&rsquo;entreprise&#160;:</span>
+  <input type="text" value="" style="width:calc(100% - 330px);border:none;border-bottom:1px solid #444;background:transparent;font-family:Arial,sans-serif;font-size:8pt;padding:0 2px;box-sizing:border-box;">
+</div>
+
+<div class="field-line" style="display:flex;align-items:baseline;margin-bottom:2px;">
+  <span style="white-space:nowrap;margin-right:4px;">Dernier produit ou fluide contenu dans l&rsquo;appareil (ou tuyauterie)&#160;:</span>
+  <input type="text" value="" style="width:calc(100% - 400px);border:none;border-bottom:1px solid #444;background:transparent;font-family:Arial,sans-serif;font-size:8pt;padding:0 2px;box-sizing:border-box;">
+</div>
+<div class="field-line" style="margin-bottom:3px;"><input type="text" value="" style="width:100%;border:none;border-bottom:1px solid #444;background:transparent;font-family:Arial,sans-serif;font-size:8pt;padding:0 2px;box-sizing:border-box;"></div>
+
+<div class="field-line" style="display:flex;align-items:baseline;margin-bottom:2px;">
+  <span style="white-space:nowrap;margin-right:4px;">Danger associ&#233;&#160;:</span>
+  <input type="text" value="" style="width:calc(100% - 120px);border:none;border-bottom:1px solid #444;background:transparent;font-family:Arial,sans-serif;font-size:8pt;padding:0 2px;box-sizing:border-box;">
+</div>
+
+<div class="field-line" style="display:flex;align-items:baseline;margin-bottom:2px;">
+  <span style="white-space:nowrap;margin-right:4px;">Appareil, mat&#233;riel ou activit&#233; avoisinantes pr&#233;sentant un danger&#160;:</span>
+  <input type="text" value="" style="width:calc(100% - 400px);border:none;border-bottom:1px solid #444;background:transparent;font-family:Arial,sans-serif;font-size:8pt;padding:0 2px;box-sizing:border-box;">
+</div>
+<div class="field-line" style="margin-bottom:4px;"><input type="text" value="" style="width:100%;border:none;border-bottom:1px solid #444;background:transparent;font-family:Arial,sans-serif;font-size:8pt;padding:0 2px;box-sizing:border-box;"></div>
+
+<!-- ══ ZONE 4 — TABLEAU DES PRÉCAUTIONS ══════════════════════════════ -->
+<p style="font-weight:bold;margin:2px 0;">Pr&#233;cautions &#224; prendre&#160;:</p>
+<table style="font-size:6.5pt;margin-bottom:3px;">
+  <colgroup>
+    <col style="width:29%;">
+    <col style="width:3.2%;">
+    <col style="width:3.2%;">
+    <col style="width:3.2%;">
+    <col style="width:21%;">
+    <col style="width:3.2%;">
+    <col style="width:3.2%;">
+    <col style="width:3.2%;">
+    <col style="width:21%;">
+    <col style="width:3.2%;">
+    <col style="width:3.2%;">
+  </colgroup>
+
+  <!-- En-tête niveau 1 -->
+  <tr style="background:#e0e0e0;font-weight:bold;font-size:6.5pt;">
+    <th colspan="8" style="text-align:center;padding:2px;border-right:2px solid #000;">
+      PRECAUTIONS A PRENDRE
+    </th>
+    <th colspan="3" style="text-align:center;padding:2px;">
+      EQUIPEMENT COMPLEMENTAIRE
+    </th>
+  </tr>
+
+  <!-- En-tête niveau 2 -->
+  <tr style="background:#f0f0f0;font-size:6pt;font-weight:bold;">
+    <th style="padding:1px 3px;">Lib&#233;ll&#233;</th>
+    <th style="text-align:center;">NON</th>
+    <th style="text-align:center;">OUI</th>
+    <th style="text-align:center;border-right:2px solid #000;">FAIT</th>
+    <th style="padding:1px 3px;">Lib&#233;ll&#233;</th>
+    <th style="text-align:center;">NON</th>
+    <th style="text-align:center;">OUI</th>
+    <th style="text-align:center;border-right:2px solid #000;">FAIT</th>
+    <th style="padding:1px 3px;">Lib&#233;ll&#233;</th>
+    <th style="text-align:center;">NON</th>
+    <th style="text-align:center;">OUI</th>
+  </tr>
+
+  
+      <tr>
+        <td style="font-size:6.5pt;padding:1px 3px;white-space:nowrap;">CONSIGNATION MAT. OU PIECE EN MOUV...</td>
+        <td style="text-align:center;padding:1px;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="text-align:center;padding:1px;"><input type="checkbox" checked style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="text-align:center;padding:1px;border-right:2px solid #000;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="font-size:6.5pt;padding:1px 3px;white-space:nowrap;">CANALISATION ELECTRIQUES</td>
+        <td style="text-align:center;padding:1px;"><input type="checkbox" checked style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="text-align:center;padding:1px;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="text-align:center;padding:1px;border-right:2px solid #000;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="font-size:6.5pt;padding:1px 3px;white-space:nowrap;">VISIERE………………………………….</td>
+        <td style="text-align:center;padding:1px;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="text-align:center;padding:1px;"><input type="checkbox" checked style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+      </tr>
+      <tr>
+        <td style="font-size:6.5pt;padding:1px 3px;white-space:nowrap;">CONSIGNATION ELECTRIQUE…………………...</td>
+        <td style="text-align:center;padding:1px;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="text-align:center;padding:1px;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="text-align:center;padding:1px;border-right:2px solid #000;"><input type="checkbox" checked style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="font-size:6.5pt;padding:1px 3px;white-space:nowrap;">SOUTERRAINES BALISEES……………...</td>
+        <td style="text-align:center;padding:1px;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="text-align:center;padding:1px;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="text-align:center;padding:1px;border-right:2px solid #000;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="font-size:6.5pt;padding:1px 3px;white-space:nowrap;">TENUE IMPERMEABLE, BOTTE………….</td>
+        <td style="text-align:center;padding:1px;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="text-align:center;padding:1px;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+      </tr>
+      <tr>
+        <td style="font-size:6.5pt;padding:1px 3px;white-space:nowrap;">DEBRANCHEMENT FORCE MOTRICE……….</td>
+        <td style="text-align:center;padding:1px;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="text-align:center;padding:1px;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="text-align:center;padding:1px;border-right:2px solid #000;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="font-size:6.5pt;padding:1px 3px;white-space:nowrap;">EGOUTS ET CABLES PROTEGES…..….</td>
+        <td style="text-align:center;padding:1px;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="text-align:center;padding:1px;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="text-align:center;padding:1px;border-right:2px solid #000;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="font-size:6.5pt;padding:1px 3px;white-space:nowrap;">CAGOULE AIR RESPIRABLE/ART…….</td>
+        <td style="text-align:center;padding:1px;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="text-align:center;padding:1px;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+      </tr>
+      <tr>
+        <td style="font-size:6.5pt;padding:1px 3px;white-space:nowrap;">VIDANGE APPAREIL/TUYAUTERIE….……..…</td>
+        <td style="text-align:center;padding:1px;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="text-align:center;padding:1px;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="text-align:center;padding:1px;border-right:2px solid #000;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="font-size:6.5pt;padding:1px 3px;white-space:nowrap;">TAUX D'OXYGENE……………………….</td>
+        <td style="text-align:center;padding:1px;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="text-align:center;padding:1px;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="text-align:center;padding:1px;border-right:2px solid #000;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="font-size:6.5pt;padding:1px 3px;white-space:nowrap;">MASQUE TYPE :………….……………….</td>
+        <td style="text-align:center;padding:1px;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="text-align:center;padding:1px;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+      </tr>
+      <tr>
+        <td style="font-size:6.5pt;padding:1px 3px;white-space:nowrap;">DECONTAMINATION/LAVAGE……………….</td>
+        <td style="text-align:center;padding:1px;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="text-align:center;padding:1px;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="text-align:center;padding:1px;border-right:2px solid #000;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="font-size:6.5pt;padding:1px 3px;white-space:nowrap;">TAUX D'EXPLOSIVITE…………………....</td>
+        <td style="text-align:center;padding:1px;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="text-align:center;padding:1px;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="text-align:center;padding:1px;border-right:2px solid #000;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="font-size:6.5pt;padding:1px 3px;white-space:nowrap;">GANT TYPE :………….………………….</td>
+        <td style="text-align:center;padding:1px;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="text-align:center;padding:1px;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+      </tr>
+      <tr>
+        <td style="font-size:6.5pt;padding:1px 3px;white-space:nowrap;">DEGAZAGE……………………………..…</td>
+        <td style="text-align:center;padding:1px;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="text-align:center;padding:1px;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="text-align:center;padding:1px;border-right:2px solid #000;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="font-size:6.5pt;padding:1px 3px;white-space:nowrap;">EXPLOSIMETRE EN CONTINU…………….</td>
+        <td style="text-align:center;padding:1px;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="text-align:center;padding:1px;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="text-align:center;padding:1px;border-right:2px solid #000;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="font-size:6.5pt;padding:1px 3px;white-space:nowrap;">HARNAIS DE SECURITE……………….</td>
+        <td style="text-align:center;padding:1px;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="text-align:center;padding:1px;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+      </tr>
+      <tr>
+        <td style="font-size:6.5pt;padding:1px 3px;white-space:nowrap;">POSE JOINT PLEIN………………………….</td>
+        <td style="text-align:center;padding:1px;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="text-align:center;padding:1px;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="text-align:center;padding:1px;border-right:2px solid #000;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="font-size:6.5pt;padding:1px 3px;white-space:nowrap;">ECLAIRAGE DE SURETE………….…....</td>
+        <td style="text-align:center;padding:1px;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="text-align:center;padding:1px;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="text-align:center;padding:1px;border-right:2px solid #000;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="font-size:6.5pt;padding:1px 3px;white-space:nowrap;">OUTILLAGE ANTI-ETINCELLE………….</td>
+        <td style="text-align:center;padding:1px;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="text-align:center;padding:1px;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+      </tr>
+      <tr>
+        <td style="font-size:6.5pt;padding:1px 3px;white-space:nowrap;">VENTILATION FORCEE……………………….</td>
+        <td style="text-align:center;padding:1px;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="text-align:center;padding:1px;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="text-align:center;padding:1px;border-right:2px solid #000;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="font-size:6.5pt;padding:1px 3px;white-space:nowrap;">EXTINCTEUR TYPE……………………….</td>
+        <td style="text-align:center;padding:1px;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="text-align:center;padding:1px;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="text-align:center;padding:1px;border-right:2px solid #000;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="font-size:6.5pt;padding:1px 3px;white-space:nowrap;">PRESENCE D'UN SURVEILLANT……….</td>
+        <td style="text-align:center;padding:1px;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="text-align:center;padding:1px;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+      </tr>
+      <tr>
+        <td style="font-size:6.5pt;padding:1px 3px;white-space:nowrap;">ZONE BALISEE………………………....……</td>
+        <td style="text-align:center;padding:1px;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="text-align:center;padding:1px;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="text-align:center;padding:1px;border-right:2px solid #000;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="font-size:6.5pt;padding:1px 3px;white-space:nowrap;">AUTRES………………………………….</td>
+        <td style="text-align:center;padding:1px;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="text-align:center;padding:1px;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="text-align:center;padding:1px;border-right:2px solid #000;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="font-size:6.5pt;padding:1px 3px;white-space:nowrap;">AUTRES.……………………………….</td>
+        <td style="text-align:center;padding:1px;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+        <td style="text-align:center;padding:1px;"><input type="checkbox"  style="width:10px;height:10px;margin:0 1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;"></td>
+      </tr>
+
+  <!-- Pied de tableau : précautions supplémentaires -->
+  <tr style="background:#f0f0f0;">
+    <td colspan="11" style="padding:2px 5px;border-top:1px solid #000;">
+      <strong>PRECAUTIONS SUPPLEMENTAIRES&#160;:</strong>&#160;
+      <input type="text" value="" style="width:calc(100% - 230px);border:none;border-bottom:1px solid #444;background:transparent;font-family:Arial,sans-serif;font-size:8pt;padding:0 2px;box-sizing:border-box;">
+      <br>
+      <input type="text" value="" style="width:100%;border:none;border-bottom:1px solid #444;background:transparent;font-family:Arial,sans-serif;font-size:8pt;padding:0 2px;box-sizing:border-box;margin-top:2px;">
+    </td>
+  </tr>
+</table>
+
+<!-- ══ ZONE 5 — VALIDATION ═══════════════════════════════════════════ -->
+<p style="font-weight:bold;margin:2px 0;">Validation (Responsable du site ou son d&#233;l&#233;gu&#233;)&#160;:</p>
+
+<div class="field-line" style="display:flex;gap:12px;margin-bottom:2px;">
+  <div style="display:flex;align-items:baseline;flex:2;">
+    <span style="white-space:nowrap;margin-right:4px;">Cette autorisation est &#233;tablie par&#160;:</span>
+    <input type="text" value="M. Dupont" style="width:100%;border:none;border-bottom:1px solid #444;background:transparent;font-family:Arial,sans-serif;font-size:8pt;padding:0 2px;box-sizing:border-box;">
+  </div>
+  <div style="display:flex;align-items:baseline;flex:1;">
+    <span style="white-space:nowrap;margin-right:4px;">Le&#160;:</span>
+    <input type="text" value="" style="width:100%;border:none;border-bottom:1px solid #444;background:transparent;font-family:Arial,sans-serif;font-size:8pt;padding:0 2px;box-sizing:border-box;">
+  </div>
+</div>
+
+<div class="field-line" style="display:flex;gap:12px;margin-bottom:3px;">
+  <div style="display:flex;align-items:baseline;flex:1;">
+    <span style="white-space:nowrap;margin-right:4px;">Est d&#233;livr&#233;e &#224;&#160;:</span>
+    <input type="text" value="Jean Martin" style="width:100%;border:none;border-bottom:1px solid #444;background:transparent;font-family:Arial,sans-serif;font-size:8pt;padding:0 2px;box-sizing:border-box;">
+  </div>
+  <div style="display:flex;align-items:baseline;flex:1;">
+    <span style="white-space:nowrap;margin-right:4px;">de l&rsquo;entreprise&#160;:</span>
+    <input type="text" value="ABC Travaux SARL" style="width:100%;border:none;border-bottom:1px solid #444;background:transparent;font-family:Arial,sans-serif;font-size:8pt;padding:0 2px;box-sizing:border-box;">
+  </div>
+</div>
+
+<!-- Tableau Visa AM 50/50 -->
+<table style="margin-bottom:4px;">
+  <tr style="height:25mm;">
+    <td style="width:50%;font-size:9pt;font-weight:bold;padding:4px;vertical-align:middle;">
+      Nom et visa AM ou responsable d&rsquo;intervention
+    </td>
+    <td style="width:50%;padding:4px;vertical-align:top;">
+      <textarea style="width:100%;height:22mm;border:none;background:transparent;font-family:Arial;font-size:8pt;resize:none;"></textarea>
+    </td>
+  </tr>
+</table>
+
+<!-- ══ ZONE 6 — VÉRIFICATION POST-TRAVAUX ════════════════════════════ -->
+<p style="font-weight:bold;margin:2px 0;">
+  V&#233;rification &#224; la fin des travaux de l&rsquo;absence de risque r&#233;siduel suite &#224; l&rsquo;intervention
+</p>
+<table style="margin-bottom:5px;">
+  <tr style="background:#e0e0e0;">
+    <th style="width:60%;text-align:center;font-size:9pt;padding:2px;">Visite AM apr&#232;s la fin de l&rsquo;intervention</th>
+    <th style="width:40%;text-align:center;font-size:9pt;padding:2px;">Visa AM</th>
+  </tr>
+  <tr style="height:15mm;">
+    <td style="text-align:center;font-size:8pt;">30 minutes</td>
+    <td style="padding:3px;"><input type="text" value="" style="width:100%;border:none;border-bottom:1px solid #444;background:transparent;font-family:Arial,sans-serif;font-size:8pt;padding:0 2px;box-sizing:border-box;"></td>
+  </tr>
+  <tr style="height:15mm;">
+    <td style="text-align:center;font-size:8pt;">1 heure</td>
+    <td style="padding:3px;"><input type="text" value="" style="width:100%;border:none;border-bottom:1px solid #444;background:transparent;font-family:Arial,sans-serif;font-size:8pt;padding:0 2px;box-sizing:border-box;"></td>
+  </tr>
+  <tr style="height:15mm;">
+    <td style="text-align:center;font-size:8pt;">2 heures</td>
+    <td style="padding:3px;"><input type="text" value="" style="width:100%;border:none;border-bottom:1px solid #444;background:transparent;font-family:Arial,sans-serif;font-size:8pt;padding:0 2px;box-sizing:border-box;"></td>
+  </tr>
+</table>
+
+<!-- ══ PIED DE PAGE ══════════════════════════════════════════════════ -->
+<p style="text-align:center;font-style:italic;font-size:8pt;margin-top:5px;">
+  Remettre une copie &#224; l&rsquo;intervenant &#8211; Archivage Direction du site
+</p>
+
+</div>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9ebd17dd8b30c4e5',t:'MTc3NjExMDgwNg=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
