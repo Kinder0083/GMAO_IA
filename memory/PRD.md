@@ -33,6 +33,12 @@ Application GMAO (Gestion de Maintenance Assistée par Ordinateur) complète pou
 - Export PDF individuel des OT (jsPDF)
 - Export PDF en masse des OT avec mode sélection
 
+### Session 14 avril 2026 — Fix filtrage permissions dans Personnalisation (Organisation menu + Header)
+
+**Problème résolu** : Les onglets "Organisation du menu" et "Organisation du Header" affichaient TOUS les menus/icônes sans filtrage de permissions.
+**Corrections** : `isMenuAccessible()` dans `MenuOrganizationSection.jsx`, `isIconAccessible()` + champ `module` dans `HeaderOrganizationSection.jsx`.
+**Tests** : iteration_168.json — 100% (20/20 frontend) ✅
+
 ### Session 14 avril 2026 (fork) — Fix menu "Personnalisation" invisible pour non-ADMIN
 
 **Problème résolu** : Le menu "Personnalisation" dans la sidebar n'apparaissait pas pour les utilisateurs non-ADMIN même lorsque l'administrateur leur avait accordé la permission `personalization.view = true`.
