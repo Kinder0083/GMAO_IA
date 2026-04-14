@@ -65,6 +65,8 @@ export default function ExplorerView({ poles, onRefresh }) {
 
   // Autorisation Particulière V4 (dialog intégré)
   const [showAutorisationDialog, setShowAutorisationDialog] = useState(false);
+  // Compteur pour forcer le remontage du dialog à chaque nouvelle autorisation vierge
+  const [newAutoKey, setNewAutoKey] = useState(0);
 
   // Share email form
   const [emailForm, setEmailForm] = useState({ recipient: '', subject: '', message: '' });
@@ -320,9 +322,9 @@ export default function ExplorerView({ poles, onRefresh }) {
     }
   };
 
-  const handleShareEmail = (item) => {
-    setShareEmailDialog(item);
-    setEmailForm({ recipient: '', subject: `Document : ${item.fichier_nom || item.titre || 'Document'}`, message: '' });
+  const handleShareEmail = (item, itemType) => {
+    setShareEmailDialog({ ...item, _nodeType: itemType });
+    setEmailForm({ recipient: '', subject: `${item.titre || item.fichier_nom || 'Document'}`, message: '' });
   };
 
   const handleShareEmailSubmit = async () => {
@@ -330,6 +332,7 @@ export default function ExplorerView({ poles, onRefresh }) {
     try {
       await documentationsAPI.shareByEmail({
         document_id: shareEmailDialog.id,
+        node_type: shareEmailDialog._nodeType || 'document',
         recipient: emailForm.recipient,
         subject: emailForm.subject,
         message: emailForm.message
@@ -645,8 +648,8 @@ export default function ExplorerView({ poles, onRefresh }) {
           onDownload={(item) => { window.open(`${getBackendURL()}/api/documentations/documents/${item.id}/download?token=${localStorage.getItem('token')}`, '_blank'); setContextMenu(null); }}
           onPrint={(item, type) => { handlePrint(item, type); setContextMenu(null); }}
           onSendTo={(item, type) => { setSendToDialog({ item, type }); setContextMenu(null); }}
-          onShareEmail={(item) => { handleShareEmail(item); setContextMenu(null); }}
-          onShareFSAO={(item) => { handleShareEmail(item); setContextMenu(null); }}
+          onShareEmail={(item, type) => { handleShareEmail(item, type || 'document'); setContextMenu(null); }}
+          onShareFSAO={(item, type) => { handleShareEmail(item, type || 'document'); setContextMenu(null); }}
           onToggleHiddenExternal={(item, type) => { handleTogglePermission(item, type, 'hidden_for_external'); setContextMenu(null); }}
           onToggleHiddenUsers={(item, type) => { handleTogglePermission(item, type, 'hidden_for_users'); setContextMenu(null); }}
           onInsertInto={(item) => { handleOpenInsertDialog(item); setContextMenu(null); }}
@@ -658,6 +661,7 @@ export default function ExplorerView({ poles, onRefresh }) {
               setShowBonTravailDialog(true);
             } else if (tpl.type === 'AUTORISATION') {
               // Nouveau : ouvre le dialog MAINT/FE/003 V4 (remplace l'ancienne navigation)
+              setNewAutoKey(k => k + 1);
               setShowAutorisationDialog(true);
             } else {
               // Template custom : ouvrir le CustomFormFiller
@@ -681,7 +685,7 @@ export default function ExplorerView({ poles, onRefresh }) {
 
       {/* Dialog Autorisation Particulière MAINT/FE/003 V4 */}
       <AutorisationParticulierePrintDialog
-        key={editAutoData?.id || 'new-auto'}
+        key={editAutoData?.id || `new-auto-${newAutoKey}`}
         open={showAutorisationDialog}
         onClose={() => { setShowAutorisationDialog(false); setEditAutoData(null); }}
         poleId={currentPoleId}
@@ -1053,12 +1057,8 @@ function FullContextMenu({
               </button>
             ))
           } />
-          <MenuItem icon={Mail} label="Partager par email" onClick={() => {
-            const mailto = `mailto:?subject=Document: ${item.fichier_nom || item.titre || 'Document'}&body=Veuillez consulter le document "${item.fichier_nom || item.titre}"`;
-            window.location.href = mailto;
-            onClose();
-          }} />
-          <MenuItem icon={Send} label="Partager par FSAO" onClick={() => onShareFSAO(item)} />
+          <MenuItem icon={Mail} label="Partager par email (avec PJ)" onClick={() => onShareEmail(item, 'document')} />
+          <MenuItem icon={Send} label="Partager par FSAO" onClick={() => onShareFSAO(item, 'document')} />
           <Separator />
           {isAdmin && (
             <>
@@ -1092,12 +1092,8 @@ function FullContextMenu({
               </button>
             ))
           } />
-          <MenuItem icon={Mail} label="Partager par email" onClick={() => {
-            const mailto = `mailto:?subject=Bon de travail: ${item.titre || 'Bon de travail'}&body=Veuillez consulter le bon de travail "${item.titre || ''}"`;
-            window.location.href = mailto;
-            onClose();
-          }} />
-          <MenuItem icon={Send} label="Partager par FSAO" onClick={() => onShareFSAO(item)} />
+          <MenuItem icon={Mail} label="Partager par email (avec PJ)" onClick={() => onShareEmail(item, 'bon')} />
+          <MenuItem icon={Send} label="Partager par FSAO" onClick={() => onShareFSAO(item, 'bon')} />
           <Separator />
           {isAdmin && (
             <>
@@ -1129,12 +1125,8 @@ function FullContextMenu({
               </button>
             ))
           } />
-          <MenuItem icon={Mail} label="Partager par email" onClick={() => {
-            const mailto = `mailto:?subject=Autorisation particulière: ${item.titre || 'Autorisation'}&body=Veuillez consulter l'autorisation particulière "${item.titre || ''}"`;
-            window.location.href = mailto;
-            onClose();
-          }} />
-          <MenuItem icon={Send} label="Partager par FSAO" onClick={() => onShareFSAO(item)} />
+          <MenuItem icon={Mail} label="Partager par email (avec PJ)" onClick={() => onShareEmail(item, 'autorisation')} />
+          <MenuItem icon={Send} label="Partager par FSAO" onClick={() => onShareFSAO(item, 'autorisation')} />
           <Separator />
           {isAdmin && (
             <>

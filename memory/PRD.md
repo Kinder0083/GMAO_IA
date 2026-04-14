@@ -33,6 +33,15 @@ Application GMAO (Gestion de Maintenance Assistée par Ordinateur) complète pou
 - Export PDF individuel des OT (jsPDF)
 - Export PDF en masse des OT avec mode sélection
 
+### Session 14 avril 2026 — Fix template contamination + email avec PJ
+- **Bug 1 (template contamination)** : `ExplorerView.jsx` — ajout de `newAutoKey` (counter) incrémenté à chaque ouverture d'un dialog vierge → `key={editAutoData?.id || \`new-auto-${newAutoKey}\`}` force le remontage complet du dialog, empêchant la réutilisation de l'état précédent
+- **Bug 2 (email sans PJ)** : Remplacement des 3 blocs `mailto:` (document, bon, autorisation) dans `FullContextMenu` par l'ouverture du dialog FSAO → `onShareEmail(item, type)`. Backend `/share-email` étendu :
+  - `document` : pièce jointe depuis le fichier disque (existant)
+  - `bon` : génération HTML via `generate_bon_travail_html` + conversion PDF WeasyPrint
+  - `autorisation` : génération HTML via `generate_autorisation_v4_html` + conversion PDF WeasyPrint
+  - `weasyprint==68.1` ajouté à requirements.txt
+- Tests : bon ✅ / autorisation ✅ — emails envoyés avec PJ PDF
+
 ### Session 14 avril 2026 — Nettoyage ancien formulaire AutorisationParticuliereForm
 - Suppression de `AutorisationParticuliereForm.jsx` (674 lignes, formulaire obsolète)
 - Suppression de l'import dans `App.js`

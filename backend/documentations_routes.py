@@ -2415,11 +2415,13 @@ async def share_by_email(
     data: dict,
     current_user: dict = Depends(get_current_user)
 ):
-    """Envoyer un document par email via le SMTP configuré dans l'application"""
+    """Envoyer un document/bon/autorisation par email via SMTP avec pièce jointe PDF."""
     try:
         import email_service
+        from weasyprint import HTML as WeasyHTML
 
         document_id = data.get("document_id")
+        node_type = data.get("node_type", "document")
         recipient = data.get("recipient")
         subject = data.get("subject", "Document partagé via FSAO")
         message = data.get("message", "")
@@ -2428,34 +2430,64 @@ async def share_by_email(
         if not recipient:
             raise HTTPException(status_code=400, detail="Destinataire requis")
 
-        doc = await db.documents.find_one({"id": document_id})
-        if not doc:
-            raise HTTPException(status_code=404, detail="Document non trouvé")
+        # ── Récupérer le document selon son type ──────────────────────────────
+        attachment_data = None
+        attachment_filename = None
+        doc_name = "Document"
 
-        # Construire le HTML de l'email
+        if node_type == "document":
+            doc = await db.documents.find_one({"id": document_id})
+            if not doc:
+                raise HTTPException(status_code=404, detail="Document non trouvé")
+            doc_name = doc.get("fichier_nom") or doc.get("titre", "Document")
+            if doc.get("fichier_url"):
+                file_path = Path(f"/app/backend{doc['fichier_url']}")
+                if file_path.exists():
+                    with open(file_path, "rb") as f:
+                        attachment_data = f.read()
+                    attachment_filename = doc_name
+
+        elif node_type == "bon":
+            bon = await db.bons_travail.find_one({"id": document_id}, {"_id": 0})
+            if not bon:
+                raise HTTPException(status_code=404, detail="Bon de travail non trouvé")
+            doc_name = bon.get("titre") or "Bon de travail"
+            try:
+                from bon_travail_template_final import generate_bon_travail_html
+                html_str = generate_bon_travail_html(bon)
+                attachment_data = WeasyHTML(string=html_str).write_pdf()
+                attachment_filename = f"{doc_name}.pdf"
+            except Exception as pdf_err:
+                logger.warning(f"PDF bon génération échoué: {pdf_err}")
+
+        elif node_type == "autorisation":
+            auto = await db.autorisations_particulieres.find_one({"id": document_id}, {"_id": 0})
+            if not auto:
+                raise HTTPException(status_code=404, detail="Autorisation non trouvée")
+            doc_name = auto.get("titre") or "Autorisation particulière"
+            try:
+                from autorisation_particuliere_v4_template import generate_autorisation_v4_html
+                form_data = auto.get("form_data") or auto
+                html_str = generate_autorisation_v4_html(form_data)
+                attachment_data = WeasyHTML(string=html_str).write_pdf()
+                attachment_filename = f"{doc_name}.pdf"
+            except Exception as pdf_err:
+                logger.warning(f"PDF autorisation génération échoué: {pdf_err}")
+
+        # ── Corps de l'email ──────────────────────────────────────────────────
         html_content = f"""
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
             <h2 style="color: #2563eb;">Document partagé</h2>
             <p>{message.replace(chr(10), '<br>')}</p>
             <div style="background: #f3f4f6; padding: 15px; border-radius: 8px; margin: 20px 0;">
-                <p style="margin: 0;"><strong>Document :</strong> {doc.get('fichier_nom') or doc.get('titre', 'Document')}</p>
-                {f"<p style='margin: 5px 0 0;'><strong>Type :</strong> {doc.get('fichier_type', 'N/A')}</p>" if doc.get('fichier_type') else ""}
+                <p style="margin: 0;"><strong>Document :</strong> {doc_name}</p>
             </div>
             <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;" />
             <p style="white-space: pre-line; color: #6b7280;">{signature}</p>
         </div>
         """
 
-        # Envoyer avec ou sans pièce jointe
-        attachment_data = None
-        attachment_filename = None
-        if doc.get("fichier_url"):
-            file_path = Path(f"/app/backend{doc['fichier_url']}")
-            if file_path.exists():
-                with open(file_path, "rb") as f:
-                    attachment_data = f.read()
-                attachment_filename = doc.get("fichier_nom", "document")
-
+        # ── Envoi ────────────────────────────────────────────────────────────
         if attachment_data:
             success = email_service.send_email_with_attachment(
                 to_email=recipient,
@@ -2472,8 +2504,6 @@ async def share_by_email(
             )
 
         if success:
-            # Audit
-            doc_name = doc.get('fichier_nom') or doc.get('titre', 'Document')
             await audit_service.log_action(
                 user_id=current_user["id"],
                 user_name=f"{current_user.get('prenom', '')} {current_user.get('nom', '')}",
