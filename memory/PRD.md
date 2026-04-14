@@ -33,6 +33,19 @@ Application GMAO (Gestion de Maintenance Assistée par Ordinateur) complète pou
 - Export PDF individuel des OT (jsPDF)
 - Export PDF en masse des OT avec mode sélection
 
+### Session 14 avril 2026 — Déconnexion inactivité : réglage per-user (Personnalisation → Sécurité)
+
+**Problème résolu** : Le délai de déconnexion automatique était un réglage global unique pour tous les utilisateurs (stocké dans `global_settings`). Chaque utilisateur doit pouvoir définir son propre délai.
+
+**Corrections** :
+- **`models.py`** : Ajout `inactivity_timeout_minutes: Optional[int] = None` dans `UserPreferences` ET `UserPreferencesUpdate`
+- **`routes/settings.py`** : `model_dump(exclude_unset=True)` au lieu de `if v is not None` → permet de sauvegarder `null` pour reset
+- **Nouveau `SecurityPreferencesSection.jsx`** : composant d'interface pour définir son timeout personnel (1-120 min) via `PUT /api/user-preferences`
+- **`Personnalisation.jsx`** : Ajout de l'onglet "Sécurité" avec `SecurityPreferencesSection`
+- **`InactivityHandler.jsx`** : Lit depuis `usePreferences()` context (préférence personnelle en priorité), fallback vers setting global admin (403 ignoré silencieusement)
+- **Comportement** : Chaque utilisateur définit son propre délai. `null` = utilise le défaut global de l'admin (15 min). Les préférences de chaque utilisateur sont totalement indépendantes.
+- **Tests** : iteration_169.json — 100% backend (12/12) + 100% frontend (5/5) ✅
+
 ### Session 14 avril 2026 — Fix filtrage permissions dans Personnalisation (Organisation menu + Header)
 
 **Problème résolu** : Les onglets "Organisation du menu" et "Organisation du Header" affichaient TOUS les menus/icônes sans filtrage de permissions.

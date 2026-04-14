@@ -43,8 +43,11 @@ const InactivityHandler = () => {
         const globalTimeout = response.data.inactivity_timeout_minutes || 15;
         setInactivityTimeout(globalTimeout * 60 * 1000);
       } catch (error) {
-        console.error('Erreur lors du chargement du timeout d\'inactivité:', error);
-        // Garder la valeur par défaut (15 min) en cas d'erreur
+        // Les non-admins obtiennent un 403 sur GET /api/settings → comportement normal
+        // Dans ce cas on garde le défaut de 15 minutes silencieusement
+        if (error?.response?.status !== 403) {
+          console.error('Erreur lors du chargement du timeout d\'inactivité:', error);
+        }
       }
     };
     loadTimeout();
