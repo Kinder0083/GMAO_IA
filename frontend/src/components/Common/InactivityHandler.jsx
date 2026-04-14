@@ -22,9 +22,15 @@ const InactivityHandler = () => {
   const [inactivityTimeout, setInactivityTimeout] = useState(15 * 60 * 1000); // Défaut 15 minutes
   const [isTimeoutDisabled, setIsTimeoutDisabled] = useState(false);
 
-  // Détecter si l'utilisateur est sur mobile (pas de déconnexion auto)
+  // Désactiver la déconnexion automatique pour :
+  // - les appareils mobiles / tablettes (user agent tactile ou pointer coarse)
+  // - les applications PWA installées en mode standalone (display-mode: standalone)
+  //   car un utilisateur PWA est sur son propre appareil personnel
   const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) ||
     window.matchMedia('(pointer: coarse)').matches;
+  const isPWA = window.matchMedia('(display-mode: standalone)').matches ||
+    window.navigator.standalone === true; // Safari iOS PWA
+  const isAutoLogoutDisabled = isMobile || isPWA;
 
   // Charger le timeout : préférence personnelle > réglage global admin
   // La préférence personnelle (inactivity_timeout_minutes) est dans les user_preferences (déjà chargées)
@@ -120,9 +126,9 @@ const InactivityHandler = () => {
     setIsTimeoutDisabled(disabledPaths.includes(location.pathname));
   }, [location.pathname]);
 
-  // Vérification de l'inactivité (désactivée sur mobile)
+  // Vérification de l'inactivité (désactivée sur mobile ET en mode PWA)
   useEffect(() => {
-    if (isMobile) return; // Pas de déconnexion automatique sur appareil mobile
+    if (isAutoLogoutDisabled) return; // Pas de déconnexion automatique sur mobile / PWA installée
 
     const checkInactivity = setInterval(() => {
       // Si sur une page protégée (Chat Live ou Whiteboard), désactiver le timeout

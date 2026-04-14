@@ -129,7 +129,8 @@ const SecurityPreferencesSection = () => {
               <Info size={15} className="text-blue-500 mt-0.5 flex-shrink-0" />
               <p className="text-xs text-blue-700">
                 Votre réglage personnel prend toujours la priorité sur le réglage global.
-                La déconnexion automatique est désactivée sur les appareils mobiles et sur les pages Chat Live / Tableau d'affichage.
+                La déconnexion automatique est <strong>désactivée</strong> sur les appareils mobiles/tablettes 
+                et sur les applications PWA installées — indépendamment de ce réglage.
               </p>
             </div>
 
