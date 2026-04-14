@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { BACKEND_URL } from '../utils/config';
 import { useToast } from '../hooks/use-toast';
+import useEscapeToClose from '../hooks/useEscapeToClose';
 import { applyTimezoneOffset, formatChartTime } from '../utils/dateUtils';
 import {
   Activity, Plus, Settings, Trash2, Play, Square, Clock, Target, Gauge,
@@ -799,6 +800,8 @@ const MachineSettingsModal = ({ machine, onClose }) => {
   const isAdmin = user.role === 'ADMIN';
   const schedule = machine.production_schedule || {};
   const emailNotif = machine.email_notifications || {};
+  // Fermeture avec Echap (composant toujours ouvert quand monté)
+  useEscapeToClose(true, onClose);
 
   const buildFormFromSource = (src) => ({
     theoretical_cadence: src.theoretical_cadence || 6,
@@ -1211,6 +1214,8 @@ const MachineSettingsModal = ({ machine, onClose }) => {
 
 // ==================== CREATE MODAL ====================
 const CreateMachineModal = ({ onClose, onCreated }) => {
+  // Fermeture avec Echap (composant toujours ouvert quand monté)
+  useEscapeToClose(true, onClose);
   const [equipments, setEquipments] = useState([]);
   const [form, setForm] = useState({
     equipment_id: '', mqtt_topic: '', sensor_ip: '', theoretical_cadence: 6,

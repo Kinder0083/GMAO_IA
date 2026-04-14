@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X, ChevronLeft, ChevronRight, FileText, Film, File, Loader2 } from 'lucide-react';
+import useEscapeToClose from '../../hooks/useEscapeToClose';
 
 const AttachmentGallery = ({ attachments, downloadFunction, itemId }) => {
   const [thumbUrls, setThumbUrls] = useState({});
@@ -9,6 +10,12 @@ const AttachmentGallery = ({ attachments, downloadFunction, itemId }) => {
   const [loading, setLoading] = useState(false);
   const urlsRef = useRef({});
   const mountedRef = useRef(true);
+
+  // Fermeture du lightbox photo avec Echap
+  useEscapeToClose(lightbox.open, () => {
+    setLightbox({ open: false, index: 0 });
+    setLightboxUrl(null);
+  });
 
   const getMime = (att) => att.mime_type || att.type || '';
 

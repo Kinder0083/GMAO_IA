@@ -2,8 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { BACKEND_URL } from '../utils/config';
 import { useToast } from '../hooks/use-toast';
-import {
-  FileText, Download, Calendar, Filter, BarChart3, TrendingUp,
+import useEscapeToClose from '../hooks/useEscapeToClose';
+import { FileText, Download, Calendar, Filter, BarChart3, TrendingUp,
   Package, AlertTriangle, ShieldAlert, Loader2, RefreshCw,
   ChevronDown, CheckCircle2, XCircle, Clock, Target, Gauge,
   Mail, Plus, Trash2, Play, Settings, Bell
@@ -66,13 +66,12 @@ const MESReportsPage = () => {
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [showMachineDropdown, setShowMachineDropdown] = useState(false);
-  const { toast } = useToast();
-
-  // Scheduled reports state
-  const [activeTab, setActiveTab] = useState('manual'); // 'manual' or 'scheduled'
   const [scheduledReports, setScheduledReports] = useState([]);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState(null);
+
+  // Fermeture du modal planning avec Echap
+  useEscapeToClose(showScheduleModal, () => setShowScheduleModal(false));
   const [scheduleForm, setScheduleForm] = useState({
     name: '',
     machine_ids: ['all'],

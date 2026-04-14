@@ -33,6 +33,22 @@ Application GMAO (Gestion de Maintenance Assistée par Ordinateur) complète pou
 - Export PDF individuel des OT (jsPDF)
 - Export PDF en masse des OT avec mode sélection
 
+### Session 14 avril 2026 — Fermeture universelle des modales avec la touche Echap
+
+**Fonctionnalité ajoutée** : Appuyer sur Echap ferme n'importe quelle boîte de dialogue de l'application, sans enregistrer.
+
+**Architecture** :
+- **`hooks/useEscapeToClose.js`** : Hook React avec pile LIFO. Quand plusieurs modales sont ouvertes, Echap ferme uniquement la plus haute. Une seule écoute globale `keydown` est montée/démontée proprement.
+- **Dialogs Radix/Shadcn (107 usages)** : Echap géré **nativement** par Radix UI — aucun changement nécessaire ✅
+- **`InactivityHandler.jsx`** : `onOpenChange={() => {}}` intentionnel — ne répond pas à Echap (voulu ✅)
+- **Modales personnalisées corrigées** (7 fichiers) :
+  - `AccidentAnalysis/CreateChecklistDialog.jsx` (`open` prop → `onClose`)
+  - `AccidentAnalysis/CreatePreventiveDialog.jsx` (`open` prop → `onClose`)
+  - `pages/MESPage.jsx` (`MachineSettingsModal` + `CreateMachineModal`, toujours ouvertes quand montées)
+  - `pages/MESReportsPage.jsx` (`showScheduleModal`)
+  - `components/shared/AttachmentGallery.jsx` (lightbox photo, `lightbox.open`)
+- **Tests** : Lint ✅ (0 erreur), HTTP 200 ✅
+
 ### Session 14 avril 2026 — Déconnexion inactivité : réglage per-user (Personnalisation → Sécurité)
 
 **Problème résolu** : Le délai de déconnexion automatique était un réglage global unique pour tous les utilisateurs (stocké dans `global_settings`). Chaque utilisateur doit pouvoir définir son propre délai.

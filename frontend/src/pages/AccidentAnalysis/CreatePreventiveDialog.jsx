@@ -12,6 +12,7 @@ const FREQUENCIES = [
   { value: 'ANNUEL', label: 'Annuel' },
 ];
 
+import useEscapeToClose from '../../hooks/useEscapeToClose';
 export default function CreatePreventiveDialog({ open, onClose, action, analysisId, onCreated }) {
   const [titre, setTitre] = useState('');
   const [description, setDescription] = useState('');
@@ -23,6 +24,9 @@ export default function CreatePreventiveDialog({ open, onClose, action, analysis
   const [users, setUsers] = useState([]);
   const [equipSearch, setEquipSearch] = useState('');
   const [creating, setCreating] = useState(false);
+
+  // Fermeture avec la touche Echap
+  useEscapeToClose(open, onClose);
 
   useEffect(() => {
     if (open && action) {

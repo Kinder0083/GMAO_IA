@@ -6,6 +6,7 @@ import { Badge } from '../../components/ui/badge';
 import { X, Plus, GripVertical, Trash2, Loader2, Search, FileText } from 'lucide-react';
 import api from '../../services/api';
 
+import useEscapeToClose from '../../hooks/useEscapeToClose';
 export default function CreateChecklistDialog({ open, onClose, action, analysisId, onCreated }) {
   const [titre, setTitre] = useState('');
   const [description, setDescription] = useState('');
@@ -15,6 +16,9 @@ export default function CreateChecklistDialog({ open, onClose, action, analysisI
   const [selectedEquipmentIds, setSelectedEquipmentIds] = useState([]);
   const [equipSearch, setEquipSearch] = useState('');
   const [creating, setCreating] = useState(false);
+
+  // Fermeture avec la touche Echap
+  useEscapeToClose(open, onClose);
 
   useEffect(() => {
     if (open && action) {
