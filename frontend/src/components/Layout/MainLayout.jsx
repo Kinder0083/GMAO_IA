@@ -106,7 +106,8 @@ const MainLayout = () => {
           nom: `${parsedUser.prenom || ''} ${parsedUser.nom || ''}`.trim() || 'Utilisateur',
           role: parsedUser.role || 'VIEWER',
           firstLogin: parsedUser.firstLogin || false,
-          id: parsedUser.id
+          id: parsedUser.id,
+          permissions: parsedUser.permissions || {}
         });
         
         if (parsedUser.firstLogin === true) {

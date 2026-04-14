@@ -258,6 +258,22 @@ const Sidebar = ({
             <Settings size={20} className="flex-shrink-0" />
             {sidebarOpen && <span className="text-sm font-medium">Paramètres</span>}
           </button>
+          {/* Menu Personnalisation : visible pour les ADMIN et pour les utilisateurs avec permissions.personalization.view = true */}
+          {(user.role === 'ADMIN' || user.permissions?.personalization?.view === true) && (
+            <button
+              onClick={() => navigate('/personnalisation')}
+              data-testid="sidebar-personnalisation"
+              className={`w-full flex items-center gap-3 px-4 py-2 rounded-lg transition-all ${!sidebarOpen ? 'justify-center px-2' : ''}`}
+              style={getSidebarButtonStyle(location.pathname === '/personnalisation')}
+              onMouseEnter={(e) => handleSidebarButtonHover(e, location.pathname === '/personnalisation')}
+              onMouseLeave={(e) => handleSidebarButtonLeave(e, location.pathname === '/personnalisation')}
+              title={!sidebarOpen ? 'Personnalisation' : ''}
+            >
+              <Palette size={20} className="flex-shrink-0" />
+              {sidebarOpen && <span className="text-sm font-medium">Personnalisation</span>}
+            </button>
+          )}
+          {/* Menus strictement réservés aux administrateurs système */}
           {user.role === 'ADMIN' && (
             <>
               <button
@@ -311,7 +327,7 @@ const Sidebar = ({
                 data-testid="sidebar-mqtt-logs"
                 className={`w-full flex items-center gap-3 px-4 py-2 rounded-lg transition-all ${!sidebarOpen ? 'justify-center px-2' : ''}`}
                 style={getSidebarButtonStyle(location.pathname === '/mqtt-logs')}
-                onMouseEnter={(e) => handleSidebarButtonHover(e, location.pathname === '/mqtt-logs')}
+                onMouseEnter={(e) => handleSidebarButtonHover(e, location.pathname === '/mqtt-pubsub')}
                 onMouseLeave={(e) => handleSidebarButtonLeave(e, location.pathname === '/mqtt-logs')}
                 title={!sidebarOpen ? 'Logs MQTT' : ''}
               >
@@ -362,17 +378,6 @@ const Sidebar = ({
               >
                 <Terminal size={20} className="flex-shrink-0" />
                 {sidebarOpen && <span className="text-sm font-medium">SSH</span>}
-              </button>
-              <button
-                onClick={() => navigate('/personnalisation')}
-                className={`w-full flex items-center gap-3 px-4 py-2 rounded-lg transition-all ${!sidebarOpen ? 'justify-center px-2' : ''}`}
-                style={getSidebarButtonStyle(location.pathname === '/personnalisation')}
-                onMouseEnter={(e) => handleSidebarButtonHover(e, location.pathname === '/personnalisation')}
-                onMouseLeave={(e) => handleSidebarButtonLeave(e, location.pathname === '/personnalisation')}
-                title={!sidebarOpen ? 'Personnalisation' : ''}
-              >
-                <Palette size={20} className="flex-shrink-0" />
-                {sidebarOpen && <span className="text-sm font-medium">Personnalisation</span>}
               </button>
             </>
           )}

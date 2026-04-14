@@ -33,6 +33,21 @@ Application GMAO (Gestion de Maintenance Assistée par Ordinateur) complète pou
 - Export PDF individuel des OT (jsPDF)
 - Export PDF en masse des OT avec mode sélection
 
+### Session 14 avril 2026 (fork) — Fix menu "Personnalisation" invisible pour non-ADMIN
+
+**Problème résolu** : Le menu "Personnalisation" dans la sidebar n'apparaissait pas pour les utilisateurs non-ADMIN même lorsque l'administrateur leur avait accordé la permission `personalization.view = true`.
+
+**Double cause racine** :
+1. **`Sidebar.jsx`** : le bouton "Personnalisation" était entièrement dans le bloc `{user.role === 'ADMIN' && (...)}` — inaccessible pour tout non-ADMIN
+2. **`MainLayout.jsx`** : le `setUser()` n'incluait pas `permissions` dans l'objet `user` passé à `Sidebar.jsx` (seuls `nom`, `role`, `firstLogin`, `id` étaient stockés) → `user.permissions` était toujours `undefined`
+
+**Corrections appliquées** :
+- **`MainLayout.jsx`** : ajout de `permissions: parsedUser.permissions || {}` dans le `setUser()` (ligne 105-111)
+- **`Sidebar.jsx`** : extraction du bouton "Personnalisation" hors du bloc ADMIN-only → rendu conditionnel séparé : `user.role === 'ADMIN' || user.permissions?.personalization?.view === true`
+- Les autres menus admin (System Health, Special Settings, Import/Export, MQTT, SSH, etc.) restent ADMIN-only (intentionnel)
+- Ajout de `data-testid="sidebar-personnalisation"` pour testabilité
+- **Test** : screenshot confirmé — menu Personnalisation visible pour `axel@gmail.com` (TECHNICIEN avec `personalization.view = true`) ✅
+
 ### Session 14 avril 2026 (fork) — Permissions module-niveau backend (isAdminForModule complet)
 
 **Problème résolu** : Un technicien avec `workOrders.edit=True` était bloqué par des vérifications ADMIN strictes dans le backend pour : modifier la catégorie d'un OT, modifier/supprimer des commentaires.
