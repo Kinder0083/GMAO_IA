@@ -33,6 +33,15 @@ Application GMAO (Gestion de Maintenance Assistée par Ordinateur) complète pou
 - Export PDF individuel des OT (jsPDF)
 - Export PDF en masse des OT avec mode sélection
 
+### Session 14 avril 2026 — Badge "Droits complets" dans PermissionsGrid
+- **`PermissionsGrid.jsx`** : 
+  - Ligne en fond ambre + label en gras dès que `edit === true` sur le module
+  - Badge pill ambre "Droits complets" (icône ShieldCheck) affiché inline dans la colonne Module
+  - Compteur en haut "N module(s) en droits complets" visible globalement
+  - Note explicative ambre en bas : "Droits complets : l'activation de l'Édition sur un module confère à l'utilisateur les mêmes droits qu'un administrateur sur cette page"
+  - data-testid ajoutés sur les lignes et badges pour testabilité
+- Validé visuellement par screenshot : dialog "Modifier les permissions" affiche correctement tous les badges
+
 ### Session 14 avril 2026 — Extension isAdminForModule aux modules DI, Améliorations, Plans d'amélioration
 - **`InterventionRequests.jsx`** : import `usePermissions`, `isAdminForModule('interventionRequests')` et `canDeletePerm('interventionRequests')` remplacent les checks `role === 'ADMIN'` pour `canConvert` et `canDelete`
 - **`ImprovementRequests.jsx`** : import `usePermissions`, `isAdminForModule('improvementRequests')` pour `canValidate` (validation) et `canConvert` (conversion en plan d'amélioration)
