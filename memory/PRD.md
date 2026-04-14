@@ -33,6 +33,21 @@ Application GMAO (Gestion de Maintenance Assistée par Ordinateur) complète pou
 - Export PDF individuel des OT (jsPDF)
 - Export PDF en masse des OT avec mode sélection
 
+### Session 14 avril 2026 (fork) — Permissions module-niveau backend (isAdminForModule complet)
+
+**Problème résolu** : Un technicien avec `workOrders.edit=True` était bloqué par des vérifications ADMIN strictes dans le backend pour : modifier la catégorie d'un OT, modifier/supprimer des commentaires.
+
+**Solution** : Ajout de `require_admin_for_module(module)` dans `dependencies.py` — accorde l'accès si ADMIN global OU `permissions[module].edit == True`. Appliqué à **tous les modules sans exception** :
+
+- **`dependencies.py`** : nouvelle fonction `require_admin_for_module(module)`
+- **`work_orders.py`** : `update_work_order` (check `has_wo_edit`), `update_comment`, `delete_comment`
+- **`improvements.py`** : validation/rejet DAs (liste + update status)
+- **`availability.py`** : create/update/delete disponibilités → `require_admin_for_module("planning")`
+- **`inventory.py`** : create/delete services inventaire → condition `has_module_edit`
+- **`preventive_maintenance.py`** : trigger exécution → `require_admin_for_module("preventiveMaintenance")`
+- **Opérations système restent ADMIN-only** : audit, backup, settings, users, mises à jour
+- **Tests** : iteration_167.json — 100% (17/17 backend), toutes régressions validées ✅
+
 ### Session 14 avril 2026 — Badge "Droits complets" dans PermissionsGrid
 - **`PermissionsGrid.jsx`** : 
   - Ligne en fond ambre + label en gras dès que `edit === true` sur le module
