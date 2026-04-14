@@ -33,6 +33,13 @@ Application GMAO (Gestion de Maintenance Assistée par Ordinateur) complète pou
 - Export PDF individuel des OT (jsPDF)
 - Export PDF en masse des OT avec mode sélection
 
+### Session 14 avril 2026 — Nettoyage ancien formulaire AutorisationParticuliereForm
+- Suppression de `AutorisationParticuliereForm.jsx` (674 lignes, formulaire obsolète)
+- Suppression de l'import dans `App.js`
+- Suppression des routes `/autorisations-particulieres/new` et `/autorisations-particulieres/edit/:id`
+- La route `/autorisations-particulieres` (liste) pointe toujours vers `AutorisationParticuliereView` qui ouvre le dialog V4
+- Lint ✅ — aucune référence résiduelle
+
 ### Session 14 avril 2026 — Envoyer vers / Copier / Déplacer / Permissions pour autorisations et bons
 - `copy_node` : ajout des cas `'bon'` (db.bons_travail) et `'autorisation'` (db.autorisations_particulieres) pour copie vers autre pôle/dossier
 - `move_node` : idem pour déplacement (couper-coller)

@@ -69,7 +69,6 @@ import SystemHealth from "./pages/SystemHealth";
 import PoleDetails from "./pages/PoleDetails";
 import BonDeTravailForm from "./pages/BonDeTravailForm";
 import BonDeTravailView from "./pages/BonDeTravailView";
-import AutorisationParticuliereForm from "./pages/AutorisationParticuliereForm";
 import AutorisationParticuliereView from "./pages/AutorisationParticuliereView";
 import Personnalisation from "./pages/Personnalisation";
 import ChatLive from "./pages/ChatLive";
@@ -309,8 +308,6 @@ function App() {
             <Route path="documentations/:poleId/bon-de-travail/:bonId/view" element={<BonDeTravailView />} />
             <Route path="documentations/:poleId/bon-de-travail/:bonId/edit" element={<BonDeTravailForm />} />
             <Route path="autorisations-particulieres" element={<AutorisationParticuliereView />} />
-            <Route path="autorisations-particulieres/new" element={<AutorisationParticuliereForm />} />
-            <Route path="autorisations-particulieres/edit/:id" element={<AutorisationParticuliereForm />} />
             <Route path="ssh" element={<SSHTerminal />} />
             <Route path="system-health" element={<SystemHealth />} />
             <Route path="personnalisation" element={<Personnalisation />} />
