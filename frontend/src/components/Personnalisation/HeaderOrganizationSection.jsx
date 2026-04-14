@@ -4,6 +4,7 @@ import { Label } from '../ui/label';
 import { Button } from '../ui/button';
 import { usePreferences } from '../../contexts/PreferencesContext';
 import { useToast } from '../../hooks/use-toast';
+import { usePermissions } from '../../hooks/usePermissions';
 import {
   GripVertical, ArrowUp, ArrowDown, RotateCcw,
   BookOpen, Bot, HelpCircle, Clock, Wifi,
@@ -13,26 +14,27 @@ import {
 } from 'lucide-react';
 
 // Registre de toutes les icônes du header avec métadonnées
+// module: null = visible pour tous | module: '__admin__' = admin uniquement | module: 'xxx' = selon permission
 export const HEADER_ICONS_REGISTRY = [
-  { id: 'manual',             label: 'Manuel',                 icon: BookOpen,      zone: 'left' },
-  { id: 'ai_assistant',       label: 'Assistant IA (Adria)',   icon: Bot,           zone: 'left' },
-  { id: 'help',               label: 'Aide',                   icon: HelpCircle,    zone: 'left' },
-  { id: 'clock',              label: 'Horloge',                icon: Clock,         zone: 'left' },
-  { id: 'offline_indicator',  label: 'Statut en ligne',        icon: Wifi,          zone: 'left' },
-  { id: 'backup',             label: 'Sauvegarde',             icon: HardDrive,     zone: 'right' },
-  { id: 'camera',             label: 'Cameras',                icon: Camera,        zone: 'right' },
-  { id: 'mes',                label: 'Alertes M.E.S.',         icon: Zap,           zone: 'right' },
-  { id: 'chat_live',          label: 'Chat Live',              icon: Mail,          zone: 'right' },
-  { id: 'overdue_calendar',   label: 'Echeances',              icon: CalendarClock, zone: 'right' },
-  { id: 'update_badge',       label: 'Mise a jour (Admin)',    icon: Download,      zone: 'right' },
-  { id: 'surveillance',       label: 'Plan de Surveillance',   icon: Eye,           zone: 'right' },
-  { id: 'inventory',          label: 'Alertes Inventaire',     icon: Package,       zone: 'right' },
-  { id: 'mqtt_alerts',        label: 'Alertes MQTT',           icon: AlertTriangle, zone: 'right' },
-  { id: 'loto',               label: 'Consignations LOTO',     icon: Lock,          zone: 'right' },
-  { id: 'notifications',      label: 'Notifications',          icon: BellRing,      zone: 'right' },
-  { id: 'whatsnew',           label: 'Quoi de neuf',           icon: Sparkles,      zone: 'right' },
-  { id: 'bell',               label: 'Cloche activite',        icon: Bell,          zone: 'right' },
-  { id: 'profile',            label: 'Profil utilisateur',     icon: User,          zone: 'right' },
+  { id: 'manual',             label: 'Manuel',                 icon: BookOpen,      zone: 'left',  module: null },
+  { id: 'ai_assistant',       label: 'Assistant IA (Adria)',   icon: Bot,           zone: 'left',  module: null },
+  { id: 'help',               label: 'Aide',                   icon: HelpCircle,    zone: 'left',  module: null },
+  { id: 'clock',              label: 'Horloge',                icon: Clock,         zone: 'left',  module: null },
+  { id: 'offline_indicator',  label: 'Statut en ligne',        icon: Wifi,          zone: 'left',  module: null },
+  { id: 'backup',             label: 'Sauvegarde',             icon: HardDrive,     zone: 'right', module: '__admin__' },
+  { id: 'camera',             label: 'Cameras',                icon: Camera,        zone: 'right', module: 'cameras' },
+  { id: 'mes',                label: 'Alertes M.E.S.',         icon: Zap,           zone: 'right', module: 'mes' },
+  { id: 'chat_live',          label: 'Chat Live',              icon: Mail,          zone: 'right', module: 'chatLive' },
+  { id: 'overdue_calendar',   label: 'Echeances',              icon: CalendarClock, zone: 'right', module: null },
+  { id: 'update_badge',       label: 'Mise a jour (Admin)',    icon: Download,      zone: 'right', module: '__admin__' },
+  { id: 'surveillance',       label: 'Plan de Surveillance',   icon: Eye,           zone: 'right', module: 'surveillance' },
+  { id: 'inventory',          label: 'Alertes Inventaire',     icon: Package,       zone: 'right', module: 'inventory' },
+  { id: 'mqtt_alerts',        label: 'Alertes MQTT',           icon: AlertTriangle, zone: 'right', module: 'sensors' },
+  { id: 'loto',               label: 'Consignations LOTO',     icon: Lock,          zone: 'right', module: 'consignationsLoto' },
+  { id: 'notifications',      label: 'Notifications',          icon: BellRing,      zone: 'right', module: null },
+  { id: 'whatsnew',           label: 'Quoi de neuf',           icon: Sparkles,      zone: 'right', module: null },
+  { id: 'bell',               label: 'Cloche activite',        icon: Bell,          zone: 'right', module: null },
+  { id: 'profile',            label: 'Profil utilisateur',     icon: User,          zone: 'right', module: null },
 ];
 
 export const DEFAULT_HEADER_ORDER = HEADER_ICONS_REGISTRY.map(item => item.id);
@@ -44,8 +46,16 @@ const zoneDot = { left: 'bg-blue-500', right: 'bg-emerald-500' };
 const HeaderOrganizationSection = () => {
   const { preferences, updatePreferences } = usePreferences();
   const { toast } = useToast();
+  const { canView, isAdmin } = usePermissions();
   const [items, setItems] = useState([]);
   const [draggedIdx, setDraggedIdx] = useState(null);
+
+  // Détermine si une icône du header est accessible pour l'utilisateur courant
+  const isIconAccessible = (item) => {
+    if (item.module === null) return true;       // Visible par tous
+    if (item.module === '__admin__') return isAdmin(); // Admin uniquement
+    return isAdmin() || canView(item.module);    // Selon permission module
+  };
 
   useEffect(() => {
     const savedOrder = preferences?.header_icon_order;
@@ -145,19 +155,21 @@ const HeaderOrganizationSection = () => {
           </div>
 
           <div className="space-y-1.5">
-            {items.map((item, idx) => {
+            {items.filter(isIconAccessible).map((item, idx, filteredItems) => {
               const Icon = item.icon;
               const isFirst = idx === 0;
-              const isLast = idx === items.length - 1;
-              const isDragged = draggedIdx === idx;
+              const isLast = idx === filteredItems.length - 1;
+              // Index réel dans items[] pour les opérations de déplacement
+              const realIdx = items.indexOf(item);
+              const isDragged = draggedIdx === realIdx;
 
               return (
                 <div
                   key={item.id}
                   draggable
-                  onDragStart={() => handleDragStart(idx)}
+                  onDragStart={() => handleDragStart(realIdx)}
                   onDragOver={handleDragOver}
-                  onDrop={() => handleDrop(idx)}
+                  onDrop={() => handleDrop(realIdx)}
                   className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border transition-all ${
                     isDragged ? 'bg-blue-50 border-blue-300 opacity-50 scale-[0.98]' : `bg-white border-gray-200 hover:border-gray-300`
                   }`}
@@ -167,13 +179,13 @@ const HeaderOrganizationSection = () => {
                   <div className="flex flex-col gap-0.5">
                     <Button
                       variant="ghost" size="sm" className="h-5 w-5 p-0"
-                      onClick={() => moveUp(idx)} disabled={isFirst}
+                      onClick={() => moveUp(realIdx)} disabled={isFirst}
                     >
                       <ArrowUp size={13} className={isFirst ? 'text-gray-300' : 'text-gray-500'} />
                     </Button>
                     <Button
                       variant="ghost" size="sm" className="h-5 w-5 p-0"
-                      onClick={() => moveDown(idx)} disabled={isLast}
+                      onClick={() => moveDown(realIdx)} disabled={isLast}
                     >
                       <ArrowDown size={13} className={isLast ? 'text-gray-300' : 'text-gray-500'} />
                     </Button>

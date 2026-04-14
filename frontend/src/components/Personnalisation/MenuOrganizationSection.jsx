@@ -5,6 +5,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { usePreferences } from '../../contexts/PreferencesContext';
 import { useToast } from '../../hooks/use-toast';
+import { usePermissions } from '../../hooks/usePermissions';
 import {
   Dialog,
   DialogContent,
@@ -135,6 +136,7 @@ const DEFAULT_MENU_ITEMS = [
 const MenuOrganizationSection = () => {
   const { preferences, updatePreferences } = usePreferences();
   const { toast } = useToast();
+  const { canView, isAdmin } = usePermissions();
   const [menuItems, setMenuItems] = useState([]);
   const [categories, setCategories] = useState([]);
   const [draggedItem, setDraggedItem] = useState(null);
@@ -145,6 +147,13 @@ const MenuOrganizationSection = () => {
   const [editingCategory, setEditingCategory] = useState(null);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newCategoryIcon, setNewCategoryIcon] = useState('Folder');
+
+  // Un menu est accessible si l'utilisateur est admin OU si canView(module) est vrai
+  const isMenuAccessible = (item) => {
+    if (isAdmin()) return true;
+    if (!item.module) return true;
+    return canView(item.module);
+  };
 
   useEffect(() => {
     // Charger les menus depuis les préférences ou utiliser les valeurs par défaut
@@ -431,16 +440,16 @@ const MenuOrganizationSection = () => {
     return iconDef ? iconDef.icon : Folder;
   };
 
-  // Filtrer les menus par catégorie
+  // Filtrer les menus par catégorie (seulement ceux accessibles à l'utilisateur)
   const getMenusByCategory = (categoryId) => {
     return menuItems
-      .filter(item => item.category_id === categoryId)
+      .filter(item => item.category_id === categoryId && isMenuAccessible(item))
       .sort((a, b) => (a.order || 0) - (b.order || 0));
   };
 
-  // Menus sans catégorie
+  // Menus sans catégorie (seulement ceux accessibles)
   const uncategorizedMenus = menuItems
-    .filter(item => !item.category_id)
+    .filter(item => !item.category_id && isMenuAccessible(item))
     .sort((a, b) => (a.order || 0) - (b.order || 0));
 
   // Déplacer un menu vers le haut
