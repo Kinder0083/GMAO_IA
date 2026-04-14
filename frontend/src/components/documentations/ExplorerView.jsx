@@ -1057,7 +1057,23 @@ function FullContextMenu({
               </button>
             ))
           } />
-          <MenuItem icon={Mail} label="Partager par email (avec PJ)" onClick={() => onShareEmail(item, 'document')} />
+          <MenuItem icon={Mail} label="Partager par email" onClick={() => {
+            const token = localStorage.getItem('token');
+            const backendUrl = getBackendURL();
+            const filename = item.fichier_nom || item.titre || 'document';
+            // 1. Télécharger le fichier automatiquement
+            const link = document.createElement('a');
+            link.href = `${backendUrl}/api/documentations/documents/${item.id}/download?token=${token}`;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            // 2. Ouvrir le client email local
+            const s = encodeURIComponent(filename);
+            const b = encodeURIComponent(`Bonjour,\n\nVeuillez trouver en pièce jointe : "${filename}".\n\nCordialement`);
+            setTimeout(() => { window.location.href = `mailto:?subject=${s}&body=${b}`; }, 500);
+            onClose();
+          }} />
           <MenuItem icon={Send} label="Partager par FSAO" onClick={() => onShareFSAO(item, 'document')} />
           <Separator />
           {isAdmin && (
@@ -1092,7 +1108,23 @@ function FullContextMenu({
               </button>
             ))
           } />
-          <MenuItem icon={Mail} label="Partager par email (avec PJ)" onClick={() => onShareEmail(item, 'bon')} />
+          <MenuItem icon={Mail} label="Partager par email" onClick={() => {
+            const token = localStorage.getItem('token');
+            const backendUrl = getBackendURL();
+            const filename = `${item.titre || 'Bon de travail'}.pdf`;
+            // 1. Télécharger le PDF automatiquement
+            const link = document.createElement('a');
+            link.href = `${backendUrl}/api/documentations/bons-travail/${item.id}/pdf?token=${token}`;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            // 2. Ouvrir le client email local
+            const s = encodeURIComponent(item.titre || 'Bon de travail');
+            const b = encodeURIComponent(`Bonjour,\n\nVeuillez trouver en pièce jointe : "${filename}".\n\nCordialement`);
+            setTimeout(() => { window.location.href = `mailto:?subject=${s}&body=${b}`; }, 500);
+            onClose();
+          }} />
           <MenuItem icon={Send} label="Partager par FSAO" onClick={() => onShareFSAO(item, 'bon')} />
           <Separator />
           {isAdmin && (
@@ -1125,7 +1157,23 @@ function FullContextMenu({
               </button>
             ))
           } />
-          <MenuItem icon={Mail} label="Partager par email (avec PJ)" onClick={() => onShareEmail(item, 'autorisation')} />
+          <MenuItem icon={Mail} label="Partager par email" onClick={() => {
+            const token = localStorage.getItem('token');
+            const backendUrl = getBackendURL();
+            const filename = `${item.titre || 'Autorisation particulière'}.pdf`;
+            // 1. Télécharger le PDF automatiquement
+            const link = document.createElement('a');
+            link.href = `${backendUrl}/api/autorisations/${item.id}/pdf?token=${token}`;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            // 2. Ouvrir le client email local
+            const s = encodeURIComponent(item.titre || 'Autorisation particulière');
+            const b = encodeURIComponent(`Bonjour,\n\nVeuillez trouver en pièce jointe : "${filename}".\n\nCordialement`);
+            setTimeout(() => { window.location.href = `mailto:?subject=${s}&body=${b}`; }, 500);
+            onClose();
+          }} />
           <MenuItem icon={Send} label="Partager par FSAO" onClick={() => onShareFSAO(item, 'autorisation')} />
           <Separator />
           {isAdmin && (
