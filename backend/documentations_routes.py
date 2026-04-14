@@ -2169,6 +2169,39 @@ async def copy_node(
                 details=f"a copié le dossier \"{folder.get('name', 'Dossier')}\""
             )
             return new_folder
+
+        elif node_type == "bon":
+            doc = await db.bons_travail.find_one({"id": node_id}, {"_id": 0})
+            if not doc:
+                raise HTTPException(status_code=404, detail="Bon de travail non trouvé")
+            new_doc = {**doc}
+            new_doc["id"] = str(uuid.uuid4())
+            new_doc["titre"] = f"{doc.get('titre', 'Bon de travail')} (copie)"
+            if target_pole_id:
+                new_doc["pole_id"] = target_pole_id
+            new_doc["folder_id"] = target_folder_id
+            new_doc["created_at"] = datetime.now(timezone.utc).isoformat()
+            new_doc["created_by"] = current_user.get("id")
+            await db.bons_travail.insert_one(new_doc)
+            new_doc.pop("_id", None)
+            return new_doc
+
+        elif node_type == "autorisation":
+            doc = await db.autorisations_particulieres.find_one({"id": node_id}, {"_id": 0})
+            if not doc:
+                raise HTTPException(status_code=404, detail="Autorisation non trouvée")
+            new_doc = {**doc}
+            new_doc["id"] = str(uuid.uuid4())
+            new_doc["titre"] = f"{doc.get('titre', 'Autorisation particulière')} (copie)"
+            if target_pole_id:
+                new_doc["pole_id"] = target_pole_id
+            new_doc["folder_id"] = target_folder_id
+            new_doc["created_at"] = datetime.now(timezone.utc).isoformat()
+            new_doc["created_by"] = current_user.get("id")
+            await db.autorisations_particulieres.insert_one(new_doc)
+            new_doc.pop("_id", None)
+            return new_doc
+
         else:
             raise HTTPException(status_code=400, detail="Type de noeud invalide")
     except HTTPException:
@@ -2237,6 +2270,29 @@ async def move_node(
                 details=f"a déplacé le dossier \"{folder.get('name', 'Dossier')}\""
             )
             return updated
+
+        elif node_type == "bon":
+            doc = await db.bons_travail.find_one({"id": node_id})
+            if not doc:
+                raise HTTPException(status_code=404, detail="Bon de travail non trouvé")
+            update = {"updated_at": datetime.now(timezone.utc).isoformat(), "folder_id": target_folder_id}
+            if target_pole_id:
+                update["pole_id"] = target_pole_id
+            await db.bons_travail.update_one({"id": node_id}, {"$set": update})
+            updated = await db.bons_travail.find_one({"id": node_id}, {"_id": 0})
+            return updated
+
+        elif node_type == "autorisation":
+            doc = await db.autorisations_particulieres.find_one({"id": node_id})
+            if not doc:
+                raise HTTPException(status_code=404, detail="Autorisation non trouvée")
+            update = {"updated_at": datetime.now(timezone.utc).isoformat(), "folder_id": target_folder_id}
+            if target_pole_id:
+                update["pole_id"] = target_pole_id
+            await db.autorisations_particulieres.update_one({"id": node_id}, {"$set": update})
+            updated = await db.autorisations_particulieres.find_one({"id": node_id}, {"_id": 0})
+            return updated
+
         else:
             raise HTTPException(status_code=400, detail="Type de noeud invalide")
     except HTTPException:
@@ -2262,7 +2318,16 @@ async def toggle_permissions(
         if field not in ("hidden_for_external", "hidden_for_users"):
             raise HTTPException(status_code=400, detail="Champ de permission invalide")
 
-        collection = db.documents if node_type == "document" else db.doc_folders
+        if node_type == "document":
+            collection = db.documents
+        elif node_type == "folder":
+            collection = db.doc_folders
+        elif node_type == "bon":
+            collection = db.bons_travail
+        elif node_type == "autorisation":
+            collection = db.autorisations_particulieres
+        else:
+            collection = db.documents
         node = await collection.find_one({"id": node_id})
         if not node:
             raise HTTPException(status_code=404, detail="Élément non trouvé")

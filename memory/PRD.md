@@ -33,6 +33,14 @@ Application GMAO (Gestion de Maintenance Assistée par Ordinateur) complète pou
 - Export PDF individuel des OT (jsPDF)
 - Export PDF en masse des OT avec mode sélection
 
+### Session 14 avril 2026 — Envoyer vers / Copier / Déplacer / Permissions pour autorisations et bons
+- `copy_node` : ajout des cas `'bon'` (db.bons_travail) et `'autorisation'` (db.autorisations_particulieres) pour copie vers autre pôle/dossier
+- `move_node` : idem pour déplacement (couper-coller)
+- `toggle_permissions` : sélection de collection généralisée (document → db.documents, folder → db.doc_folders, bon → db.bons_travail, autorisation → db.autorisations_particulieres)
+- `send_to_pole` bénéficie automatiquement des fixes via son appel à `copy_node`
+- Tests : copy ✅ / move ✅ / permissions toggle ✅
+- P2 "Sous-équipement dans liste DI" : déjà implémenté (colonne présente ligne 284 d'InterventionRequests.jsx, données peuplées par le backend)
+
 ### Session 14 avril 2026 (fork) — Menu contextuel autorisation particulière
 - **Fix : menu contextuel manquant sur les autorisations** dans `ExplorerView.jsx` → ajout du cas `itemType === 'autorisation'` dans `FullContextMenu` avec toutes les actions : Voir/Modifier, Imprimer, Copier, Couper, Coller, Envoyer vers, Partager email/FSAO, permissions admin, Renommer, Supprimer
 - Backend : ajout de `DELETE /documentations/autorisations-particulieres/{id}` et `PATCH /documentations/autorisations-particulieres/{id}` dans `documentations_routes.py`
