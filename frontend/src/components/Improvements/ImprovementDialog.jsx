@@ -26,8 +26,8 @@ import { formatTimeToHoursMinutes } from '../../utils/timeFormat';
 
 const ImprovementDialog = ({ open, onOpenChange, workOrder, onSuccess }) => {
   const { toast } = useToast();
-  const { canEdit, canDelete, isAdmin } = usePermissions();
-  const canManageTimeEntries = isAdmin() || (canEdit('improvements') && canDelete('improvements'));
+  const { canEdit, canDelete, isAdmin, isAdminForModule } = usePermissions();
+  const canManageTimeEntries = isAdminForModule('improvements') || (canEdit('improvements') && canDelete('improvements'));
 
   const [refreshAttachments, setRefreshAttachments] = useState(0);
   const [comments, setComments] = useState([]);

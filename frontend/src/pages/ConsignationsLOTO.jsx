@@ -53,7 +53,7 @@ async function apiFetch(url, opts = {}) {
 // ===== Main Page =====
 export default function ConsignationsLOTO() {
   const { toast } = useToast();
-  const { isAdmin } = usePermissions();
+  const { isAdmin, isAdminForModule } = usePermissions();
   const location = window.location;
   const [consignations, setConsignations] = useState([]);
   const [stats, setStats] = useState(null);
@@ -372,7 +372,7 @@ export default function ConsignationsLOTO() {
                         <Button variant="ghost" size="sm" onClick={e => { e.stopPropagation(); setSelectedId(c.id); }} data-testid={`loto-view-${c.id}`}>
                           <Eye className="w-4 h-4" />
                         </Button>
-                        {isAdmin() && ['DEMANDE', 'ANNULE', 'DECONSIGNE'].includes(c.status) && (
+                        {isAdminForModule('consignationsLoto') && ['DEMANDE', 'ANNULE', 'DECONSIGNE'].includes(c.status) && (
                           <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-700 hover:bg-red-50"
                             onClick={e => { e.stopPropagation(); setDeleteConfirm(c); }}
                             data-testid={`loto-delete-${c.id}`}>

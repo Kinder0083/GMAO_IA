@@ -33,6 +33,14 @@ Application GMAO (Gestion de Maintenance Assistée par Ordinateur) complète pou
 - Export PDF individuel des OT (jsPDF)
 - Export PDF en masse des OT avec mode sélection
 
+### Session 14 avril 2026 — Permissions basées sur les modules (isAdminForModule)
+- **`usePermissions.js`** : ajout de `isAdminForModule(module)` — retourne `true` si admin global OU si `permissions[module].edit === true`. Exporté dans le hook.
+- **`WorkOrderDialog.jsx`** : `isAdmin()` → `isAdminForModule('workOrders')` (2 occurrences : `canManageTimeEntries` et affichage boutons commentaires)
+- **`ImprovementDialog.jsx`** : `canManageTimeEntries` utilise `isAdminForModule('improvements')`
+- **`ConsignationsLOTO.jsx`** : boutons de validation consignation → `isAdminForModule('consignationsLoto')`
+- **`Documentations.jsx`** : bouton "Modèles" → `isAdminForModule('documentations')` + ajout import `usePermissions`
+- Testé : technicien avec `workOrders.edit=True` obtient les droits admin sur la page OT ✅
+
 ### Session 14 avril 2026 — Fix template contamination + email avec PJ
 - **Bug 1 (template contamination)** : `ExplorerView.jsx` — ajout de `newAutoKey` (counter) incrémenté à chaque ouverture d'un dialog vierge → `key={editAutoData?.id || \`new-auto-${newAutoKey}\`}` force le remontage complet du dialog, empêchant la réutilisation de l'état précédent
 - **Bug 2 (email sans PJ)** : Remplacement des 3 blocs `mailto:` (document, bon, autorisation) dans `FullContextMenu` par l'ouverture du dialog FSAO → `onShareEmail(item, type)`. Backend `/share-email` étendu :

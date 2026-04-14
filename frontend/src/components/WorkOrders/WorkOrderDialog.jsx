@@ -29,8 +29,8 @@ import jsPDF from 'jspdf';
 
 const WorkOrderDialog = ({ open, onOpenChange, workOrder, onSuccess }) => {
   const { toast } = useToast();
-  const { canEdit, canDelete, isAdmin } = usePermissions();
-  const canManageTimeEntries = isAdmin() || (canEdit('workOrders') && canDelete('workOrders'));
+  const { canEdit, canDelete, isAdmin, isAdminForModule } = usePermissions();
+  const canManageTimeEntries = isAdminForModule('workOrders') || (canEdit('workOrders') && canDelete('workOrders'));
   const [refreshAttachments, setRefreshAttachments] = useState(0);
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState('');
@@ -1061,7 +1061,7 @@ const WorkOrderDialog = ({ open, onOpenChange, workOrder, onSuccess }) => {
                       <span className="font-semibold text-sm text-gray-900">{comment.user_name}</span>
                       <div className="flex items-center gap-1">
                         <span className="text-xs text-gray-500">{formatDate(comment.timestamp)}</span>
-                        {isAdmin() && (
+                        {isAdminForModule('workOrders') && (
                           <>
                             <button
                               data-testid={`edit-comment-${comment.id}`}

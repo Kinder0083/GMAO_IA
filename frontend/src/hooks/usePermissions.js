@@ -26,41 +26,35 @@ export const usePermissions = () => {
 
   /**
    * Vérifie si l'utilisateur a une permission spécifique
-   * Stabilisé avec useCallback pour éviter les re-renders inutiles
    */
   const hasPermission = useCallback((module, permissionType) => {
-    // Les admins ont toujours toutes les permissions
-    if (userRole === 'ADMIN') {
-      return true;
-    }
-
-    if (!permissions || !permissions[module]) {
-      return false;
-    }
-
+    if (userRole === 'ADMIN') return true;
+    if (!permissions || !permissions[module]) return false;
     return permissions[module][permissionType] === true;
   }, [userRole, permissions]);
 
-  /**
-   * Vérifie si l'utilisateur peut voir un module
-   */
   const canView = useCallback((module) => hasPermission(module, 'view'), [hasPermission]);
-
-  /**
-   * Vérifie si l'utilisateur peut modifier un module
-   */
   const canEdit = useCallback((module) => hasPermission(module, 'edit'), [hasPermission]);
-
-  /**
-   * Vérifie si l'utilisateur peut supprimer dans un module
-   */
   const canDelete = useCallback((module) => hasPermission(module, 'delete'), [hasPermission]);
 
   /**
-   * Vérifie si l'utilisateur est admin
-   * Stabilisé avec useCallback — ne change que quand userRole change
+   * Vérifie si l'utilisateur est administrateur global
    */
   const isAdmin = useCallback(() => userRole === 'ADMIN', [userRole]);
+
+  /**
+   * Vérifie si l'utilisateur a des droits administrateur sur un module spécifique.
+   * Retourne true si :
+   *  - l'utilisateur est administrateur global, OU
+   *  - l'utilisateur a le droit "edit" activé sur ce module
+   * Cela permet aux utilisateurs avec permissions spécifiques d'avoir
+   * les mêmes droits qu'un admin sur la page concernée.
+   */
+  const isAdminForModule = useCallback((module) => {
+    if (userRole === 'ADMIN') return true;
+    if (!module || !permissions || !permissions[module]) return false;
+    return permissions[module].edit === true;
+  }, [userRole, permissions]);
 
   return {
     permissions,
@@ -69,6 +63,7 @@ export const usePermissions = () => {
     canView,
     canEdit,
     canDelete,
-    isAdmin
+    isAdmin,
+    isAdminForModule,
   };
 };

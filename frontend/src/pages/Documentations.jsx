@@ -11,6 +11,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../com
 import { Plus, FolderOpen, Edit, Trash2, FileText, Search, Grid3x3, List, ChevronDown, ChevronRight, Eye, Download, FileSpreadsheet, FileImage, FileVideo, Printer, ClipboardList, Settings, Monitor } from 'lucide-react';
 import { documentationsAPI } from '../services/api';
 import { useToast } from '../hooks/use-toast';
+import { usePermissions } from '../hooks/usePermissions';
 import { useConfirmDialog } from '../components/ui/confirm-dialog';
 import { formatErrorMessage } from '../utils/errorFormatter';
 import { getBackendURL } from '../utils/config';
@@ -76,7 +77,7 @@ function Documentations() {
     }
   }, []);
 
-  const isAdmin = () => currentUser?.role === 'ADMIN';
+  const { isAdminForModule } = usePermissions();
 
   const [formData, setFormData] = useState({
     nom: '',
@@ -229,7 +230,7 @@ function Documentations() {
             <h1 className="text-3xl font-bold">Documentations</h1>
             <p className="text-gray-500">Gestion des pôles de service et documents</p>
           </div>
-          {isAdmin() && (
+          {isAdminForModule('documentations') && (
             <Button 
               variant="outline" 
               onClick={() => navigate('/documentations/modeles')}
