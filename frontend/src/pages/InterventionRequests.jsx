@@ -13,12 +13,14 @@ import RefuseInterventionDialog from '../components/InterventionRequests/RefuseI
 import DeleteConfirmDialog from '../components/Common/DeleteConfirmDialog';
 import { interventionRequestsAPI, workOrdersAPI } from '../services/api';
 import { useToast } from '../hooks/use-toast';
+import { usePermissions } from '../hooks/usePermissions';
 import { useInterventionRequests } from '../hooks/useInterventionRequests';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
 const InterventionRequests = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { isAdminForModule, canDelete: canDeletePerm } = usePermissions();
   const [searchParams, setSearchParams] = useSearchParams();
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const [searchTerm, setSearchTerm] = useState('');
@@ -170,8 +172,9 @@ const InterventionRequests = () => {
     return dueDate < today;
   };
 
-  const canConvert = user && (user.role === 'ADMIN' || user.role === 'TECHNICIEN');
-  const canDelete = user && (user.role === 'ADMIN' || (user.permissions && user.permissions.interventionRequests && user.permissions.interventionRequests.delete));
+  // Un utilisateur peut convertir/refuser s'il est admin, technicien, ou a les droits d'édition sur les DI
+  const canConvert = user && (isAdminForModule('interventionRequests') || user.role === 'TECHNICIEN');
+  const canDelete = user && (isAdminForModule('interventionRequests') || canDeletePerm('interventionRequests'));
 
   return (
     <div className="space-y-6">

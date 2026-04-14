@@ -17,6 +17,7 @@ import { LOTOBadge } from '../components/Common/LOTOBadge';
 import { improvementRequestsAPI, improvementsAPI } from '../services/api';
 import api from '../services/api';
 import { useToast } from '../hooks/use-toast';
+import { usePermissions } from '../hooks/usePermissions';
 import { useImprovementRequests } from '../hooks/useImprovementRequests';
 import { useServiceManagerStatus } from '../hooks/useServiceManagerStatus';
 import AvatarInitials from '../components/ui/avatar-initials';
@@ -25,6 +26,7 @@ import { formatTimeToHoursMinutes } from '../utils/timeFormat';
 const ImprovementRequests = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { isAdminForModule } = usePermissions();
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   const { isServiceManager } = useServiceManagerStatus();
   const [searchTerm, setSearchTerm] = useState('');
@@ -170,8 +172,8 @@ const ImprovementRequests = () => {
     );
   };
 
-  // Vérifier si l'utilisateur peut valider (admin ou responsable de service)
-  const canValidate = user && (user.role === 'ADMIN' || isServiceManager);
+  // Vérifier si l'utilisateur peut valider (admin, responsable de service, ou droits d'édition)
+  const canValidate = user && (isAdminForModule('improvementRequests') || isServiceManager);
 
   const formatDate = (dateString) => {
     if (!dateString) return '-';
@@ -186,7 +188,8 @@ const ImprovementRequests = () => {
     return dueDate < today;
   };
 
-  const canConvert = user && (user.role === 'ADMIN' || user.role === 'TECHNICIEN');
+  // Peut convertir en plan d'amélioration : admin, technicien, ou droits d'édition
+  const canConvert = user && (isAdminForModule('improvementRequests') || user.role === 'TECHNICIEN');
 
   return (
     <div className="space-y-6">

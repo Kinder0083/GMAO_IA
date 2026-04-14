@@ -33,6 +33,13 @@ Application GMAO (Gestion de Maintenance Assistée par Ordinateur) complète pou
 - Export PDF individuel des OT (jsPDF)
 - Export PDF en masse des OT avec mode sélection
 
+### Session 14 avril 2026 — Extension isAdminForModule aux modules DI, Améliorations, Plans d'amélioration
+- **`InterventionRequests.jsx`** : import `usePermissions`, `isAdminForModule('interventionRequests')` et `canDeletePerm('interventionRequests')` remplacent les checks `role === 'ADMIN'` pour `canConvert` et `canDelete`
+- **`ImprovementRequests.jsx`** : import `usePermissions`, `isAdminForModule('improvementRequests')` pour `canValidate` (validation) et `canConvert` (conversion en plan d'amélioration)
+- **`PreventiveMaintenance.jsx`** : déjà correct — utilise `permissions.preventiveMaintenance.edit/delete` directement depuis l'objet user → aucun changement nécessaire
+- **`Improvements.jsx`** / composants : aucun check admin explicite → déjà géré via `ImprovementDialog.jsx` (session précédente)
+- Lint ✅ toutes les pages
+
 ### Session 14 avril 2026 — Permissions basées sur les modules (isAdminForModule)
 - **`usePermissions.js`** : ajout de `isAdminForModule(module)` — retourne `true` si admin global OU si `permissions[module].edit === true`. Exporté dans le hook.
 - **`WorkOrderDialog.jsx`** : `isAdmin()` → `isAdminForModule('workOrders')` (2 occurrences : `canManageTimeEntries` et affichage boutons commentaires)
