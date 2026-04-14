@@ -346,6 +346,8 @@ function FormTemplatesPage() {
                 onClick={() => {
                   if (template.id === 'default-bon-travail') {
                     setShowBonTravailPrint(true);
+                  } else if (template.id === 'default-autorisation') {
+                    setShowAutorisationPrint(true);
                   } else {
                     handleViewTemplate(template);
                   }

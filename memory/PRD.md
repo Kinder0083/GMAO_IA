@@ -33,7 +33,12 @@ Application GMAO (Gestion de Maintenance Assistée par Ordinateur) complète pou
 - Export PDF individuel des OT (jsPDF)
 - Export PDF en masse des OT avec mode sélection
 
-### Session 13 avril 2026 (fork) — AutorisationParticulière MAINT/FE/003 V4 — Révision 2
+### Session 14 avril 2026 (fork) — Correctifs Autorisation Particulière
+- **Fix P0: Logo print** — `autorisation_particuliere_v4_template.py` : ajout de `style="width:100%;height:auto;display:block;"` sur la balise `<img>` du logo IRIS dans l'en-tête d'impression. Le logo prend désormais toute la largeur de sa cellule tout en conservant son ratio.
+- **Fix P0: Routing FormTemplatesPage** — `FormTemplatesPage.jsx` : le clic sur la carte système "Autorisation particulière" (`id === 'default-autorisation'`) ouvre maintenant `setShowAutorisationPrint(true)` (dialog V4) au lieu de `handleViewTemplate(template)` (ancien visualiseur).
+- **Fix P0: AutorisationParticuliereView** — Remplacement de tous les `navigate('/autorisations-particulieres/new')` et `navigate('/autorisations-particulieres/edit/:id')` par le nouveau `AutorisationParticulierePrintDialog`. Bouton "Nouvelle Autorisation" et bouton icône (FileText) ouvrent le dialog. Prop `key={selectedAutorisation?.id || 'new'}` pour forcer le remontage lors du changement de sélection.
+
+
 - **Correction template HTML (14 points)** selon comparaison PDF généré vs PDF cible :
   - En-tête : structure correcte 4 colonnes × 4 lignes (Date col1, MAINT/FE/003 col2+3, Version4 col4)
   - Séparateur gris (#CCCCCC, colspan=4) présent en ligne 3

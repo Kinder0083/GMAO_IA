@@ -4,8 +4,9 @@ import { autorisationsAPI } from '../services/api';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
-import { Plus, Search, FileText, Edit, Trash2, Eye, Printer, ArrowLeft } from 'lucide-react';
+import { Plus, Search, FileText, Trash2, Printer, ArrowLeft } from 'lucide-react';
 import { useToast } from '../hooks/use-toast';
+import AutorisationParticulierePrintDialog from '../components/AutorisationParticulierePrintDialog';
 
 const AutorisationParticuliereView = () => {
   const navigate = useNavigate();
@@ -15,7 +16,9 @@ const AutorisationParticuliereView = () => {
   const [filteredAutorisations, setFilteredAutorisations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  
+  const [showDialog, setShowDialog] = useState(false);
+  const [selectedAutorisation, setSelectedAutorisation] = useState(null);
+
   // Récupérer le poleId depuis le state de navigation
   const fromPoleId = location.state?.fromPoleId;
 
@@ -126,7 +129,7 @@ const AutorisationParticuliereView = () => {
             <p className="text-gray-600 mt-1">Gestion des autorisations - Format MAINT_FE_003_V03</p>
           </div>
         </div>
-        <Button onClick={() => navigate('/autorisations-particulieres/new')}>
+        <Button onClick={() => { setSelectedAutorisation(null); setShowDialog(true); }}>
           <Plus className="h-4 w-4 mr-2" />
           Nouvelle Autorisation
         </Button>
@@ -182,7 +185,7 @@ const AutorisationParticuliereView = () => {
               {searchTerm ? 'Aucune autorisation ne correspond à votre recherche' : 'Aucune autorisation créée'}
             </p>
             {!searchTerm && (
-              <Button onClick={() => navigate('/autorisations-particulieres/new')} className="mt-4">
+              <Button onClick={() => { setSelectedAutorisation(null); setShowDialog(true); }} className="mt-4">
                 <Plus className="h-4 w-4 mr-2" />
                 Créer la première autorisation
               </Button>
@@ -233,10 +236,10 @@ const AutorisationParticuliereView = () => {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => navigate(`/autorisations-particulieres/edit/${autorisation.id}`)}
-                      title="Modifier"
+                      onClick={() => { setSelectedAutorisation(autorisation); setShowDialog(true); }}
+                      title="Ouvrir / Modifier"
                     >
-                      <Edit className="h-4 w-4" />
+                      <FileText className="h-4 w-4" />
                     </Button>
                     <Button
                       variant="destructive"
@@ -253,6 +256,16 @@ const AutorisationParticuliereView = () => {
           ))}
         </div>
       )}
+
+      {/* Dialog Autorisation Particulière V4 */}
+      <AutorisationParticulierePrintDialog
+        key={selectedAutorisation?.id || 'new'}
+        open={showDialog}
+        onClose={() => { setShowDialog(false); setSelectedAutorisation(null); }}
+        poleId={fromPoleId || null}
+        prefillData={selectedAutorisation}
+        onSaved={() => { loadAutorisations(); }}
+      />
     </div>
   );
 };
