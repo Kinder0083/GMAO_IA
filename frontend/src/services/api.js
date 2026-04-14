@@ -853,6 +853,14 @@ export const documentationsAPI = {
   createBonTravail: (data) => api.post('/documentations/bons-travail', data).then(res => res.data),
   updateBonTravail: (id, data) => api.put(`/documentations/bons-travail/${id}`, data).then(res => res.data),
   deleteBonTravail: (id) => api.delete(`/documentations/bons-travail/${id}`).then(res => res.data),
+
+  // Autorisations particulières (explorateur)
+  deleteAutorisation: (id) => api.delete(`/documentations/autorisations-particulieres/${id}`).then(res => res.data),
+  updateAutorisation: (id, data) => api.patch(`/documentations/autorisations-particulieres/${id}`, data).then(res => res.data),
+  getAutorisationPdfUrl: (id) => {
+    const token = localStorage.getItem('token');
+    return `${API_BASE}/autorisations/${id}/pdf?token=${token}`;
+  },
   
   // Actions
   generatePDF: (id) => api.post(`/documentations/bons-travail/${id}/pdf`).then(res => res.data),

@@ -33,6 +33,13 @@ Application GMAO (Gestion de Maintenance Assistée par Ordinateur) complète pou
 - Export PDF individuel des OT (jsPDF)
 - Export PDF en masse des OT avec mode sélection
 
+### Session 14 avril 2026 (fork) — Menu contextuel autorisation particulière
+- **Fix : menu contextuel manquant sur les autorisations** dans `ExplorerView.jsx` → ajout du cas `itemType === 'autorisation'` dans `FullContextMenu` avec toutes les actions : Voir/Modifier, Imprimer, Copier, Couper, Coller, Envoyer vers, Partager email/FSAO, permissions admin, Renommer, Supprimer
+- Backend : ajout de `DELETE /documentations/autorisations-particulieres/{id}` et `PATCH /documentations/autorisations-particulieres/{id}` dans `documentations_routes.py`
+- Frontend `api.js` : ajout de `deleteAutorisation` et `updateAutorisation` dans `documentationsAPI`
+- Handlers mis à jour : `handleDelete`, `handlePrint`, rename handler — tous gèrent désormais `'autorisation'`
+- Tests API : Créer ✅ / Renommer ✅ / Supprimer ✅
+
 ### Session 14 avril 2026 (fork) — Correctifs Autorisation Particulière — Fix ExplorerView
 - **Fix bug sauvegarde dans répertoire** : 
   - Backend `save_autorisation_v4` : ajout du champ `folder_id` dans le document MongoDB (exclusion de `folder_id` du `form_data`)

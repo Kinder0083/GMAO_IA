@@ -1626,6 +1626,47 @@ async def save_autorisation_v4(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.delete("/autorisations-particulieres/{auto_id}")
+async def delete_autorisation_v4(
+    auto_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Supprimer une Autorisation Particulière."""
+    try:
+        result = await db.autorisations_particulieres.delete_one({"id": auto_id})
+        if result.deleted_count == 0:
+            raise HTTPException(status_code=404, detail="Autorisation non trouvée")
+        return {"status": "ok", "id": auto_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erreur suppression autorisation v4: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.patch("/autorisations-particulieres/{auto_id}")
+async def update_autorisation_v4(
+    auto_id: str,
+    payload: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    """Mettre à jour le titre / les champs d'une Autorisation Particulière."""
+    try:
+        update_fields = {k: v for k, v in payload.items() if k not in ("id", "_id")}
+        update_fields["updated_at"] = datetime.now(timezone.utc).isoformat()
+        result = await db.autorisations_particulieres.update_one(
+            {"id": auto_id}, {"$set": update_fields}
+        )
+        if result.matched_count == 0:
+            raise HTTPException(status_code=404, detail="Autorisation non trouvée")
+        return {"status": "ok", "id": auto_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erreur mise à jour autorisation v4: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/autorisations-particulieres/generate-html")
 async def generate_autorisation_v4_html_endpoint(
     data: dict,

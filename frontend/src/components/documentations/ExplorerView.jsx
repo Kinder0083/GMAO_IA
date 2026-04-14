@@ -257,6 +257,7 @@ export default function ExplorerView({ poles, onRefresh }) {
       if (renameDialog.type === 'folder') await documentationsAPI.updateFolder(renameDialog.id, { name: renameName.trim() });
       else if (renameDialog.type === 'document') await documentationsAPI.updateDocument(renameDialog.id, { titre: renameName.trim() });
       else if (renameDialog.type === 'bon') await documentationsAPI.updateBonTravail(renameDialog.id, { titre: renameName.trim() });
+      else if (renameDialog.type === 'autorisation') await documentationsAPI.updateAutorisation(renameDialog.id, { titre: renameName.trim() });
       setRenameDialog(null); setRenameName('');
       loadExplorerContents(currentPoleId, currentFolderId);
       toast({ title: 'Renommé avec succès' });
@@ -266,7 +267,10 @@ export default function ExplorerView({ poles, onRefresh }) {
   };
 
   const handleDelete = (item, itemType) => {
-    const label = itemType === 'folder' ? 'le dossier' : itemType === 'bon' ? 'le bon de travail' : 'le document';
+    const label = itemType === 'folder' ? 'le dossier'
+      : itemType === 'bon' ? 'le bon de travail'
+      : itemType === 'autorisation' ? "l'autorisation particulière"
+      : 'le document';
     confirm({
       title: `Supprimer ${label}`,
       description: `Êtes-vous sûr de vouloir supprimer "${item.name || item.titre || item.fichier_nom}" ?`,
@@ -276,6 +280,7 @@ export default function ExplorerView({ poles, onRefresh }) {
           if (itemType === 'folder') await documentationsAPI.deleteFolder(item.id);
           else if (itemType === 'document') await documentationsAPI.deleteDocument(item.id);
           else if (itemType === 'bon') await documentationsAPI.deleteBonTravail(item.id);
+          else if (itemType === 'autorisation') await documentationsAPI.deleteAutorisation(item.id);
           loadExplorerContents(currentPoleId, currentFolderId);
           toast({ title: 'Supprimé' });
         } catch {
@@ -289,6 +294,9 @@ export default function ExplorerView({ poles, onRefresh }) {
     const token = localStorage.getItem('token');
     if (itemType === 'bon') {
       const w = window.open(`${getBackendURL()}/api/documentations/bons-travail/${item.id}/pdf?token=${token}`, '_blank');
+      if (w) w.onload = () => w.print();
+    } else if (itemType === 'autorisation') {
+      const w = window.open(`${getBackendURL()}/api/autorisations/${item.id}/pdf?token=${token}`, '_blank');
       if (w) w.onload = () => w.print();
     } else if (itemType === 'document') {
       const w = window.open(`${getBackendURL()}/api/documentations/documents/${item.id}/view?token=${token}`, '_blank');
@@ -1102,6 +1110,43 @@ function FullContextMenu({
           )}
           <MenuItem icon={Edit} label="Renommer" onClick={() => onRename(item, 'bon')} />
           {canDelete && <MenuItem icon={Trash2} label="Supprimer" onClick={() => onDelete(item, 'bon')} destructive />}
+        </>
+
+      ) : itemType === 'autorisation' ? (
+        <>
+          <MenuItem icon={Eye} label="Voir / Modifier l'autorisation" onClick={() => onOpen(item, 'autorisation')} />
+          <MenuItem icon={Printer} label="Imprimer" onClick={() => onPrint(item, 'autorisation')} />
+          <Separator />
+          <MenuItem icon={Copy} label="Copier" onClick={() => onCopy(item, 'autorisation')} />
+          <MenuItem icon={Scissors} label="Couper" onClick={() => onCut(item, 'autorisation')} />
+          {clipboard && <MenuItem icon={ClipboardPaste} label="Coller" onClick={onPaste} />}
+          <Separator />
+          <MenuItem icon={Send} label="Envoyer vers..." children={
+            poles?.filter(p => p.id !== currentPoleId).map(pole => (
+              <button key={pole.id} className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-100"
+                onClick={() => onSendTo(item, 'autorisation')}>
+                <Folder className="h-4 w-4" style={{ color: pole.couleur }} />{pole.nom}
+              </button>
+            ))
+          } />
+          <MenuItem icon={Mail} label="Partager par email" onClick={() => {
+            const mailto = `mailto:?subject=Autorisation particulière: ${item.titre || 'Autorisation'}&body=Veuillez consulter l'autorisation particulière "${item.titre || ''}"`;
+            window.location.href = mailto;
+            onClose();
+          }} />
+          <MenuItem icon={Send} label="Partager par FSAO" onClick={() => onShareFSAO(item)} />
+          <Separator />
+          {isAdmin && (
+            <>
+              <MenuItem icon={Lock} label={item.hidden_for_external ? 'Visible aux Services Ext.' : 'Masquer aux Services Ext.'}
+                onClick={() => onToggleHiddenExternal(item, 'autorisation')} />
+              <MenuItem icon={UserX} label={item.hidden_for_users ? 'Visible aux Utilisateurs' : 'Masquer aux Utilisateurs'}
+                onClick={() => onToggleHiddenUsers(item, 'autorisation')} />
+              <Separator />
+            </>
+          )}
+          <MenuItem icon={Edit} label="Renommer" onClick={() => onRename(item, 'autorisation')} />
+          {canDelete && <MenuItem icon={Trash2} label="Supprimer" onClick={() => onDelete(item, 'autorisation')} destructive />}
         </>
       ) : null}
     </div>
