@@ -25,7 +25,7 @@ from models import (
 
 # Alias utilisé dans server.py
 EntityType_Audit = EntityType
-from dependencies import get_current_user, get_current_admin_user, require_permission
+from dependencies import get_current_user, get_current_admin_user, require_permission, require_admin_for_module
 from openapi_config import STANDARD_ERRORS
 from routes.shared import (
     db, audit_service, serialize_doc,
@@ -345,7 +345,11 @@ async def update_work_order(wo_id: str, wo_update: WorkOrderUpdate, current_user
         update_fields = set(wo_update.model_dump(exclude_unset=True).keys())
         is_status_only = update_fields <= {'statut', 'att_materiel_info', 'att_decision_info'}
 
-        if user_role == "ADMIN":
+        # isAdminForModule : ADMIN global OU utilisateur avec workOrders.edit = True
+        user_permissions = current_user.get("permissions", {})
+        has_wo_edit = isinstance(user_permissions, dict) and user_permissions.get("workOrders", {}).get("edit", False)
+
+        if user_role == "ADMIN" or has_wo_edit:
             can_full_edit = True
         elif user_role == "TECHNICIEN":
             can_full_edit = (created_by == user_id)
@@ -1086,13 +1090,13 @@ async def delete_time_entry(
 
 
 @router.put("/work-orders/{work_order_id}/comments/{comment_id}",
-    summary="Modifier un commentaire (admin)")
+    summary="Modifier un commentaire (admin ou droits edit OT)")
 async def update_comment(
     work_order_id: str, comment_id: str,
     update_data: CommentUpdate,
-    current_user: dict = Depends(get_current_admin_user)
+    current_user: dict = Depends(require_admin_for_module("workOrders"))
 ):
-    """Modifier un commentaire d'un OT (admin uniquement)"""
+    """Modifier un commentaire d'un OT (admin global ou utilisateur avec workOrders.edit)"""
     try:
         work_order = await find_work_order_flexible(work_order_id)
         if not work_order:
@@ -1131,12 +1135,12 @@ async def update_comment(
 
 
 @router.delete("/work-orders/{work_order_id}/comments/{comment_id}",
-    summary="Supprimer un commentaire (admin)")
+    summary="Supprimer un commentaire (admin ou droits edit OT)")
 async def delete_comment(
     work_order_id: str, comment_id: str,
-    current_user: dict = Depends(get_current_admin_user)
+    current_user: dict = Depends(require_admin_for_module("workOrders"))
 ):
-    """Supprimer un commentaire d'un OT (admin uniquement)"""
+    """Supprimer un commentaire d'un OT (admin global ou utilisateur avec workOrders.edit)"""
     try:
         work_order = await find_work_order_flexible(work_order_id)
         if not work_order:

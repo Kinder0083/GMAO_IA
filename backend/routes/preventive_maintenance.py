@@ -19,7 +19,7 @@ from models import (
     ChecklistTemplate, ChecklistTemplateCreate, ChecklistTemplateUpdate,
     ChecklistExecution, ChecklistExecutionCreate, ChecklistExecutionUpdate
 )
-from dependencies import get_current_user, get_current_admin_user, require_permission
+from dependencies import get_current_user, get_current_admin_user, require_permission, require_admin_for_module
 from routes.shared import db, audit_service, serialize_doc, _get_realtime_manager, get_equipment_by_id, get_user_by_id
 
 EntityType_Audit = EntityType
@@ -347,8 +347,8 @@ def calculate_next_maintenance_date(current_date: datetime, frequency: str) -> d
         return current_date + timedelta(days=30)
 
 @router.post("/preventive-maintenance/check-and-execute", response_model=SuccessResponse, tags=["Maintenance Preventive"])
-async def check_and_execute_due_maintenances(current_user: dict = Depends(get_current_admin_user)):
-    """Vérifie et exécute MANUELLEMENT les maintenances échues (admin uniquement)"""
+async def check_and_execute_due_maintenances(current_user: dict = Depends(require_admin_for_module("preventiveMaintenance"))):
+    """Vérifie et exécute MANUELLEMENT les maintenances échues (admin ou droits édition maintenance préventive)"""
     try:
         logger.info(f"🔄 Vérification MANUELLE déclenchée par {current_user.get('email', 'Unknown')}")
         await auto_check_preventive_maintenance()
@@ -357,8 +357,8 @@ async def check_and_execute_due_maintenances(current_user: dict = Depends(get_cu
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/preventive-maintenance/check-and-execute-OLD", tags=["Maintenance Preventive"])
-async def check_and_execute_due_maintenances_old(current_user: dict = Depends(get_current_admin_user)):
-    """Version détaillée pour debug (admin uniquement)"""
+async def check_and_execute_due_maintenances_old(current_user: dict = Depends(require_admin_for_module("preventiveMaintenance"))):
+    """Version détaillée pour debug (admin ou droits édition maintenance préventive)"""
     try:
         today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
         

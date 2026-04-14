@@ -9,7 +9,7 @@ import uuid
 import logging
 
 from models import ActionType, EntityType, UserAvailabilityCreate, UserAvailabilityUpdate, MessageResponse
-from dependencies import get_current_user, get_current_admin_user, require_permission
+from dependencies import get_current_user, get_current_admin_user, require_permission, require_admin_for_module
 from routes.shared import db, audit_service, serialize_doc, _get_realtime_manager
 
 EntityType_Audit = EntityType
@@ -51,9 +51,9 @@ async def get_availabilities(
     summary="Creer une disponibilite", tags=["Disponibilites"])
 async def create_availability(
     availability: UserAvailabilityCreate,
-    current_user: dict = Depends(get_current_admin_user)
+    current_user: dict = Depends(require_admin_for_module("planning"))
 ):
-    """Créer une disponibilité (admin uniquement)"""
+    """Créer une disponibilité (admin ou droits édition planning)"""
     avail_dict = availability.model_dump()
     avail_dict["_id"] = ObjectId()
     
@@ -82,9 +82,9 @@ async def create_availability(
 async def update_availability(
     avail_id: str,
     availability_update: UserAvailabilityUpdate,
-    current_user: dict = Depends(get_current_admin_user)
+    current_user: dict = Depends(require_admin_for_module("planning"))
 ):
-    """Mettre à jour une disponibilité (admin uniquement)"""
+    """Mettre à jour une disponibilité (admin ou droits édition planning)"""
     try:
         # Utiliser model_dump() pour obtenir toutes les valeurs, y compris None
         # On accepte explicitement les valeurs null pour pouvoir remettre à blanc
@@ -128,9 +128,9 @@ async def update_availability(
     summary="Supprimer une disponibilite", tags=["Disponibilites"])
 async def delete_availability(
     avail_id: str,
-    current_user: dict = Depends(get_current_admin_user)
+    current_user: dict = Depends(require_admin_for_module("planning"))
 ):
-    """Supprimer une disponibilité (admin uniquement)"""
+    """Supprimer une disponibilité (admin ou droits édition planning)"""
     try:
         result = await db.availabilities.delete_one({"_id": ObjectId(avail_id)})
         if result.deleted_count == 0:

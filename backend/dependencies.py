@@ -99,6 +99,28 @@ async def get_current_admin_user(current_user: dict = Depends(get_current_user))
         )
     return current_user
 
+
+def require_admin_for_module(module: str):
+    """
+    Dependency : accorde l'accès si l'utilisateur est ADMIN global
+    OU s'il possède le droit 'edit' sur le module spécifié.
+    Cela implémente la règle isAdminForModule côté backend.
+
+    Usage:
+        current_user: dict = Depends(require_admin_for_module("workOrders"))
+    """
+    async def checker(current_user: dict = Depends(get_current_user)):
+        if current_user.get("role") == "ADMIN":
+            return current_user
+        permissions = current_user.get("permissions", {})
+        if isinstance(permissions, dict) and permissions.get(module, {}).get("edit", False):
+            return current_user
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Accès refusé. Droits administrateur ou droits d'édition du module '{module}' requis."
+        )
+    return checker
+
 def can_edit_resource(current_user: dict, resource: dict) -> bool:
     """
     Vérifie si l'utilisateur peut éditer la ressource.

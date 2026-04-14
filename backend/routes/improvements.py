@@ -190,14 +190,17 @@ async def get_pending_improvement_requests(
     try:
         is_admin = current_user.get("role") == "ADMIN"
         is_manager = await is_service_manager(current_user)
-        
-        if not is_admin and not is_manager:
+        # isAdminForModule : utilisateur avec improvementRequests.edit a accès complet
+        user_perms = current_user.get("permissions", {})
+        has_module_edit = isinstance(user_perms, dict) and user_perms.get("improvementRequests", {}).get("edit", False)
+
+        if not is_admin and not is_manager and not has_module_edit:
             return []  # Pas de permissions pour voir les demandes en attente
         
         query = {"$or": [{"status": "SOUMISE"}, {"status": {"$exists": False}}, {"status": None}]}
         
         # Si responsable (non admin), filtrer par service
-        if not is_admin and is_manager:
+        if not is_admin and not has_module_edit and is_manager:
             managed_services = await get_user_managed_services(current_user)
             if managed_services:
                 # Récupérer les IDs des utilisateurs de ces services
@@ -376,15 +379,18 @@ async def update_improvement_request_status(
         # Vérifier les permissions
         is_admin = current_user.get("role") == "ADMIN"
         is_manager = await is_service_manager(current_user)
-        
-        if not is_admin and not is_manager:
+        # isAdminForModule : utilisateur avec improvementRequests.edit a accès complet
+        user_perms = current_user.get("permissions", {})
+        has_module_edit = isinstance(user_perms, dict) and user_perms.get("improvementRequests", {}).get("edit", False)
+
+        if not is_admin and not is_manager and not has_module_edit:
             raise HTTPException(
                 status_code=403, 
-                detail="Seuls les administrateurs et responsables de service peuvent valider/rejeter"
+                detail="Seuls les administrateurs, responsables de service et utilisateurs avec droits d'édition peuvent valider/rejeter"
             )
         
-        # Si responsable de service, vérifier que la demande est dans son service
-        if not is_admin and is_manager:
+        # Si responsable de service (ni admin ni droits module), vérifier que la demande est dans son service
+        if not is_admin and not has_module_edit and is_manager:
             managed_services = await get_user_managed_services(current_user)
             request_service = req.get("service")
             

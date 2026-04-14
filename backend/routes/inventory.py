@@ -313,7 +313,10 @@ async def create_inventory_service(
     """Créer un nouvel onglet de service d'inventaire (Admin ou responsable de service)."""
     user_role = current_user.get("role", "")
     is_admin = user_role in ["ADMIN", "admin", "Administrateur"]
-    
+    # isAdminForModule : utilisateur avec inventory.edit a accès complet
+    user_perms = current_user.get("permissions", {})
+    has_module_edit = isinstance(user_perms, dict) and user_perms.get("inventory", {}).get("edit", False)
+
     # Vérifier si responsable de service
     is_manager = False
     try:
@@ -322,8 +325,8 @@ async def create_inventory_service(
     except Exception:
         pass
     
-    if not is_admin and not is_manager:
-        raise HTTPException(403, "Seuls les administrateurs et responsables de service peuvent créer des onglets")
+    if not is_admin and not is_manager and not has_module_edit:
+        raise HTTPException(403, "Seuls les administrateurs, responsables de service et utilisateurs avec droits d'édition peuvent créer des onglets")
     
     name = data.get("name", "").strip()
     if not name:
@@ -355,7 +358,10 @@ async def delete_inventory_service(
     """Supprimer un onglet de service d'inventaire. Les articles seront déplacés vers 'Non classé'."""
     user_role = current_user.get("role", "")
     is_admin = user_role in ["ADMIN", "admin", "Administrateur"]
-    
+    # isAdminForModule : utilisateur avec inventory.edit a accès complet
+    user_perms = current_user.get("permissions", {})
+    has_module_edit = isinstance(user_perms, dict) and user_perms.get("inventory", {}).get("edit", False)
+
     is_manager = False
     try:
         from service_filter import is_service_manager
@@ -363,8 +369,8 @@ async def delete_inventory_service(
     except Exception:
         pass
     
-    if not is_admin and not is_manager:
-        raise HTTPException(403, "Seuls les administrateurs et responsables de service peuvent supprimer des onglets")
+    if not is_admin and not is_manager and not has_module_edit:
+        raise HTTPException(403, "Seuls les administrateurs, responsables de service et utilisateurs avec droits d'édition peuvent supprimer des onglets")
     
     service = await db.inventory_services.find_one({"id": service_id}, {"_id": 0})
     if not service:
