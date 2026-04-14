@@ -181,6 +181,7 @@ export default function ExplorerView({ poles, onRefresh }) {
 
   // ── État pour éditer un bon existant ─────────────────────────────────────
   const [editBonData, setEditBonData] = useState(null);
+  const [editAutoData, setEditAutoData] = useState(null);
 
   const handleDoubleClick = (item, itemType) => {
     if (itemType === 'pole') openPole(item.id);
@@ -195,6 +196,11 @@ export default function ExplorerView({ poles, onRefresh }) {
       };
       setEditBonData({ id: item.id, ...prefill });
       setShowBonTravailDialog(true);
+    }
+    else if (itemType === 'autorisation') {
+      // Ouvrir le dialog d'autorisation V4 pré-rempli
+      setEditAutoData(item);
+      setShowAutorisationDialog(true);
     }
   };
 
@@ -479,7 +485,8 @@ export default function ExplorerView({ poles, onRefresh }) {
   const folders = explorerData?.folders || [];
   const documents = explorerData?.documents || [];
   const bons = explorerData?.bons_travail || [];
-  const isEmpty = folders.length === 0 && documents.length === 0 && bons.length === 0;
+  const autorisations = explorerData?.autorisations_particulieres || [];
+  const isEmpty = folders.length === 0 && documents.length === 0 && bons.length === 0 && autorisations.length === 0;
 
   return (
     <div className="border rounded-lg bg-white" data-testid="explorer-view">
@@ -592,6 +599,17 @@ export default function ExplorerView({ poles, onRefresh }) {
                 onContextMenu={(e) => handleContextMenu(e, bon, 'bon')}
               />
             ))}
+            {autorisations.map(auto => (
+              <ExplorerItem key={auto.id} id={auto.id}
+                name={auto.titre || 'Autorisation particulière'} type="autorisation"
+                iconComp={FileText} color="#f59e0b"
+                subtitle={auto.created_at ? new Date(auto.created_at).toLocaleDateString() : ''}
+                selected={selectedItems.includes(auto.id)}
+                onClick={(e) => handleItemClick(e, auto.id)}
+                onDoubleClick={() => handleDoubleClick(auto, 'autorisation')}
+                onContextMenu={(e) => handleContextMenu(e, auto, 'autorisation')}
+              />
+            ))}
           </div>
         )}
       </div>
@@ -655,10 +673,13 @@ export default function ExplorerView({ poles, onRefresh }) {
 
       {/* Dialog Autorisation Particulière MAINT/FE/003 V4 */}
       <AutorisationParticulierePrintDialog
+        key={editAutoData?.id || 'new-auto'}
         open={showAutorisationDialog}
-        onClose={() => setShowAutorisationDialog(false)}
+        onClose={() => { setShowAutorisationDialog(false); setEditAutoData(null); }}
         poleId={currentPoleId}
-        onSaved={() => { setShowAutorisationDialog(false); if (currentPoleId) loadExplorerContents(currentPoleId, currentFolderId); }}
+        folderId={currentFolderId}
+        prefillData={editAutoData}
+        onSaved={() => { setShowAutorisationDialog(false); setEditAutoData(null); if (currentPoleId) loadExplorerContents(currentPoleId, currentFolderId); }}
       />
 
       {/* New Folder Dialog */}

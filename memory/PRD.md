@@ -33,6 +33,14 @@ Application GMAO (Gestion de Maintenance Assistée par Ordinateur) complète pou
 - Export PDF individuel des OT (jsPDF)
 - Export PDF en masse des OT avec mode sélection
 
+### Session 14 avril 2026 (fork) — Correctifs Autorisation Particulière — Fix ExplorerView
+- **Fix bug sauvegarde dans répertoire** : 
+  - Backend `save_autorisation_v4` : ajout du champ `folder_id` dans le document MongoDB (exclusion de `folder_id` du `form_data`)
+  - Backend `get_explorer_contents` : query de `autorisations_particulieres` filtrée par `folder_id` (même logique que `documents`), ajoutée à la réponse JSON
+  - Frontend `AutorisationParticulierePrintDialog` : prop `folderId` acceptée et incluse dans le payload de sauvegarde
+  - Frontend `ExplorerView` : state `editAutoData`, rendu des autorisations (couleur amber), double-clic pour édition, prop `folderId={currentFolderId}` transmise, callback `onSaved` recharge l'explorateur du dossier courant
+  - Résultat vérifié par test API : autorisation sauvegardée dans un sous-dossier, retrouvée dans l'explorateur du même sous-dossier ✅
+
 ### Session 14 avril 2026 (fork) — Correctifs Autorisation Particulière
 - **Fix P0: Logo print** — `autorisation_particuliere_v4_template.py` : ajout de `style="width:100%;height:auto;display:block;"` sur la balise `<img>` du logo IRIS dans l'en-tête d'impression. Le logo prend désormais toute la largeur de sa cellule tout en conservant son ratio.
 - **Fix P0: Routing FormTemplatesPage** — `FormTemplatesPage.jsx` : le clic sur la carte système "Autorisation particulière" (`id === 'default-autorisation'`) ouvre maintenant `setShowAutorisationPrint(true)` (dialog V4) au lieu de `handleViewTemplate(template)` (ancien visualiseur).

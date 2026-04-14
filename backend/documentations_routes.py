@@ -1585,6 +1585,7 @@ async def save_autorisation_v4(
         if not pole_id:
             raise HTTPException(status_code=400, detail="pole_id est requis")
 
+        folder_id = payload.get("folder_id") or None
         auto_id = payload.get("id") or str(_uuid.uuid4())
         now = datetime.now(timezone.utc).isoformat()
 
@@ -1598,12 +1599,13 @@ async def save_autorisation_v4(
         doc = {
             "id": auto_id,
             "pole_id": pole_id,
+            "folder_id": folder_id,
             "form_version": 4,
             "titre": titre,
             "type_autorisation": "MAINT/FE/003 V4",
             "lieu_travaux": payload.get("lieu_intervention", ""),
             "statut": payload.get("statut", "BROUILLON"),
-            "form_data": {k: v for k, v in payload.items() if k not in ("pole_id", "id", "titre")},
+            "form_data": {k: v for k, v in payload.items() if k not in ("pole_id", "folder_id", "id", "titre")},
             "created_at": payload.get("created_at", now),
             "updated_at": now,
             "created_by": current_user.get("id"),
@@ -1978,11 +1980,26 @@ async def get_explorer_contents(
         if not is_admin and not is_maintenance:
             documents = [d for d in documents if not d.get("hidden_for_external", False)]
 
-        # Bons de travail (uniquement à la racine du pôle)
+        # Bons de travail
         bons_travail = []
         if folder_id is None:
             bons_travail = await db.bons_travail.find(
-                {"pole_id": pole_id}, {"_id": 0}
+                {"pole_id": pole_id, "$or": [{"folder_id": None}, {"folder_id": {"$exists": False}}]}, {"_id": 0}
+            ).to_list(length=None)
+        else:
+            bons_travail = await db.bons_travail.find(
+                {"pole_id": pole_id, "folder_id": folder_id}, {"_id": 0}
+            ).to_list(length=None)
+
+        # Autorisations particulières
+        autorisations_particulieres = []
+        if folder_id is None:
+            autorisations_particulieres = await db.autorisations_particulieres.find(
+                {"pole_id": pole_id, "$or": [{"folder_id": None}, {"folder_id": {"$exists": False}}]}, {"_id": 0}
+            ).to_list(length=None)
+        else:
+            autorisations_particulieres = await db.autorisations_particulieres.find(
+                {"pole_id": pole_id, "folder_id": folder_id}, {"_id": 0}
             ).to_list(length=None)
 
         # Tri
@@ -1995,6 +2012,7 @@ async def get_explorer_contents(
         folders.sort(key=sort_fn)
         documents.sort(key=sort_fn)
         bons_travail.sort(key=sort_fn)
+        autorisations_particulieres.sort(key=sort_fn)
 
         # Breadcrumb
         breadcrumb = [{"id": pole_id, "name": pole.get("nom", ""), "type": "pole"}]
@@ -2013,6 +2031,7 @@ async def get_explorer_contents(
             "folders": folders,
             "documents": documents,
             "bons_travail": bons_travail,
+            "autorisations_particulieres": autorisations_particulieres,
             "breadcrumb": breadcrumb,
             "current_folder_id": folder_id
         }

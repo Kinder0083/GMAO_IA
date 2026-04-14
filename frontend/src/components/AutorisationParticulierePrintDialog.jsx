@@ -220,6 +220,7 @@ export default function AutorisationParticulierePrintDialog({
   open,
   onClose,
   poleId,
+  folderId = null,
   prefillData = null,
   onSaved,
 }) {
@@ -243,7 +244,7 @@ export default function AutorisationParticulierePrintDialog({
   const handleSave = async () => {
     setSaving(true);
     try {
-      const payload = { ...data, pole_id: poleId };
+      const payload = { ...data, pole_id: poleId, folder_id: folderId };
       await api.post('/documentations/autorisations-particulieres/save', payload);
       toast({ title: 'Succès', description: 'Autorisation enregistrée' });
       if (onSaved) onSaved();
