@@ -17,7 +17,8 @@ import {
   Download,
   Upload,
   Bot,
-  PanelTop
+  PanelTop,
+  ShieldCheck
 } from 'lucide-react';
 
 // Import des sections
@@ -28,6 +29,7 @@ import HeaderOrganizationSection from '../components/Personnalisation/HeaderOrga
 import DisplayPreferencesSection from '../components/Personnalisation/DisplayPreferencesSection';
 import DashboardSection from '../components/Personnalisation/DashboardSection';
 import AISection from '../components/Personnalisation/AISection';
+import SecurityPreferencesSection from '../components/Personnalisation/SecurityPreferencesSection';
 import OfflineDisabled from '../components/Common/OfflineDisabled';
 
 const Personnalisation = () => {
@@ -167,6 +169,12 @@ const Personnalisation = () => {
       title: 'IA',
       icon: Bot,
       component: AISection
+    },
+    {
+      id: 'security',
+      title: 'Sécurité',
+      icon: ShieldCheck,
+      component: SecurityPreferencesSection
     }
   ];
 

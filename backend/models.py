@@ -2540,6 +2540,10 @@ class UserPreferences(BaseModel):
     tour_completed: bool = False
     tour_completed_at: Optional[str] = None
     
+    # Sécurité personnelle : délai de déconnexion automatique par inactivité (minutes)
+    # None = utilise le réglage global de l'administrateur
+    inactivity_timeout_minutes: Optional[int] = None
+    
     # Métadonnées
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
@@ -2622,6 +2626,9 @@ class UserPreferencesUpdate(BaseModel):
     # Visite guidée
     tour_completed: Optional[bool] = None
     tour_completed_at: Optional[str] = None
+    # Sécurité personnelle : délai de déconnexion automatique par inactivité (minutes)
+    # None = utilise le réglage global de l'administrateur
+    inactivity_timeout_minutes: Optional[int] = None
 
 # ==================== SUPPORT HELP REQUEST ====================
 

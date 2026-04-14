@@ -84,7 +84,7 @@ const SecuritySettings = () => {
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Temps d'inactivité avant déconnexion (minutes)
+              Temps d'inactivité avant déconnexion — Défaut global (minutes)
             </label>
             <div className="flex items-center gap-4">
               <input
@@ -98,8 +98,8 @@ const SecuritySettings = () => {
               <span className="text-gray-500 text-sm">minutes (1 - 120)</span>
             </div>
             <p className="mt-2 text-sm text-gray-500">
-              Les utilisateurs seront automatiquement déconnectés après cette période d'inactivité.
-              La valeur par défaut est de 15 minutes.
+              Ce délai s'applique à tous les utilisateurs n'ayant pas défini de préférence personnelle.
+              Chaque utilisateur peut surcharger cette valeur dans <strong>Personnalisation → Sécurité</strong>.
             </p>
           </div>
 

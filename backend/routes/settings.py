@@ -242,7 +242,9 @@ async def update_user_preferences(
         logger.info(f"[PREFS] Mise à jour pour user_id: {user_id}")
         
         # Préparer les données de mise à jour
-        update_data = {k: v for k, v in preferences_update.model_dump().items() if v is not None}
+        # exclude_unset=True : ne mettre à jour que les champs explicitement envoyés
+        # (permet de sauvegarder None/null pour les champs optionnels comme inactivity_timeout_minutes)
+        update_data = preferences_update.model_dump(exclude_unset=True)
         update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
         logger.info(f"[PREFS] Données à mettre à jour: {list(update_data.keys())}")
         

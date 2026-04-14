@@ -11,33 +11,44 @@ import {
 import { Button } from '../ui/button';
 import { AlertTriangle, LogOut } from 'lucide-react';
 import api from '../../services/api';
+import { usePreferences } from '../../contexts/PreferencesContext';
 
 const InactivityHandler = () => {
   const location = useLocation();
+  const { preferences } = usePreferences();
   const [showWarning, setShowWarning] = useState(false);
   const [countdown, setCountdown] = useState(60);
   const [lastActivity, setLastActivity] = useState(Date.now());
-  const [inactivityTimeout, setInactivityTimeout] = useState(15 * 60 * 1000); // Par défaut 15 minutes
+  const [inactivityTimeout, setInactivityTimeout] = useState(15 * 60 * 1000); // Défaut 15 minutes
   const [isTimeoutDisabled, setIsTimeoutDisabled] = useState(false);
 
-  // Détecter si l'utilisateur est sur mobile (appareil personnel → pas de déconnexion auto)
+  // Détecter si l'utilisateur est sur mobile (pas de déconnexion auto)
   const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) ||
     window.matchMedia('(pointer: coarse)').matches;
 
-  // Charger les paramètres au démarrage
+  // Charger le timeout : préférence personnelle > réglage global admin
+  // La préférence personnelle (inactivity_timeout_minutes) est dans les user_preferences (déjà chargées)
   useEffect(() => {
-    const loadSettings = async () => {
+    const loadTimeout = async () => {
       try {
+        // 1. Vérifier si l'utilisateur a défini sa propre valeur dans ses préférences
+        const userTimeout = preferences?.inactivity_timeout_minutes;
+        if (userTimeout !== undefined && userTimeout !== null && userTimeout > 0) {
+          setInactivityTimeout(userTimeout * 60 * 1000);
+          return;
+        }
+
+        // 2. Pas de préférence personnelle → utiliser le réglage global admin
         const response = await api.settings.getSettings();
-        const timeoutMinutes = response.data.inactivity_timeout_minutes || 15;
-        setInactivityTimeout(timeoutMinutes * 60 * 1000);
+        const globalTimeout = response.data.inactivity_timeout_minutes || 15;
+        setInactivityTimeout(globalTimeout * 60 * 1000);
       } catch (error) {
-        console.error('Erreur lors du chargement des paramètres:', error);
-        // En cas d'erreur, garder la valeur par défaut
+        console.error('Erreur lors du chargement du timeout d\'inactivité:', error);
+        // Garder la valeur par défaut (15 min) en cas d'erreur
       }
     };
-    loadSettings();
-  }, []);
+    loadTimeout();
+  }, [preferences?.inactivity_timeout_minutes]);
 
   // Durées en millisecondes
   const WARNING_DURATION = 60 * 1000; // 60 secondes
