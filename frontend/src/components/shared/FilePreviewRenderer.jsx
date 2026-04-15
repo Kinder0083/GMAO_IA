@@ -229,19 +229,28 @@ const FilePreviewRenderer = ({ url, filename = '', mimeType = '', className = ''
     let cancelled = false;
     setState({ status: 'loading', arrayBuffer: null, error: null });
 
-    fetch(url)
-      .then(r => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.arrayBuffer();
-      })
-      .then(buf => {
-        if (!cancelled) setState({ status: 'ready', arrayBuffer: buf, error: null });
-      })
-      .catch(e => {
-        if (!cancelled) setState({ status: 'error', arrayBuffer: null, error: e.message });
-      });
+    // XHR au lieu de fetch() pour éviter tout conflit avec
+    // l'API Response (clonage Service Worker, corps déjà consommé, etc.)
+    const xhr = new XMLHttpRequest();
+    xhr.open('GET', url, true);
+    xhr.responseType = 'arraybuffer';
+    xhr.onload = () => {
+      if (cancelled) return;
+      if (xhr.status >= 200 && xhr.status < 300) {
+        setState({ status: 'ready', arrayBuffer: xhr.response, error: null });
+      } else {
+        setState({ status: 'error', arrayBuffer: null, error: `HTTP ${xhr.status}` });
+      }
+    };
+    xhr.onerror = () => {
+      if (!cancelled) setState({ status: 'error', arrayBuffer: null, error: 'Erreur réseau lors du chargement' });
+    };
+    xhr.send();
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      xhr.abort();
+    };
   }, [url, fileType]);
 
   const containerClass = `h-full w-full overflow-hidden ${className}`;
