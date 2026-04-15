@@ -579,11 +579,8 @@ function Documentations() {
                                       <Button
                                         variant="ghost"
                                         size="sm"
-                                        onClick={() => {
-                                          const token = localStorage.getItem('token');
-                                          window.open(`${getBackendURL()}/api/documentations/documents/${doc.id}/view?token=${token}`, '_blank');
-                                        }}
-                                        title="Ouvrir dans un nouvel onglet"
+                                        onClick={() => handleDocumentPreview(doc)}
+                                        title="Prévisualiser"
                                       >
                                         <Eye className="h-4 w-4" />
                                       </Button>
@@ -699,29 +696,29 @@ function Documentations() {
       <Dialog open={openPreview} onOpenChange={setOpenPreview}>
         <DialogContent className="max-w-4xl h-[80vh]">
           <DialogHeader>
-            <DialogTitle>Prévisualisation : {previewDocument?.nom_fichier}</DialogTitle>
+            <DialogTitle>Prévisualisation : {previewDocument?.fichier_nom || previewDocument?.titre}</DialogTitle>
           </DialogHeader>
           <div className="flex-1 overflow-auto">
             {previewDocument && (
               <>
-                {previewDocument.type_fichier?.includes('pdf') ? (
+                {previewDocument.fichier_type?.includes('pdf') ? (
                   <iframe
                     src={`${getBackendURL()}/api/documentations/documents/${previewDocument.id}/view?token=${localStorage.getItem('token')}`}
                     className="w-full h-full border-0"
                     title="PDF Preview"
                   />
-                ) : previewDocument.type_fichier?.includes('image') ? (
+                ) : previewDocument.fichier_type?.includes('image') ? (
                   <img
                     src={`${getBackendURL()}/api/documentations/documents/${previewDocument.id}/view?token=${localStorage.getItem('token')}`}
-                    alt={previewDocument.nom_fichier}
+                    alt={previewDocument.fichier_nom}
                     className="max-w-full h-auto mx-auto"
                   />
                 ) : (
                   <div className="h-[60vh]">
                     <FilePreviewRenderer
                       url={`${getBackendURL()}/api/documentations/documents/${previewDocument.id}/view?token=${localStorage.getItem('token')}`}
-                      filename={previewDocument.nom_fichier}
-                      mimeType={previewDocument.type_fichier}
+                      filename={previewDocument.fichier_nom || previewDocument.titre}
+                      mimeType={previewDocument.fichier_type}
                     />
                   </div>
                 )}

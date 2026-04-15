@@ -13,6 +13,7 @@ import { Label } from '../ui/label';
 import { Textarea } from '../ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { documentationsAPI } from '../../services/api';
+import FilePreviewRenderer, { detectFileType } from '../shared/FilePreviewRenderer';
 import { useToast } from '../../hooks/use-toast';
 import { useConfirmDialog } from '../ui/confirm-dialog';
 import { getBackendURL } from '../../utils/config';
@@ -845,12 +846,12 @@ export default function ExplorerView({ poles, onRefresh }) {
                 <iframe src={`${getBackendURL()}/api/documentations/documents/${viewerDialog.id}/view?token=${localStorage.getItem('token')}`}
                   className="w-full h-full border-0" title="Text" />
               ) : (
-                <div className="flex flex-col items-center justify-center h-full text-gray-500">
-                  <File className="h-16 w-16 mb-4" />
-                  <p>Prévisualisation non disponible pour ce type de fichier</p>
-                  <Button variant="outline" className="mt-4" onClick={() => window.open(`${getBackendURL()}/api/documentations/documents/${viewerDialog.id}/view?token=${localStorage.getItem('token')}`, '_blank')}>
-                    <Eye className="h-4 w-4 mr-1" /> Ouvrir dans un nouvel onglet
-                  </Button>
+                <div className="w-full h-full">
+                  <FilePreviewRenderer
+                    url={`${getBackendURL()}/api/documentations/documents/${viewerDialog.id}/view?token=${localStorage.getItem('token')}`}
+                    filename={viewerDialog.fichier_nom || viewerDialog.titre}
+                    mimeType={viewerDialog.fichier_type}
+                  />
                 </div>
               )
             )}
