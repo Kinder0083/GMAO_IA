@@ -33,6 +33,16 @@ Application GMAO (Gestion de Maintenance Assistée par Ordinateur) complète pou
 - Export PDF individuel des OT (jsPDF)
 - Export PDF en masse des OT avec mode sélection
 
+### Session 15 avril 2026 — Fix critique : chemin fichiers production
+
+**Bug corrigé** : Le backend avait le chemin `/app/backend` codé en dur dans `documentations_routes.py` (4 occurrences). Sur le serveur de production (`/opt/gmao-iris/`), tous les fichiers étaient introuvables → HTTP 404.
+
+**Correction** : Ajout de `BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))` — chemin calculé dynamiquement depuis l'emplacement réel du fichier. Fonctionne sur tous les environnements.
+
+**Fichier modifié** : `backend/documentations_routes.py` — routes `view`, `download`, `copy`, export PDF.
+
+---
+
 ### Session 15 avril 2026 — Intégration FilePreviewRenderer (.docx + .xlsx)
 
 **Fonctionnalité ajoutée** : Prévisualisation in-app des fichiers Word (.docx) et Excel (.xlsx/.csv) avec chargement dynamique des bibliothèques.
