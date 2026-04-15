@@ -14,6 +14,9 @@ import json
 import os
 from io import BytesIO
 
+# Répertoire racine du backend (fonctionne sur tous les environnements : /app, /opt/gmao-iris, etc.)
+BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
+
 from models import (
     PoleDeService,
     PoleDeServiceCreate,
@@ -637,9 +640,8 @@ async def view_document_file(
         if not doc.get("fichier_url"):
             raise HTTPException(status_code=404, detail="Aucun fichier associé")
         
-        # Le fichier_url commence par /uploads/documents/
-        # Le fichier réel est dans /app/backend/uploads/documents/
-        file_path = Path(f"/app/backend{doc['fichier_url']}")
+        # Le fichier réel est dans {BACKEND_DIR}/uploads/documents/
+        file_path = Path(BACKEND_DIR) / doc['fichier_url'].lstrip('/')
         if not file_path.exists():
             raise HTTPException(status_code=404, detail="Fichier non trouvé sur le serveur")
         
@@ -683,7 +685,7 @@ async def download_document_file(
         if not doc.get("fichier_url"):
             raise HTTPException(status_code=404, detail="Aucun fichier associé")
         
-        file_path = Path(f"/app/backend{doc['fichier_url']}")
+        file_path = Path(BACKEND_DIR) / doc['fichier_url'].lstrip('/')
         if not file_path.exists():
             raise HTTPException(status_code=404, detail="Fichier non trouvé sur le serveur")
         
@@ -2134,7 +2136,7 @@ async def copy_node(
             new_doc["created_by"] = current_user.get("id")
             # Copier le fichier physique si existant
             if doc.get("fichier_url"):
-                src_path = Path(f"/app/backend{doc['fichier_url']}")
+                src_path = Path(BACKEND_DIR) / doc['fichier_url'].lstrip('/')
                 if src_path.exists():
                     upload_dir = Path("uploads/documents")
                     upload_dir.mkdir(parents=True, exist_ok=True)
@@ -2460,7 +2462,7 @@ async def share_by_email(
                 raise HTTPException(status_code=404, detail="Document non trouvé")
             doc_name = doc.get("fichier_nom") or doc.get("titre", "Document")
             if doc.get("fichier_url"):
-                file_path = Path(f"/app/backend{doc['fichier_url']}")
+                file_path = Path(BACKEND_DIR) / doc['fichier_url'].lstrip('/')
                 if file_path.exists():
                     with open(file_path, "rb") as f:
                         attachment_data = f.read()
