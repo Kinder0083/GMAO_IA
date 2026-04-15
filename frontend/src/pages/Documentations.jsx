@@ -18,6 +18,7 @@ import { getBackendURL } from '../utils/config';
 import { useDocumentations } from '../hooks/useDocumentations';
 import ExplorerView from '../components/documentations/ExplorerView';
 import BonDeTravailPrintDialog from '../components/BonDeTravailPrintDialog';
+import FilePreviewRenderer from '../components/shared/FilePreviewRenderer';
 
 const POLE_COLORS = {
   MAINTENANCE: '#f97316',
@@ -716,19 +717,12 @@ function Documentations() {
                     className="max-w-full h-auto mx-auto"
                   />
                 ) : (
-                  <div className="text-center py-12">
-                    <FileText className="h-16 w-16 mx-auto text-gray-300 mb-4" />
-                    <p className="text-gray-600 mb-4">
-                      Prévisualisation non disponible pour ce type de fichier
-                    </p>
-                    <Button
-                      onClick={() => {
-                        window.open(`${getBackendURL()}/api/documentations/documents/${previewDocument.id}/view`, '_blank');
-                      }}
-                    >
-                      <Eye className="mr-2 h-4 w-4" />
-                      Ouvrir dans un nouvel onglet
-                    </Button>
+                  <div className="h-[60vh]">
+                    <FilePreviewRenderer
+                      url={`${getBackendURL()}/api/documentations/documents/${previewDocument.id}/view?token=${localStorage.getItem('token')}`}
+                      filename={previewDocument.nom_fichier}
+                      mimeType={previewDocument.type_fichier}
+                    />
                   </div>
                 )}
               </>

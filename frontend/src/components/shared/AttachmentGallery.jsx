@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X, ChevronLeft, ChevronRight, FileText, Film, File, Loader2 } from 'lucide-react';
 import useEscapeToClose from '../../hooks/useEscapeToClose';
+import FilePreviewRenderer, { detectFileType } from './FilePreviewRenderer';
 
 const AttachmentGallery = ({ attachments, downloadFunction, itemId }) => {
   const [thumbUrls, setThumbUrls] = useState({});
@@ -148,6 +149,23 @@ const AttachmentGallery = ({ attachments, downloadFunction, itemId }) => {
         </div>
       );
     }
+    const fileType = detectFileType(mime, att.original_filename || att.filename || '');
+    if (fileType === 'docx') {
+      return (
+        <div className="flex flex-col items-center justify-center h-full bg-blue-50">
+          <FileText className="text-blue-600" size={22} />
+          <span className="text-[10px] text-blue-700 mt-0.5 font-semibold">WORD</span>
+        </div>
+      );
+    }
+    if (fileType === 'xlsx' || fileType === 'csv') {
+      return (
+        <div className="flex flex-col items-center justify-center h-full bg-green-50">
+          <File className="text-green-600" size={22} />
+          <span className="text-[10px] text-green-700 mt-0.5 font-semibold">{fileType === 'csv' ? 'CSV' : 'EXCEL'}</span>
+        </div>
+      );
+    }
     return (
       <div className="flex flex-col items-center justify-center h-full bg-gray-50">
         <File className="text-gray-400" size={22} />
@@ -179,6 +197,18 @@ const AttachmentGallery = ({ attachments, downloadFunction, itemId }) => {
     }
     if (mime.startsWith('text/')) {
       return <iframe src={lightboxUrl} className="w-[80vw] h-[70vh] bg-white rounded font-mono" title={att.original_filename} />;
+    }
+    const fileType = detectFileType(mime, att.original_filename || att.filename || '');
+    if (fileType) {
+      return (
+        <div className="w-[90vw] h-[80vh] bg-white rounded-lg overflow-hidden shadow-2xl">
+          <FilePreviewRenderer
+            url={lightboxUrl}
+            filename={att.original_filename || att.filename}
+            mimeType={mime}
+          />
+        </div>
+      );
     }
     return (
       <div className="text-center text-white">
