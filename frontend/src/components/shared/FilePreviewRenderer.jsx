@@ -239,7 +239,7 @@ const FilePreviewRenderer = ({ url, filename = '', mimeType = '', className = ''
       if (xhr.status >= 200 && xhr.status < 300) {
         setState({ status: 'ready', arrayBuffer: xhr.response, error: null });
       } else {
-        setState({ status: 'error', arrayBuffer: null, error: `HTTP ${xhr.status}` });
+        setState({ status: 'error', arrayBuffer: null, error: `HTTP ${xhr.status} — URL : ${url}` });
       }
     };
     xhr.onerror = () => {

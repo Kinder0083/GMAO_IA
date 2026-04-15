@@ -68,12 +68,17 @@ async def get_poles(current_user: dict = Depends(get_current_user)):
             documents = await db.documents.find({"pole_id": pole["id"]}).to_list(length=None)
             for doc in documents:
                 if "_id" in doc:
+                    # Garantir que le champ "id" est toujours présent
+                    if "id" not in doc:
+                        doc["id"] = str(doc["_id"])
                     del doc["_id"]
             
             # Récupérer les bons de travail associés
             bons_travail = await db.bons_travail.find({"pole_id": pole["id"]}).to_list(length=None)
             for bon in bons_travail:
                 if "_id" in bon:
+                    if "id" not in bon:
+                        bon["id"] = str(bon["_id"])
                     del bon["_id"]
             
             # Ajouter les documents et bons au pôle
@@ -619,6 +624,13 @@ async def view_document_file(
             raise HTTPException(status_code=401, detail="Not authenticated")
         
         doc = await db.documents.find_one({"id": document_id})
+        if not doc:
+            # Fallback : anciens documents sans champ "id" (seulement _id ObjectId)
+            from bson import ObjectId
+            try:
+                doc = await db.documents.find_one({"_id": ObjectId(document_id)})
+            except Exception:
+                pass
         if not doc:
             raise HTTPException(status_code=404, detail="Document non trouvé")
         
@@ -2008,12 +2020,19 @@ async def get_explorer_contents(
         # Documents dans ce dossier
         if folder_id is None:
             documents = await db.documents.find(
-                {"pole_id": pole_id, "$or": [{"folder_id": None}, {"folder_id": {"$exists": False}}]}, {"_id": 0}
+                {"pole_id": pole_id, "$or": [{"folder_id": None}, {"folder_id": {"$exists": False}}]}
             ).to_list(length=None)
         else:
             documents = await db.documents.find(
-                {"pole_id": pole_id, "folder_id": folder_id}, {"_id": 0}
+                {"pole_id": pole_id, "folder_id": folder_id}
             ).to_list(length=None)
+
+        # Garantir id + supprimer _id
+        for doc in documents:
+            if "_id" in doc:
+                if "id" not in doc:
+                    doc["id"] = str(doc["_id"])
+                del doc["_id"]
 
         # Filtrer par permissions
         if not is_admin:
