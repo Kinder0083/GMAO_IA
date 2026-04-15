@@ -33,7 +33,18 @@ Application GMAO (Gestion de Maintenance Assistée par Ordinateur) complète pou
 - Export PDF individuel des OT (jsPDF)
 - Export PDF en masse des OT avec mode sélection
 
-### Session 14 avril 2026 — Fermeture universelle des modales avec la touche Echap
+### Session 15 avril 2026 — Intégration FilePreviewRenderer (.docx + .xlsx)
+
+**Fonctionnalité ajoutée** : Prévisualisation in-app des fichiers Word (.docx) et Excel (.xlsx/.csv) avec chargement dynamique des bibliothèques.
+
+**Architecture** :
+- **`components/shared/FilePreviewRenderer.jsx`** : Composant principal. Détecte le type de fichier, charge dynamiquement `mammoth` (docx → HTML) ou `xlsx`/SheetJS (xlsx/csv → tableau HTML) via `import()`. Fallback gracieux pour les types non supportés.
+- **`pages/Documentations.jsx`** : Bouton Eye ouvre maintenant le dialog de prévisualisation in-app (plus `window.open`). Champs corrigés (`fichier_nom`, `fichier_type`). Fallback remplacé par `FilePreviewRenderer`.
+- **`components/documentations/ExplorerView.jsx`** : Dialog visualiseur (double-clic) utilise `FilePreviewRenderer` pour docx/xlsx au lieu de l'ancien fallback "Prévisualisation non disponible".
+- **`components/shared/AttachmentGallery.jsx`** : Miniatures WORD (fond bleu) et EXCEL (fond vert). Lightbox utilise `FilePreviewRenderer` pour les fichiers Word/Excel.
+- **Tests** : iteration_170 (bugs trouvés) + iteration_171 (100% passé) ✅
+
+
 
 **Fonctionnalité ajoutée** : Appuyer sur Echap ferme n'importe quelle boîte de dialogue de l'application, sans enregistrer.
 
