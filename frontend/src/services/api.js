@@ -430,7 +430,7 @@ export const vendorsAPI = {
 export const purchaseHistoryAPI = {
   getAll: () => api.get('/purchase-history'),
   getGrouped: () => api.get('/purchase-history/grouped'),
-  getStats: () => api.get('/purchase-history/stats'),
+  getStats: (params = {}) => api.get('/purchase-history/stats', { params }),
   downloadTemplate: (format = 'csv') => 
     api.get('/purchase-history/template', {
       params: { format },

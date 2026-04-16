@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { Plus, Search, ShoppingCart, TrendingUp, Calendar, Pencil, Trash2, Download, Upload, ChevronDown, ChevronRight, Brain, FileText, Archive } from 'lucide-react';
+import { Plus, Search, ShoppingCart, TrendingUp, Calendar, Pencil, Trash2, Download, Upload, ChevronDown, ChevronRight, Brain, FileText, Archive, Filter, RotateCcw } from 'lucide-react';
 import { purchaseHistoryAPI } from '../services/api';
 import { useToast } from '../hooks/use-toast';
 import { useConfirmDialog } from '../components/ui/confirm-dialog';
@@ -31,18 +31,41 @@ const PurchaseHistory = () => {
   const [selectedMonth, setSelectedMonth] = useState('');
   const [openAIAnalysis, setOpenAIAnalysis] = useState(false);
 
+  // ── Helpers exercice fiscal ──
+  const getCurrentFiscalYear = () => {
+    const now = new Date();
+    return (now.getMonth() + 1) >= 10 ? now.getFullYear() : now.getFullYear() - 1;
+  };
+  const formatFiscalLabel = (fy) => `Exercice ${fy}-${fy + 1}`;
+  const formatMonthLabel = (ym) => {
+    const MONTHS = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'];
+    const [year, month] = ym.split('-');
+    return `${MONTHS[parseInt(month, 10) - 1]} ${year}`;
+  };
+
+  // ── Filtre période ──
+  const [filterMode, setFilterMode] = useState('fiscal'); // 'fiscal' | 'monthly'
+  const [fiscalYear, setFiscalYear] = useState(getCurrentFiscalYear);
+  const [selectedMonths, setSelectedMonths] = useState([]); // mois sélectionnés en mode mensuel
+  const [comparisonMode, setComparisonMode] = useState(false);
+  const COMPARISON_COLORS = ['#3b82f6','#ef4444','#22c55e','#f59e0b','#8b5cf6','#ec4899','#14b8a6'];
+
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem('user') || '{}');
     setCurrentUser(user);
-    loadData();
+    const fy = getCurrentFiscalYear();
+    loadData(`${fy}-10-01T00:00:00`, `${fy + 1}-09-30T23:59:59`);
   }, []);
 
-  const loadData = async () => {
+  const loadData = async (startDate = null, endDate = null) => {
     try {
       setLoading(true);
+      const statsParams = {};
+      if (startDate) statsParams.start_date = startDate;
+      if (endDate) statsParams.end_date = endDate;
       const [groupedRes, statsRes] = await Promise.all([
         purchaseHistoryAPI.getGrouped(),
-        purchaseHistoryAPI.getStats()
+        purchaseHistoryAPI.getStats(statsParams)
       ]);
       setGroupedPurchases(groupedRes.data);
       setStats(statsRes.data);
@@ -56,6 +79,75 @@ const PurchaseHistory = () => {
       setLoading(false);
     }
   };
+
+  // Recharge uniquement les stats (sans recharger les commandes groupées)
+  const reloadStats = async (startDate = null, endDate = null) => {
+    try {
+      const params = {};
+      if (startDate) params.start_date = startDate;
+      if (endDate) params.end_date = endDate;
+      const statsRes = await purchaseHistoryAPI.getStats(params);
+      setStats(statsRes.data);
+    } catch {
+      toast({ title: 'Erreur', description: 'Impossible de filtrer les statistiques', variant: 'destructive' });
+    }
+  };
+
+  // Applique le filtre actif et recharge les stats
+  const applyFilter = () => {
+    let start = null, end = null;
+    if (filterMode === 'fiscal') {
+      start = `${fiscalYear}-10-01T00:00:00`;
+      end = `${fiscalYear + 1}-09-30T23:59:59`;
+    } else if (selectedMonths.length > 0) {
+      const sorted = [...selectedMonths].sort();
+      start = `${sorted[0]}-01T00:00:00`;
+      end = `${sorted[sorted.length - 1]}-31T23:59:59`;
+    }
+    reloadStats(start, end);
+  };
+
+  // Mois disponibles (déduits des commandes groupées, toujours non filtrées)
+  const availableMonths = useMemo(() => {
+    const months = new Set();
+    groupedPurchases.forEach(o => {
+      if (o.dateCreation) months.add(String(o.dateCreation).substring(0, 7));
+    });
+    return [...months].sort();
+  }, [groupedPurchases]);
+
+  // Exercices fiscaux disponibles
+  const availableFiscalYears = useMemo(() => {
+    const years = new Set();
+    availableMonths.forEach(m => {
+      const [y, mo] = m.split('-').map(Number);
+      years.add(mo >= 10 ? y : y - 1);
+    });
+    return [...years].sort((a, b) => b - a);
+  }, [availableMonths]);
+
+  // Statistiques affichées : en mode comparaison, recalcul côté client depuis par_mois
+  const displayStats = useMemo(() => {
+    if (!stats) return null;
+    if (filterMode === 'monthly' && comparisonMode && selectedMonths.length > 0) {
+      const sel = stats.par_mois?.filter(m => selectedMonths.includes(m.mois)) || [];
+      return {
+        ...stats,
+        montantTotal: sel.reduce((s, m) => s + (m.montant_total || 0), 0),
+        commandesTotales: sel.reduce((s, m) => s + (m.nb_commandes || 0), 0),
+        totalAchats: sel.reduce((s, m) => s + (m.nb_lignes || 0), 0),
+      };
+    }
+    return stats;
+  }, [stats, filterMode, comparisonMode, selectedMonths]);
+
+  // Données du graphique Évolution Mensuelle
+  const chartData = useMemo(() => {
+    if (!stats?.par_mois) return [];
+    if (filterMode === 'monthly' && comparisonMode && selectedMonths.length > 0)
+      return stats.par_mois.filter(m => selectedMonths.includes(m.mois));
+    return stats.par_mois;
+  }, [stats, filterMode, comparisonMode, selectedMonths]);
 
   const handleDeleteAll = async () => {
     confirm({
@@ -296,7 +388,7 @@ const PurchaseHistory = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Total Achats</p>
-                <p className="text-3xl font-bold text-blue-600 mt-2">{stats?.totalAchats || 0}</p>
+                <p className="text-3xl font-bold text-blue-600 mt-2">{displayStats?.totalAchats || 0}</p>
               </div>
               <div className="bg-blue-100 p-3 rounded-xl">
                 <ShoppingCart size={24} className="text-blue-600" />
@@ -311,7 +403,7 @@ const PurchaseHistory = () => {
               <div>
                 <p className="text-sm font-medium text-gray-600">Montant Total</p>
                 <p className="text-3xl font-bold text-green-600 mt-2">
-                  {formatCurrency(stats?.montantTotal || 0)}
+                  {formatCurrency(displayStats?.montantTotal || 0)}
                 </p>
               </div>
               <div className="bg-green-100 p-3 rounded-xl">
@@ -327,7 +419,7 @@ const PurchaseHistory = () => {
               <div>
                 <p className="text-sm font-medium text-gray-600">Commandes Totales</p>
                 <p className="text-3xl font-bold text-orange-600 mt-2">
-                  {stats?.commandesTotales || 0}
+                  {displayStats?.commandesTotales || 0}
                 </p>
                 <p className="text-xs text-gray-500 mt-1">N° uniques</p>
               </div>
@@ -339,12 +431,165 @@ const PurchaseHistory = () => {
         </Card>
       </div>
 
+      {/* ── Panneau Filtre Période ── */}
+      <Card className="border-blue-200 bg-blue-50/40">
+        <CardContent className="pt-4 pb-4">
+          <div className="flex items-center gap-2 mb-4">
+            <Filter size={18} className="text-blue-600" />
+            <span className="font-semibold text-blue-900">Période d'analyse</span>
+          </div>
+
+          {/* Sélecteur de mode */}
+          <div className="flex gap-2 mb-4">
+            <button
+              onClick={() => { setFilterMode('fiscal'); setSelectedMonths([]); setComparisonMode(false); }}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${filterMode === 'fiscal' ? 'bg-blue-600 text-white shadow' : 'bg-white text-gray-600 border hover:bg-gray-50'}`}
+            >
+              Exercice fiscal
+            </button>
+            <button
+              onClick={() => { setFilterMode('monthly'); }}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${filterMode === 'monthly' ? 'bg-blue-600 text-white shadow' : 'bg-white text-gray-600 border hover:bg-gray-50'}`}
+            >
+              Sélection par mois
+            </button>
+          </div>
+
+          {/* Mode exercice fiscal */}
+          {filterMode === 'fiscal' && (
+            <div className="flex flex-wrap items-center gap-4">
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">Exercice fiscal</label>
+                <select
+                  value={fiscalYear}
+                  onChange={(e) => {
+                    const fy = parseInt(e.target.value, 10);
+                    setFiscalYear(fy);
+                    reloadStats(`${fy}-10-01T00:00:00`, `${fy + 1}-09-30T23:59:59`);
+                  }}
+                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+                >
+                  {availableFiscalYears.length > 0
+                    ? availableFiscalYears.map(fy => (
+                        <option key={fy} value={fy}>{formatFiscalLabel(fy)}</option>
+                      ))
+                    : <option value={fiscalYear}>{formatFiscalLabel(fiscalYear)}</option>
+                  }
+                </select>
+              </div>
+              <div className="text-sm text-gray-600 mt-4">
+                <span className="font-medium text-blue-700">{formatFiscalLabel(fiscalYear)}</span>
+                <span className="text-gray-400 ml-2">01/10/{fiscalYear} → 30/09/{fiscalYear + 1}</span>
+              </div>
+            </div>
+          )}
+
+          {/* Mode sélection par mois */}
+          {filterMode === 'monthly' && (
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-gray-500 block mb-2">
+                  Cliquez sur les mois à inclure {comparisonMode ? '(comparaison côte à côte)' : ''}
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {availableMonths.length > 0 ? availableMonths.map(m => {
+                    const isSelected = selectedMonths.includes(m);
+                    const colorIdx = comparisonMode ? selectedMonths.indexOf(m) : -1;
+                    return (
+                      <button
+                        key={m}
+                        onClick={() => {
+                          setSelectedMonths(prev =>
+                            prev.includes(m) ? prev.filter(x => x !== m) : [...prev, m]
+                          );
+                        }}
+                        className="px-3 py-1.5 rounded-full text-xs font-semibold transition-all border"
+                        style={{
+                          backgroundColor: isSelected
+                            ? (comparisonMode && colorIdx >= 0 ? COMPARISON_COLORS[colorIdx % COMPARISON_COLORS.length] : '#2563eb')
+                            : '#fff',
+                          color: isSelected ? '#fff' : '#374151',
+                          borderColor: isSelected
+                            ? (comparisonMode && colorIdx >= 0 ? COMPARISON_COLORS[colorIdx % COMPARISON_COLORS.length] : '#2563eb')
+                            : '#d1d5db',
+                        }}
+                      >
+                        {formatMonthLabel(m)}
+                      </button>
+                    );
+                  }) : (
+                    <span className="text-sm text-gray-400 italic">Aucune donnée disponible</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Option comparaison */}
+              <label className="flex items-center gap-2 cursor-pointer w-fit">
+                <input
+                  type="checkbox"
+                  checked={comparisonMode}
+                  onChange={(e) => setComparisonMode(e.target.checked)}
+                  className="w-4 h-4 accent-blue-600"
+                />
+                <span className="text-sm text-gray-700 font-medium">
+                  Mode comparaison (affichage côte à côte dans Évolution Mensuelle)
+                </span>
+              </label>
+
+              {/* Boutons action */}
+              <div className="flex gap-2 pt-1">
+                <Button
+                  size="sm"
+                  onClick={applyFilter}
+                  disabled={selectedMonths.length === 0}
+                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  Appliquer ({selectedMonths.length} mois)
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => { setSelectedMonths([]); setComparisonMode(false); reloadStats(); }}
+                  className="text-gray-600"
+                >
+                  <RotateCcw size={14} className="mr-1" /> Réinitialiser
+                </Button>
+              </div>
+
+              {/* Résumé des mois sélectionnés */}
+              {comparisonMode && selectedMonths.length > 0 && (
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {selectedMonths.sort().map((m, i) => (
+                    <span
+                      key={m}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs text-white font-medium"
+                      style={{ backgroundColor: COMPARISON_COLORS[i % COMPARISON_COLORS.length] }}
+                    >
+                      {formatMonthLabel(m)}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Statistics Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Statistiques par Utilisateur - NOUVELLE SECTION */}
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle>📊 Statistiques par Utilisateur (Créateurs de Commandes)</CardTitle>
+            <CardTitle className="flex items-center justify-between">
+              <span>📊 Statistiques par Utilisateur (Créateurs de Commandes)</span>
+              <span className="text-xs font-normal text-gray-400">
+                {filterMode === 'fiscal'
+                  ? formatFiscalLabel(fiscalYear)
+                  : selectedMonths.length > 0
+                    ? selectedMonths.sort().map(formatMonthLabel).join(', ')
+                    : 'Toutes périodes'}
+              </span>
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
@@ -366,8 +611,8 @@ const PurchaseHistory = () => {
                       <td className="px-4 py-3 text-sm text-right">
                         <div className="flex items-center justify-end gap-2">
                           <div className="w-24 bg-gray-200 rounded-full h-2">
-                            <div 
-                              className="bg-blue-600 h-2 rounded-full" 
+                            <div
+                              className="bg-blue-600 h-2 rounded-full"
                               style={{width: `${Math.min(user.pourcentage, 100)}%`}}
                             ></div>
                           </div>
@@ -385,81 +630,77 @@ const PurchaseHistory = () => {
         {/* Évolution Mensuelle des Achats - HISTOGRAMME À COLONNES */}
         <Card className="lg:col-span-3">
           <CardHeader>
-            <CardTitle>📈 Évolution Mensuelle des Achats</CardTitle>
+            <CardTitle className="flex items-center justify-between">
+              <span>📈 Évolution Mensuelle des Achats</span>
+              {comparisonMode && selectedMonths.length > 0 && (
+                <span className="text-xs font-normal text-blue-600 bg-blue-50 px-2 py-1 rounded-full">
+                  Mode comparaison — {selectedMonths.length} mois
+                </span>
+              )}
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            {stats?.par_mois && stats.par_mois.length > 0 ? (
+            {chartData && chartData.length > 0 ? (
               <>
-                {/* Histogramme en bleu */}
                 <div className="w-full bg-white p-6 rounded-lg border">
                   {(() => {
-                    const data = stats.par_mois.slice(-12);
-                    const maxValue = Math.max(...data.map(d => d.montant_total));
-                    const blueColor = '#3b82f6';
-                    
+                    const data = chartData;
+                    const maxValue = Math.max(...data.map(d => d.montant_total), 1);
+
                     return (
                       <div>
+                        {/* Légende comparaison */}
+                        {comparisonMode && selectedMonths.length > 0 && (
+                          <div className="flex flex-wrap gap-3 mb-4">
+                            {data.map((item, idx) => (
+                              <span key={item.mois} className="flex items-center gap-1.5 text-xs font-medium">
+                                <span className="w-3 h-3 rounded-sm inline-block" style={{ backgroundColor: COMPARISON_COLORS[idx % COMPARISON_COLORS.length] }} />
+                                {formatMonthLabel(item.mois)}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+
                         {/* Graphique */}
                         <div style={{ display: 'flex', alignItems: 'flex-end', height: '350px', gap: '8px', padding: '20px', border: '1px solid #e5e7eb', borderRadius: '8px', backgroundColor: '#fafafa' }}>
                           {data.map((item, index) => {
+                            const barColor = (comparisonMode && selectedMonths.length > 0)
+                              ? COMPARISON_COLORS[index % COMPARISON_COLORS.length]
+                              : '#3b82f6';
                             const heightPx = Math.max((item.montant_total / maxValue) * 300, 10);
-                            
                             return (
-                              <div 
+                              <div
                                 key={index}
-                                style={{ 
-                                  flex: 1,
-                                  display: 'flex',
-                                  flexDirection: 'column',
-                                  alignItems: 'center',
-                                  justifyContent: 'flex-end'
-                                }}
+                                style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end' }}
                               >
-                                {/* Barre */}
                                 <div
                                   title={`${item.mois}: ${item.montant_total.toLocaleString('fr-FR')} € (${item.nb_commandes} commandes)`}
                                   style={{
                                     width: '100%',
                                     height: `${heightPx}px`,
-                                    backgroundColor: blueColor,
+                                    backgroundColor: barColor,
                                     borderRadius: '8px 8px 0 0',
                                     cursor: 'pointer',
                                     transition: 'all 0.3s',
                                     boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
                                   }}
-                                  onMouseEnter={(e) => {
-                                    e.currentTarget.style.opacity = '0.8';
-                                    e.currentTarget.style.transform = 'translateY(-4px)';
-                                  }}
-                                  onMouseLeave={(e) => {
-                                    e.currentTarget.style.opacity = '1';
-                                    e.currentTarget.style.transform = 'translateY(0)';
-                                  }}
+                                  onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.8'; e.currentTarget.style.transform = 'translateY(-4px)'; }}
+                                  onMouseLeave={(e) => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.transform = 'translateY(0)'; }}
                                 />
                               </div>
                             );
                           })}
                         </div>
-                        
+
                         {/* Labels des mois */}
                         <div style={{ display: 'flex', gap: '8px', marginTop: '10px', paddingLeft: '20px', paddingRight: '20px' }}>
                           {data.map((item, index) => (
-                            <div 
-                              key={index}
-                              style={{ 
-                                flex: 1,
-                                textAlign: 'center',
-                                fontSize: '11px',
-                                color: '#666',
-                                fontWeight: '600'
-                              }}
-                            >
-                              {item.mois}
+                            <div key={index} style={{ flex: 1, textAlign: 'center', fontSize: '11px', color: '#666', fontWeight: '600' }}>
+                              {formatMonthLabel(item.mois)}
                             </div>
                           ))}
                         </div>
-                        
-                        {/* Info */}
+
                         <div style={{ textAlign: 'center', marginTop: '20px', fontSize: '13px', color: '#888' }}>
                           📊 {data.length} mois affichés • Maximum: {maxValue.toLocaleString('fr-FR')} €
                         </div>
@@ -470,13 +711,13 @@ const PurchaseHistory = () => {
               </>
             ) : (
               <div className="text-center py-8 text-gray-500">
-                Aucune donnée d'achat disponible pour le moment
+                Aucune donnée d'achat disponible pour cette période
               </div>
             )}
             
             {/* Tableau récapitulatif sous le graphique */}
             <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-              {stats?.par_mois?.slice(-3).reverse().map((month, index) => (
+              {chartData?.slice(-3).reverse().map((month, index) => (
                 <div key={index} className="border rounded-lg p-4 bg-gray-50">
                   <p className="text-sm font-semibold text-gray-700">{month.mois}</p>
                   <p className="text-2xl font-bold text-blue-600 mt-2">{formatCurrency(month.montant_total)}</p>
