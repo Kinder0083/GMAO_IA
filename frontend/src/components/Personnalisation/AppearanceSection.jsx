@@ -276,16 +276,72 @@ const AppearanceSection = () => {
             <ImageIcon size={20} />
             Fond d'écran personnalisé
           </Label>
-          <div className="space-y-3">
-            <Input
-              type="text"
-              placeholder="URL de l'image de fond"
-              value={localPrefs.background_image_url || ''}
-              onChange={(e) => handleThemeChange('background_image_url', e.target.value)}
-            />
-            <p className="text-sm text-gray-500">
-              Laissez vide pour utiliser le fond par défaut
-            </p>
+          <div className="space-y-4">
+
+            {/* Sélection fichier local */}
+            <div>
+              <Label className="mb-2 block text-sm">Depuis votre ordinateur</Label>
+              <label className="flex items-center gap-3 cursor-pointer w-full border-2 border-dashed border-gray-300 hover:border-blue-400 rounded-lg p-4 transition-colors">
+                <ImageIcon size={20} className="text-gray-400 shrink-0" />
+                <span className="text-sm text-gray-500">Cliquez pour sélectionner une image (JPG, PNG, WebP…)</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = (ev) => {
+                      handleThemeChange('background_image_url', ev.target.result);
+                    };
+                    reader.readAsDataURL(file);
+                    // Reset input so same file can be re-selected
+                    e.target.value = '';
+                  }}
+                />
+              </label>
+            </div>
+
+            {/* OU URL distante */}
+            <div>
+              <Label className="mb-2 block text-sm">Ou entrer une URL d'image</Label>
+              <div className="flex gap-2">
+                <Input
+                  type="text"
+                  placeholder="https://exemple.com/image.jpg"
+                  value={localPrefs.background_image_url?.startsWith('data:') ? '' : (localPrefs.background_image_url || '')}
+                  onChange={(e) => handleThemeChange('background_image_url', e.target.value)}
+                  className="flex-1"
+                />
+                {localPrefs.background_image_url && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleThemeChange('background_image_url', '')}
+                    className="shrink-0 text-red-500 hover:text-red-700"
+                  >
+                    Supprimer
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            {/* Aperçu */}
+            {localPrefs.background_image_url ? (
+              <div className="rounded-lg overflow-hidden border border-gray-200 shadow-sm">
+                <p className="text-xs text-gray-500 px-3 py-1 bg-gray-50 border-b">Aperçu</p>
+                <div
+                  className="h-40 bg-cover bg-center bg-no-repeat"
+                  style={{ backgroundImage: `url(${localPrefs.background_image_url})` }}
+                  onError={(e) => e.currentTarget.style.display = 'none'}
+                />
+              </div>
+            ) : (
+              <p className="text-sm text-gray-400 italic">
+                Aucun fond d'écran défini — fond par défaut utilisé
+              </p>
+            )}
           </div>
         </CardContent>
       </Card>

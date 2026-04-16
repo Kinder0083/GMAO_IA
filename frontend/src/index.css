@@ -108,6 +108,11 @@ code {
     }
     body {
         @apply bg-background text-foreground;
+        background-image: var(--background-image, none);
+        background-size: cover;
+        background-position: center center;
+        background-attachment: fixed;
+        background-repeat: no-repeat;
     }
 }
 
