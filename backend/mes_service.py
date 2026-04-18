@@ -252,7 +252,13 @@ class MESService:
         downtime_seconds = 0
 
         if last_pulse:
-            if last_pulse.tzinfo is None:
+            # Correction : last_pulse_at peut être une chaîne ISO en DB
+            if isinstance(last_pulse, str):
+                try:
+                    last_pulse = datetime.fromisoformat(last_pulse.replace("Z", "+00:00"))
+                except (ValueError, AttributeError):
+                    last_pulse = None
+            if last_pulse and last_pulse.tzinfo is None:
                 last_pulse = last_pulse.replace(tzinfo=timezone.utc)
             expected_interval = 60.0 / theoretical if theoretical > 0 else 10
             threshold = expected_interval * (1 + margin_pct / 100)
@@ -352,6 +358,12 @@ class MESService:
         prev_time = start
         for p in pulses:
             ts = p["timestamp"]
+            # Correction : timestamp peut être une chaîne ISO en DB
+            if isinstance(ts, str):
+                try:
+                    ts = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+                except (ValueError, AttributeError):
+                    continue
             if ts.tzinfo is None:
                 ts = ts.replace(tzinfo=timezone.utc)
             gap = (ts - prev_time).total_seconds()
