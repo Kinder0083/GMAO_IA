@@ -572,47 +572,106 @@ async def _compute_time_widgets(database, now):
         "time_deviation_year": None,
         "time_deviation_month_count": 0,
         "time_deviation_year_count": 0,
+        "time_total_estime_month": 0,
+        "time_total_reel_month": 0,
+        "time_total_estime_year": 0,
+        "time_total_reel_year": 0,
         "estimated_hours_open": 0,
         "estimated_hours_open_count": 0,
         "maintenance_techs_count": 0,
     }
 
     # --- Widget 1: Ecart temps estimé/réel (OT terminés) ---
+    # Robustesse : dateTermine peut être stocké comme string ISO ou comme datetime BSON
+    # On normalise avec $addFields + $toDate pour couvrir les deux cas
     for label, days in [("month", 30), ("year", 365)]:
         cutoff = now - timedelta(days=days)
         pipeline = [
+            # Étape 1 : normaliser dateTermine (string ISO → Date BSON)
+            {"$addFields": {
+                "_dateTermine_norm": {
+                    "$cond": {
+                        "if": {"$eq": [{"$type": "$dateTermine"}, "string"]},
+                        "then": {"$toDate": "$dateTermine"},
+                        "else": {
+                            "$cond": {
+                                "if": {"$eq": [{"$type": "$dateTermine"}, "date"]},
+                                "then": "$dateTermine",
+                                "else": None
+                            }
+                        }
+                    }
+                },
+                # Normaliser aussi tempsEstime : prendre tempsEstime (camelCase) OU
+                # temps_estime (snake_case, héritage templates), en ignorant les strings non numériques
+                "_tempsEstime_norm": {
+                    "$cond": {
+                        "if": {"$and": [{"$gt": ["$tempsEstime", 0]}, {"$isNumber": "$tempsEstime"}]},
+                        "then": "$tempsEstime",
+                        "else": {
+                            "$cond": {
+                                "if": {"$and": [{"$gt": ["$temps_estime", 0]}, {"$isNumber": "$temps_estime"}]},
+                                "then": "$temps_estime",
+                                "else": None
+                            }
+                        }
+                    }
+                }
+            }},
+            # Étape 2 : filtrer OT terminés dans la fenêtre temporelle avec temps valides
             {"$match": {
                 "statut": "TERMINE",
                 **NOT_DELETED,
-                "tempsEstime": {"$gt": 0},
+                "_tempsEstime_norm": {"$gt": 0},
                 "tempsReel": {"$gt": 0},
-                "dateTermine": {"$gte": cutoff}
+                "_dateTermine_norm": {"$gte": cutoff}
             }},
             {"$group": {
                 "_id": None,
-                "total_estime": {"$sum": "$tempsEstime"},
+                "total_estime": {"$sum": "$_tempsEstime_norm"},
                 "total_reel": {"$sum": "$tempsReel"},
                 "count": {"$sum": 1}
             }}
         ]
-        agg = await database.work_orders.aggregate(pipeline).to_list(1)
+        try:
+            agg = await database.work_orders.aggregate(pipeline).to_list(1)
+        except Exception as e:
+            logger.warning(f"Erreur aggregate ecart_temps ({label}): {e}")
+            agg = []
         if agg and agg[0]["total_estime"] > 0:
             estime = agg[0]["total_estime"]
             reel = agg[0]["total_reel"]
             deviation = round(((reel - estime) / estime) * 100, 1)
             result[f"time_deviation_{label}"] = deviation
             result[f"time_deviation_{label}_count"] = agg[0]["count"]
+            result[f"time_total_estime_{label}"] = round(estime, 1)
+            result[f"time_total_reel_{label}"] = round(reel, 1)
 
     # --- Widget 2: Heures estimées restantes (OT non terminés) ---
     pipeline_open = [
+        {"$addFields": {
+            "_tempsEstime_norm": {
+                "$cond": {
+                    "if": {"$and": [{"$gt": ["$tempsEstime", 0]}, {"$isNumber": "$tempsEstime"}]},
+                    "then": "$tempsEstime",
+                    "else": {
+                        "$cond": {
+                            "if": {"$and": [{"$gt": ["$temps_estime", 0]}, {"$isNumber": "$temps_estime"}]},
+                            "then": "$temps_estime",
+                            "else": None
+                        }
+                    }
+                }
+            }
+        }},
         {"$match": {
             "statut": {"$nin": ["TERMINE", "ANNULE"]},
             **NOT_DELETED,
-            "tempsEstime": {"$gt": 0}
+            "_tempsEstime_norm": {"$gt": 0}
         }},
         {"$group": {
             "_id": None,
-            "total_hours": {"$sum": "$tempsEstime"},
+            "total_hours": {"$sum": "$_tempsEstime_norm"},
             "count": {"$sum": 1}
         }}
     ]

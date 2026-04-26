@@ -785,16 +785,30 @@ const Dashboard = () => {
         const devYear = widgetData?.time_deviation_year;
         const countMonth = widgetData?.time_deviation_month_count || 0;
         const countYear = widgetData?.time_deviation_year_count || 0;
-        const val = devMonth != null ? `${devMonth > 0 ? '+' : ''}${devMonth}%` : '-';
-        const yearText = devYear != null ? `Annee glissante : ${devYear > 0 ? '+' : ''}${devYear}% (${countYear} OT)` : 'Aucun OT sur l\'annee';
-        const monthColor = devMonth == null ? 'blue' : devMonth > 15 ? 'red' : devMonth > 0 ? 'orange' : 'green';
+        const estMonth = widgetData?.time_total_estime_month;
+        const reelMonth = widgetData?.time_total_reel_month;
+        const estYear = widgetData?.time_total_estime_year;
+        const reelYear = widgetData?.time_total_reel_year;
+
+        const val = devMonth != null ? `${devMonth > 0 ? '+' : ''}${devMonth}%` : (countYear > 0 ? `${devYear > 0 ? '+' : ''}${devYear}%` : '-');
+        const isYearFallback = devMonth == null && devYear != null;
+
+        const monthLine = devMonth != null
+          ? `30j : ${devMonth > 0 ? '+' : ''}${devMonth}% (${estMonth}h→${reelMonth}h, ${countMonth} OT)`
+          : 'Aucun OT terminé ce mois avec temps enregistrés';
+        const yearLine = devYear != null
+          ? `365j : ${devYear > 0 ? '+' : ''}${devYear}% (${estYear}h→${reelYear}h, ${countYear} OT)`
+          : 'Aucun OT terminé sur l\'année avec temps enregistrés';
+        const trend = isYearFallback ? `↑ Données annuelles (pas de données 30j) — ${yearLine}` : yearLine;
+
+        const monthColor = val === '-' ? 'blue' : (devMonth ?? devYear) > 15 ? 'red' : (devMonth ?? devYear) > 0 ? 'orange' : 'green';
         return {
           title: 'Ecart Temps Est./Reel',
           value: val,
           icon: Timer,
           color: monthColor,
-          trend: yearText,
-          tooltip: 'Pourcentage d\'ecart entre le temps estime et le temps reel sur les OT termines. Positif = depassement. Valeur principale : mois glissant (30j). En bas : annee glissante (365j).',
+          trend,
+          tooltip: `Écart entre temps estimé et temps réel sur les OT TERMINÉS.\n\n${monthLine}\n${yearLine}\n\nPositif (+) = dépassement. Négatif (−) = gain de temps.\nSeuls les OT avec les deux champs remplis (Est. et Réel) sont comptabilisés.`,
           link: '/work-orders?widget=ecart_temps'
         };
       },
