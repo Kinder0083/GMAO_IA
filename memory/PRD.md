@@ -33,7 +33,39 @@ Application GMAO (Gestion de Maintenance Assistée par Ordinateur) complète pou
 - Export PDF individuel des OT (jsPDF)
 - Export PDF en masse des OT avec mode sélection
 
-### Session 15 avril 2026 — Fix critique : chemin fichiers production
+### Session 26 avril 2026 — Drill-down widgets Dashboard (raccourcis avec filtres)
+
+**Fonctionnalité ajoutée** : Chaque widget du tableau de bord est désormais un raccourci cliquable qui navigue vers la page source avec les filtres pré-appliqués correspondant aux données affichées.
+
+**Comportement** :
+- Curseur "main" + ombre/bordure bleue au survol + icône `ExternalLink` en bas à droite
+- Navigation dans le même onglet via `useNavigate` + paramètre `?widget=xxx` dans l'URL
+- Bannière bleue dismissable sur la page cible : "Vue filtrée depuis le tableau de bord : [label]"
+- Fermer la bannière réinitialise les filtres par défaut
+
+**Mapping widget → filtre** :
+- `ecart_temps` → `/work-orders` : TERMINE + 30 derniers jours
+- `charge_maintenance` → `/work-orders` : tous non-terminés (NON_TERMINE)
+- `work_orders_active` → `/work-orders` : non-terminés
+- `overdue_tasks` → `/work-orders` : en retard
+- `maintenance_stats` → `/work-orders` : TERMINE ce mois
+- `team_activity` → `/work-orders` : EN_COURS
+- `di_en_attente` → `/intervention-requests` : DI non converties et non refusées
+- `di_temps_reponse` → `/intervention-requests` : toutes les DI
+- `equipment_alerts` → `/assets` : ALERTE_S_EQUIP
+- `equipment_status_overview` → `/assets` : DEGRADE
+- `equipment_maintenance` → `/assets` : EN_MAINTENANCE
+- `low_stock` → `/inventory` (filtre futur)
+- `planning_mprev_summary` / `upcoming_maintenance` → `/planning-mprev`
+
+**Fichiers modifiés** :
+- `Dashboard.jsx` : `useNavigate` + `ExternalLink` icon + champ `link` sur tous les stats
+- `WorkOrders.jsx` : `useEffect` lecture `?widget=` + filtre `NON_TERMINE` + bannière
+- `InterventionRequests.jsx` : `filterStatus` + logique EN_ATTENTE via `!work_order_id && !refused` + bannière
+- `Assets.jsx` : `useSearchParams` + `useEffect` widget + bannière
+- **Tests** : iteration_172 — 13/13 ✅ (fix appliqué sur le bug DI en attente)
+
+
 
 **Bug corrigé** : Le backend avait le chemin `/app/backend` codé en dur dans `documentations_routes.py` (4 occurrences). Sur le serveur de production (`/opt/gmao-iris/`), tous les fichiers étaient introuvables → HTTP 404.
 

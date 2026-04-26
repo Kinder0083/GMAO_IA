@@ -128,7 +128,9 @@ const InterventionRequests = () => {
     const matchesSearch = req.titre.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          (req.description && req.description.toLowerCase().includes(searchTerm.toLowerCase()));
     const matchesPriority = filterPriority === 'ALL' || req.priorite === filterPriority;
-    const matchesStatus = filterStatus === 'ALL' || req.statut === filterStatus;
+    // EN_ATTENTE = DI non converties et non refusées (les DI n'ont pas de champ statut dans l'API)
+    const matchesStatus = filterStatus === 'ALL' ||
+      (filterStatus === 'EN_ATTENTE' ? (!req.work_order_id && !req.refused) : req.statut === filterStatus);
     const today = new Date(); today.setHours(23, 59, 59, 999);
     const matchesOverdue = !filterOverdue || (req.date_limite_desiree && new Date(req.date_limite_desiree) < today && req.statut !== 'TERMINE' && req.statut !== 'ANNULE');
 
