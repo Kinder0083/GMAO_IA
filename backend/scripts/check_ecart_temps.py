@@ -23,8 +23,16 @@ from pymongo import MongoClient
 from dotenv import load_dotenv
 
 # ─── Chargement configuration ────────────────────────────────────────────────
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-load_dotenv(os.path.join(BASE_DIR, ".env"))
+# Chercher le .env dans plusieurs emplacements possibles
+_candidates = [
+    os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"),  # backend/scripts/ → backend/.env
+    "/opt/gmao-iris/backend/.env",   # chemin production standard
+    os.path.join(os.getcwd(), ".env"),  # répertoire courant
+]
+for _env_path in _candidates:
+    if os.path.exists(_env_path):
+        load_dotenv(_env_path)
+        break
 
 MONGO_URL = os.environ.get("MONGO_URL")
 DB_NAME   = os.environ.get("DB_NAME", "gmao")
