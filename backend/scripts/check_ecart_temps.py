@@ -168,7 +168,8 @@ def compute_ecart(wos, cutoff, label):
         dev = round(((total_reel - total_est) / total_est) * 100, 1)
         print(f"\n    Résultat : {dev:+.1f}%")
         print(f"    Détail   : {fmt_h(total_est)} estimées → {fmt_h(total_reel)} réelles")
-        print(f"    Interprétation : {'Dépassement (travail plus long qu\'estimé)' if dev > 0 else 'Gain (travail plus rapide qu\'estimé)'}")
+        interpretation = "Dépassement (travail plus long qu'estimé)" if dev > 0 else "Gain (travail plus rapide qu'estimé)"
+        print(f"    Interprétation : {interpretation}")
     else:
         print("\n    Résultat : Aucune donnée disponible pour cette période")
 
