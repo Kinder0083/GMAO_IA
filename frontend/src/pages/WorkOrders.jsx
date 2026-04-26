@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import { Plus, Search, Filter, Eye, Pencil, Trash2, Calendar, ArrowUpDown, Paperclip, BookOpen, FileText, Printer, Download, CheckSquare, Square, X as XIcon } from 'lucide-react';
+import { Plus, Search, Filter, Eye, Pencil, Trash2, Calendar, ArrowUpDown, Paperclip, BookOpen, FileText, Printer, Download, CheckSquare, Square, X as XIcon, LayoutDashboard } from 'lucide-react';
 import WorkOrderDialog from '../components/WorkOrders/WorkOrderDialog';
 import WorkOrderFormDialog from '../components/WorkOrders/WorkOrderFormDialog';
 import DeleteConfirmDialog from '../components/Common/DeleteConfirmDialog';
@@ -34,6 +34,8 @@ const WorkOrders = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('OUVERT');
   const [filterOverdue, setFilterOverdue] = useState(false);
+  // Filtre provenant du dashboard (widget drill-down)
+  const [widgetFilter, setWidgetFilter] = useState(null); // { label: '...', widget: '...' }
   const [dialogOpen, setDialogOpen] = useState(false);
   const [formDialogOpen, setFormDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -89,6 +91,35 @@ const WorkOrders = () => {
       }
     }
   });
+
+  // Appliquer les filtres depuis un widget du dashboard (?widget=...)
+  useEffect(() => {
+    const widget = searchParams.get('widget');
+    if (!widget) return;
+
+    const newParams = new URLSearchParams(searchParams);
+    newParams.delete('widget');
+    setSearchParams(newParams, { replace: true });
+
+    const WIDGET_FILTERS = {
+      work_orders_active:  { status: 'NON_TERMINE', date: 'all', overdue: false, label: 'Ordres actifs (non terminés)' },
+      overdue_tasks:       { status: 'ALL',          date: 'all', overdue: true,  label: 'OT en retard' },
+      maintenance_stats:   { status: 'TERMINE',      date: 'month', overdue: false, label: 'OT terminés ce mois' },
+      team_activity:       { status: 'EN_COURS',     date: 'all', overdue: false, label: 'OT en cours' },
+      performance_metrics: { status: 'ALL',          date: 'all', overdue: false, label: 'Tous les OT' },
+      global_summary:      { status: 'ALL',          date: 'all', overdue: false, label: 'Tous les OT' },
+      ecart_temps:         { status: 'TERMINE',      date: 'month', overdue: false, label: 'OT terminés (30j) — Écart temps Est./Réel' },
+      charge_maintenance:  { status: 'NON_TERMINE',  date: 'all', overdue: false, label: 'Charge OT restante (non terminés)' },
+    };
+
+    const cfg = WIDGET_FILTERS[widget];
+    if (cfg) {
+      setFilterStatus(cfg.status);
+      setDateFilter(cfg.date);
+      setFilterOverdue(cfg.overdue);
+      setWidgetFilter({ label: cfg.label, widget });
+    }
+  }, [searchParams]);
 
   // Calculer les paramètres de date pour le hook
   const getDateFilters = useCallback(() => {
@@ -285,7 +316,8 @@ const WorkOrders = () => {
   const filteredWorkOrders = allWorkOrders.filter(wo => {
     const matchesSearch = wo.titre.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          (wo.numero && wo.numero.toString().includes(searchTerm));
-    const matchesStatus = filterStatus === 'ALL' || wo.statut === filterStatus;
+    const matchesStatus = filterStatus === 'ALL' ||
+      (filterStatus === 'NON_TERMINE' ? wo.statut !== 'TERMINE' && wo.statut !== 'ANNULE' : wo.statut === filterStatus);
     const today = new Date();
     today.setHours(23, 59, 59, 999);
     // dateLimite est le champ correct dans la réponse API (pas date_echeance)
@@ -744,6 +776,27 @@ const WorkOrders = () => {
           )}
         </div>
       </div>
+
+      {/* Bannière filtre depuis le dashboard */}
+      {widgetFilter && (
+        <div className="flex items-center gap-3 px-4 py-2.5 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800" data-testid="widget-filter-banner">
+          <LayoutDashboard className="h-4 w-4 flex-shrink-0 text-blue-600" />
+          <span>Vue filtrée depuis le tableau de bord : <strong>{widgetFilter.label}</strong></span>
+          <button
+            onClick={() => {
+              setWidgetFilter(null);
+              setFilterStatus('OUVERT');
+              setDateFilter('month');
+              setFilterOverdue(false);
+            }}
+            className="ml-auto text-blue-500 hover:text-blue-800 transition-colors"
+            title="Réinitialiser les filtres"
+            data-testid="dismiss-widget-filter"
+          >
+            <XIcon className="h-4 w-4" />
+          </button>
+        </div>
+      )}
 
       {/* Filtres de date */}
       <Card>

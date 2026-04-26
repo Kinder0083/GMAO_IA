@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   DndContext,
   closestCenter,
@@ -32,7 +33,8 @@ import {
   Clock,
   Timer,
   Info,
-  Shield
+  Shield,
+  ExternalLink
 } from 'lucide-react';
 import { useDashboard } from '../hooks/useDashboard';
 import { usePermissions } from '../hooks/usePermissions';
@@ -48,6 +50,7 @@ import WidgetPermissionsDialog from '../components/Dashboard/WidgetPermissionsDi
 
 // Composant Widget Sortable
 const SortableWidget = ({ item, isEditMode, stat, colorClasses, onDelete, onPermissions, isAdmin }) => {
+  const navigate = useNavigate();
   const {
     attributes,
     listeners,
@@ -66,9 +69,25 @@ const SortableWidget = ({ item, isEditMode, stat, colorClasses, onDelete, onPerm
 
   if (!stat) return null;
 
+  const isClickable = !isEditMode && !!stat.link;
+
+  const handleWidgetClick = () => {
+    if (isClickable) navigate(stat.link);
+  };
+
   return (
     <div ref={setNodeRef} style={style} className="relative group">
-      <Card className={`h-full ${isEditMode ? 'border-2 border-dashed border-gray-300 hover:border-blue-400' : ''}`}>
+      <Card
+        onClick={handleWidgetClick}
+        data-testid={`widget-card-${item.widgetId}`}
+        className={`h-full transition-all duration-200 ${
+          isEditMode
+            ? 'border-2 border-dashed border-gray-300 hover:border-blue-400'
+            : isClickable
+              ? 'cursor-pointer hover:shadow-md hover:border-blue-300 border border-transparent'
+              : ''
+        }`}
+      >
         {isEditMode && (
           <>
             <div
@@ -121,8 +140,13 @@ const SortableWidget = ({ item, isEditMode, stat, colorClasses, onDelete, onPerm
               <p className="text-3xl font-bold mt-1">{stat.value}</p>
               <p className="text-xs text-gray-400 mt-1">{stat.trend}</p>
             </div>
-            <div className={`p-3 rounded-full ${colorClasses[stat.color]}`}>
-              <stat.icon className="h-6 w-6" />
+            <div className="flex flex-col items-end gap-2">
+              <div className={`p-3 rounded-full ${colorClasses[stat.color]}`}>
+                <stat.icon className="h-6 w-6" />
+              </div>
+              {isClickable && (
+                <ExternalLink className="h-3.5 w-3.5 text-gray-300 group-hover:text-blue-400 transition-colors" />
+              )}
             </div>
           </div>
         </CardContent>
@@ -546,7 +570,8 @@ const Dashboard = () => {
           value: activeOrders.length,
           icon: ClipboardList,
           color: 'blue',
-          trend: `${safeWorkOrders.filter(wo => wo.statut === 'EN_COURS').length} en cours`
+          trend: `${safeWorkOrders.filter(wo => wo.statut === 'EN_COURS').length} en cours`,
+          link: '/work-orders?widget=work_orders_active'
         };
       },
       'equipment_maintenance': () => {
@@ -557,7 +582,8 @@ const Dashboard = () => {
           value: inMaintenance.length,
           icon: Wrench,
           color: 'orange',
-          trend: `${safeEquipments.filter(eq => eq.statut === 'OPERATIONNEL').length} opérationnels`
+          trend: `${safeEquipments.filter(eq => eq.statut === 'OPERATIONNEL').length} opérationnels`,
+          link: '/assets?widget=equipment_maintenance'
         };
       },
       'overdue_tasks': () => {
@@ -575,7 +601,8 @@ const Dashboard = () => {
           value: overdue.length,
           icon: AlertCircle,
           color: 'red',
-          trend: overdue.length > 0 ? 'À traiter en priorité' : 'Tout est à jour'
+          trend: overdue.length > 0 ? 'À traiter en priorité' : 'Tout est à jour',
+          link: '/work-orders?widget=overdue_tasks'
         };
       },
       'maintenance_stats': () => {
@@ -593,7 +620,8 @@ const Dashboard = () => {
           value: completedThisMonth.length,
           icon: CheckCircle2,
           color: 'green',
-          trend: 'Ce mois-ci'
+          trend: 'Ce mois-ci',
+          link: '/work-orders?widget=maintenance_stats'
         };
       },
       'demandes_arret_pending': () => ({
@@ -618,7 +646,8 @@ const Dashboard = () => {
           value: alertEquipments.length,
           icon: AlertTriangle,
           color: 'red',
-          trend: alertEquipments.length > 0 ? 'Sous-équipement(s) HS' : 'Aucune alerte'
+          trend: alertEquipments.length > 0 ? 'Sous-équipement(s) HS' : 'Aucune alerte',
+          link: '/assets?widget=equipment_alerts'
         };
       },
       'equipment_status_overview': () => {
@@ -629,7 +658,8 @@ const Dashboard = () => {
           value: degradedEquipments.length,
           icon: Wrench,
           color: 'blue',
-          trend: `${safeEquipments.filter(eq => eq.statut === 'HORS_SERVICE').length} hors service`
+          trend: `${safeEquipments.filter(eq => eq.statut === 'HORS_SERVICE').length} hors service`,
+          link: '/assets?widget=equipment_status_overview'
         };
       },
       'low_stock': () => {
@@ -640,7 +670,8 @@ const Dashboard = () => {
           value: ls + oos,
           icon: AlertTriangle,
           color: (ls + oos) > 0 ? 'red' : 'green',
-          trend: oos > 0 ? `${oos} en rupture, ${ls} niveau bas` : ls > 0 ? `${ls} article(s) sous seuil` : 'Stock OK'
+          trend: oos > 0 ? `${oos} en rupture, ${ls} niveau bas` : ls > 0 ? `${ls} article(s) sous seuil` : 'Stock OK',
+          link: '/inventory?widget=low_stock'
         };
       },
       'recent_incidents': () => ({
@@ -655,7 +686,8 @@ const Dashboard = () => {
         value: widgetData?.upcoming_maintenance_7d ?? '-',
         icon: CalendarClock,
         color: 'blue',
-        trend: widgetData?.overdue_mprev > 0 ? `${widgetData.overdue_mprev} en retard` : 'Aucun retard'
+        trend: widgetData?.overdue_mprev > 0 ? `${widgetData.overdue_mprev} en retard` : 'Aucun retard',
+        link: '/planning-mprev?widget=upcoming_maintenance'
       }),
       'performance_metrics': () => {
         const total = safeWorkOrders.length;
@@ -666,7 +698,8 @@ const Dashboard = () => {
           value: `${rate}%`,
           icon: CheckCircle2,
           color: rate >= 75 ? 'green' : rate >= 50 ? 'orange' : 'red',
-          trend: `${done}/${total} termines`
+          trend: `${done}/${total} termines`,
+          link: '/work-orders?widget=performance_metrics'
         };
       },
       'team_activity': () => {
@@ -677,7 +710,8 @@ const Dashboard = () => {
           value: inProgress + pending,
           icon: ClipboardList,
           color: 'purple',
-          trend: `${inProgress} en cours, ${pending} en attente`
+          trend: `${inProgress} en cours, ${pending} en attente`,
+          link: '/work-orders?widget=team_activity'
         };
       },
       'quick_actions': () => ({
@@ -706,28 +740,32 @@ const Dashboard = () => {
         value: widgetData?.upcoming_maintenance_7d ?? '-',
         icon: CalendarClock,
         color: widgetData?.overdue_mprev > 0 ? 'red' : 'blue',
-        trend: widgetData?.overdue_mprev > 0 ? `${widgetData.overdue_mprev} en retard` : '7 prochains jours'
+        trend: widgetData?.overdue_mprev > 0 ? `${widgetData.overdue_mprev} en retard` : '7 prochains jours',
+        link: '/planning-mprev?widget=planning_mprev_summary'
       }),
       'recent_status_changes': () => ({
         title: 'Changements statut',
         value: widgetData?.recent_status_changes_7d ?? '-',
         icon: AlertCircle,
         color: 'orange',
-        trend: '7 derniers jours'
+        trend: '7 derniers jours',
+        link: '/assets?widget=recent_status_changes'
       }),
       'di_en_attente': () => ({
         title: 'DI en attente',
         value: diKpi?.en_attente ?? '-',
         icon: Bell,
         color: (diKpi?.en_attente || 0) > 0 ? 'red' : 'green',
-        trend: `${diKpi?.total ?? 0} DI au total (${diKpi?.publiques ?? 0} QR)`
+        trend: `${diKpi?.total ?? 0} DI au total (${diKpi?.publiques ?? 0} QR)`,
+        link: '/intervention-requests?widget=di_en_attente'
       }),
       'di_temps_reponse': () => ({
         title: 'Temps reponse DI',
         value: diKpi?.temps_moyen_reponse_label ?? '-',
         icon: CalendarClock,
         color: diKpi?.temps_moyen_reponse_heures != null && diKpi.temps_moyen_reponse_heures > 48 ? 'red' : diKpi?.temps_moyen_reponse_heures != null && diKpi.temps_moyen_reponse_heures > 24 ? 'orange' : 'green',
-        trend: `${diKpi?.taux_conversion ?? 0}% converties, ${diKpi?.taux_refus ?? 0}% refusees`
+        trend: `${diKpi?.taux_conversion ?? 0}% converties, ${diKpi?.taux_refus ?? 0}% refusees`,
+        link: '/intervention-requests?widget=di_temps_reponse'
       }),
       'global_summary': () => {
         const totalOT = safeWorkOrders.length;
@@ -737,7 +775,8 @@ const Dashboard = () => {
           value: `${totalOT} OT`,
           icon: CheckCircle2,
           color: 'green',
-          trend: `${totalEquip} equipement(s)`
+          trend: `${totalEquip} equipement(s)`,
+          link: '/work-orders?widget=global_summary'
         };
       },
       'ecart_temps': () => {
@@ -755,7 +794,8 @@ const Dashboard = () => {
           icon: Timer,
           color: monthColor,
           trend: yearText,
-          tooltip: 'Pourcentage d\'ecart entre le temps estime et le temps reel sur les OT termines. Positif = depassement. Valeur principale : mois glissant (30j). En bas : annee glissante (365j).'
+          tooltip: 'Pourcentage d\'ecart entre le temps estime et le temps reel sur les OT termines. Positif = depassement. Valeur principale : mois glissant (30j). En bas : annee glissante (365j).',
+          link: '/work-orders?widget=ecart_temps'
         };
       },
       'charge_maintenance': () => {
@@ -770,7 +810,8 @@ const Dashboard = () => {
           icon: Clock,
           color: totalH > 50 ? 'red' : totalH > 20 ? 'orange' : 'green',
           trend: nbTechs > 0 ? `${perTech}h / tech. (${nbTechs} tech., ${nbOT} OT)` : `${nbOT} OT en cours`,
-          tooltip: 'Total des heures estimees sur les OT non termines. En bas : repartition theorique par technicien du service maintenance (hors responsable de service).'
+          tooltip: 'Total des heures estimees sur les OT non termines. En bas : repartition theorique par technicien du service maintenance (hors responsable de service).',
+          link: '/work-orders?widget=charge_maintenance'
         };
       }
     };

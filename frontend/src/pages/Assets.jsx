@@ -1,9 +1,9 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { Plus, Search, Wrench, AlertCircle, CheckCircle2, Clock, Pencil, Trash2, List, GitBranch, FileCheck, Cog, AlertTriangle, ArrowUp, ArrowDown, GripVertical, Save, X, Settings2 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { Plus, Search, Wrench, AlertCircle, CheckCircle2, Clock, Pencil, Trash2, List, GitBranch, FileCheck, Cog, AlertTriangle, ArrowUp, ArrowDown, GripVertical, Save, X, Settings2, LayoutDashboard, X as XIcon } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   DndContext,
   closestCenter,
@@ -93,8 +93,10 @@ const SortableEquipmentCard = ({ equipment, isReordering, index, totalCount, onM
 const Assets = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('ALL');
+  const [widgetFilter, setWidgetFilter] = useState(null); // Bannière filtre dashboard
   const [formDialogOpen, setFormDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedEquipment, setSelectedEquipment] = useState(null);
@@ -108,6 +110,28 @@ const Assets = () => {
   // Vérifier si l'utilisateur est admin
   const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
   const isAdmin = currentUser.role === 'ADMIN';
+
+  // Lire le filtre provenant du widget dashboard (?widget=...)
+  useEffect(() => {
+    const widget = searchParams.get('widget');
+    if (!widget) return;
+
+    const newParams = new URLSearchParams(searchParams);
+    newParams.delete('widget');
+    setSearchParams(newParams, { replace: true });
+
+    const WIDGET_FILTERS = {
+      equipment_maintenance:    { status: 'EN_MAINTENANCE', label: 'Équipements en maintenance' },
+      equipment_alerts:         { status: 'ALERTE_S_EQUIP', label: 'Alertes équipements (sous-équipement HS)' },
+      equipment_status_overview:{ status: 'DEGRADE',        label: 'Équipements dégradés' },
+      recent_status_changes:    { status: 'ALL',            label: 'Tous les équipements (changements de statut)' },
+    };
+    const cfg = WIDGET_FILTERS[widget];
+    if (cfg) {
+      setFilterStatus(cfg.status);
+      setWidgetFilter({ label: cfg.label, widget });
+    }
+  }, [searchParams]);
 
   // Sensors pour @dnd-kit
   const sensors = useSensors(
@@ -407,6 +431,22 @@ const Assets = () => {
           </Button>
         </div>
       </div>
+
+      {/* Bannière filtre depuis le dashboard */}
+      {widgetFilter && (
+        <div className="flex items-center gap-3 px-4 py-2.5 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800" data-testid="widget-filter-banner-assets">
+          <LayoutDashboard className="h-4 w-4 flex-shrink-0 text-blue-600" />
+          <span>Vue filtrée depuis le tableau de bord : <strong>{widgetFilter.label}</strong></span>
+          <button
+            onClick={() => { setWidgetFilter(null); setFilterStatus('ALL'); }}
+            className="ml-auto text-blue-500 hover:text-blue-800 transition-colors"
+            title="Réinitialiser les filtres"
+            data-testid="dismiss-widget-filter-assets"
+          >
+            <XIcon className="h-4 w-4" />
+          </button>
+        </div>
+      )}
 
       {/* Stats Cards - Affichage adaptatif (uniquement les statuts avec count > 0) */}
       {(() => {

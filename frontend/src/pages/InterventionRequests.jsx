@@ -3,7 +3,7 @@ import { useLocationStateFilter } from '../hooks/useLocationStateFilter';
 import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { Plus, Search, Eye, Pencil, Trash2, Wrench, AlertCircle, Calendar, Ban } from 'lucide-react';
+import { Plus, Search, Eye, Pencil, Trash2, Wrench, AlertCircle, Calendar, Ban, LayoutDashboard, X as XIcon } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../components/ui/tooltip';
 import { Label } from '../components/ui/label';
 import InterventionRequestDialog from '../components/InterventionRequests/InterventionRequestDialog';
@@ -26,6 +26,8 @@ const InterventionRequests = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterPriority, setFilterPriority] = useState('ALL');
   const [filterOverdue, setFilterOverdue] = useState(false);
+  const [filterStatus, setFilterStatus] = useState('ALL'); // Filtre statut DI (pour drill-down dashboard)
+  const [widgetFilter, setWidgetFilter] = useState(null); // Bannière filtre dashboard
   const [dateFilter, setDateFilter] = useState('all');
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
@@ -46,9 +48,30 @@ const InterventionRequests = () => {
   } = useInterventionRequests();
 
   // Handle email action links (?action=convert&id=xxx or ?action=refuse&id=xxx)
+  // Also handle widget drill-down (?widget=di_en_attente)
   useEffect(() => {
     const action = searchParams.get('action');
     const requestId = searchParams.get('id');
+    const widget = searchParams.get('widget');
+
+    // Widget drill-down depuis le dashboard
+    if (widget) {
+      const newParams = new URLSearchParams(searchParams);
+      newParams.delete('widget');
+      setSearchParams(newParams, { replace: true });
+
+      const WIDGET_FILTERS = {
+        di_en_attente:   { status: 'EN_ATTENTE', label: 'DI en attente de traitement' },
+        di_temps_reponse: { status: 'ALL',       label: 'Toutes les DI (temps de réponse)' },
+      };
+      const cfg = WIDGET_FILTERS[widget];
+      if (cfg) {
+        setFilterStatus(cfg.status);
+        setWidgetFilter({ label: cfg.label, widget });
+      }
+      return;
+    }
+
     if (action && requestId && requests.length > 0) {
       const targetRequest = requests.find(r => r.id === requestId);
       if (targetRequest) {
@@ -105,6 +128,7 @@ const InterventionRequests = () => {
     const matchesSearch = req.titre.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          (req.description && req.description.toLowerCase().includes(searchTerm.toLowerCase()));
     const matchesPriority = filterPriority === 'ALL' || req.priorite === filterPriority;
+    const matchesStatus = filterStatus === 'ALL' || req.statut === filterStatus;
     const today = new Date(); today.setHours(23, 59, 59, 999);
     const matchesOverdue = !filterOverdue || (req.date_limite_desiree && new Date(req.date_limite_desiree) < today && req.statut !== 'TERMINE' && req.statut !== 'ANNULE');
 
@@ -136,7 +160,7 @@ const InterventionRequests = () => {
       }
     }
 
-    return matchesSearch && matchesPriority && matchesOverdue && matchesDate;
+    return matchesSearch && matchesPriority && matchesStatus && matchesOverdue && matchesDate;
   });
 
   // Appliquer le filtre "en retard" depuis la navigation (header)
@@ -191,6 +215,22 @@ const InterventionRequests = () => {
           Nouvelle demande
         </Button>
       </div>
+
+      {/* Bannière filtre depuis le dashboard */}
+      {widgetFilter && (
+        <div className="flex items-center gap-3 px-4 py-2.5 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800" data-testid="widget-filter-banner-di">
+          <LayoutDashboard className="h-4 w-4 flex-shrink-0 text-blue-600" />
+          <span>Vue filtrée depuis le tableau de bord : <strong>{widgetFilter.label}</strong></span>
+          <button
+            onClick={() => { setWidgetFilter(null); setFilterStatus('ALL'); }}
+            className="ml-auto text-blue-500 hover:text-blue-800 transition-colors"
+            title="Réinitialiser les filtres"
+            data-testid="dismiss-widget-filter-di"
+          >
+            <XIcon className="h-4 w-4" />
+          </button>
+        </div>
+      )}
 
       {/* Date Filters */}
       <Card>
