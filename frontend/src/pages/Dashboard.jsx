@@ -130,8 +130,8 @@ const SortableWidget = ({ item, isEditMode, stat, colorClasses, onDelete, onPerm
                       <TooltipTrigger asChild>
                         <Info className="h-3.5 w-3.5 text-gray-400 cursor-help flex-shrink-0" />
                       </TooltipTrigger>
-                      <TooltipContent side="top" className="max-w-xs text-xs">
-                        <p>{stat.tooltip}</p>
+                      <TooltipContent side="top" className="max-w-sm text-xs">
+                        <p className="whitespace-pre-line">{stat.tooltip}</p>
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
@@ -789,17 +789,34 @@ const Dashboard = () => {
         const reelMonth = widgetData?.time_total_reel_month;
         const estYear = widgetData?.time_total_estime_year;
         const reelYear = widgetData?.time_total_reel_year;
+        const top3 = widgetData?.top_deviations_month || [];
 
         const val = devMonth != null ? `${devMonth > 0 ? '+' : ''}${devMonth}%` : (countYear > 0 ? `${devYear > 0 ? '+' : ''}${devYear}%` : '-');
         const isYearFallback = devMonth == null && devYear != null;
 
+        const fmtH = (h) => {
+          if (!h && h !== 0) return '—';
+          const hh = Math.floor(h);
+          const mm = Math.round((h - hh) * 60);
+          return mm ? `${hh}h${String(mm).padStart(2, '0')}` : `${hh}h`;
+        };
+
         const monthLine = devMonth != null
-          ? `30j : ${devMonth > 0 ? '+' : ''}${devMonth}% (${estMonth}h→${reelMonth}h, ${countMonth} OT)`
+          ? `30j : ${devMonth > 0 ? '+' : ''}${devMonth}% — ${fmtH(estMonth)} estimées → ${fmtH(reelMonth)} réelles (${countMonth} OT)`
           : 'Aucun OT terminé ce mois avec temps enregistrés';
         const yearLine = devYear != null
-          ? `365j : ${devYear > 0 ? '+' : ''}${devYear}% (${estYear}h→${reelYear}h, ${countYear} OT)`
+          ? `365j : ${devYear > 0 ? '+' : ''}${devYear}% — ${fmtH(estYear)} estimées → ${fmtH(reelYear)} réelles (${countYear} OT)`
           : 'Aucun OT terminé sur l\'année avec temps enregistrés';
-        const trend = isYearFallback ? `↑ Données annuelles (pas de données 30j) — ${yearLine}` : yearLine;
+
+        const top3Lines = top3.length > 0
+          ? '\nPrincipaux dépassements (30j) :\n' + top3.map(t =>
+              `  • OT${t.numero} — ${t.titre}\n    ${fmtH(t.tempsEstime)} → ${fmtH(t.tempsReel)} (${t.ecart_pct > 0 ? '+' : ''}${t.ecart_pct}%)`
+            ).join('\n')
+          : '';
+
+        const trend = isYearFallback
+          ? `Données annuelles — ${devYear > 0 ? '+' : ''}${devYear}% sur ${countYear} OT`
+          : yearLine;
 
         const monthColor = val === '-' ? 'blue' : (devMonth ?? devYear) > 15 ? 'red' : (devMonth ?? devYear) > 0 ? 'orange' : 'green';
         return {
@@ -808,7 +825,7 @@ const Dashboard = () => {
           icon: Timer,
           color: monthColor,
           trend,
-          tooltip: `Écart entre temps estimé et temps réel sur les OT TERMINÉS.\n\n${monthLine}\n${yearLine}\n\nPositif (+) = dépassement. Négatif (−) = gain de temps.\nSeuls les OT avec les deux champs remplis (Est. et Réel) sont comptabilisés.`,
+          tooltip: `${monthLine}\n${yearLine}${top3Lines}\n\nPositif (+) = dépassement · Négatif (−) = gain`,
           link: '/work-orders?widget=ecart_temps'
         };
       },

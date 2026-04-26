@@ -647,6 +647,78 @@ async def _compute_time_widgets(database, now):
             result[f"time_total_estime_{label}"] = round(estime, 1)
             result[f"time_total_reel_{label}"] = round(reel, 1)
 
+    # --- Top 3 OT avec le plus grand dépassement absolu (30j uniquement) ---
+    _norm_stage = {
+        "$addFields": {
+            "_dateTermine_norm": {
+                "$cond": {
+                    "if": {"$eq": [{"$type": "$dateTermine"}, "string"]},
+                    "then": {"$toDate": "$dateTermine"},
+                    "else": {
+                        "$cond": {
+                            "if": {"$eq": [{"$type": "$dateTermine"}, "date"]},
+                            "then": "$dateTermine",
+                            "else": None
+                        }
+                    }
+                }
+            },
+            "_tempsEstime_norm": {
+                "$cond": {
+                    "if": {"$and": [{"$gt": ["$tempsEstime", 0]}, {"$isNumber": "$tempsEstime"}]},
+                    "then": "$tempsEstime",
+                    "else": {
+                        "$cond": {
+                            "if": {"$and": [{"$gt": ["$temps_estime", 0]}, {"$isNumber": "$temps_estime"}]},
+                            "then": "$temps_estime",
+                            "else": None
+                        }
+                    }
+                }
+            }
+        }
+    }
+    cutoff_30 = now - timedelta(days=30)
+    try:
+        top3_raw = await database.work_orders.aggregate([
+            _norm_stage,
+            {"$match": {
+                "statut": "TERMINE",
+                **NOT_DELETED,
+                "_tempsEstime_norm": {"$gt": 0},
+                "tempsReel": {"$gt": 0},
+                "_dateTermine_norm": {"$gte": cutoff_30}
+            }},
+            {"$addFields": {
+                "_deviation_h": {"$subtract": ["$tempsReel", "$_tempsEstime_norm"]}
+            }},
+            {"$match": {"_deviation_h": {"$gt": 0}}},
+            {"$sort": {"_deviation_h": -1}},
+            {"$limit": 3},
+            {"$project": {
+                "_id": 0,
+                "numero": 1,
+                "titre": 1,
+                "tempsEstime": "$_tempsEstime_norm",
+                "tempsReel": 1,
+            }}
+        ]).to_list(3)
+        result["top_deviations_month"] = [
+            {
+                "numero": w.get("numero"),
+                "titre": (w.get("titre") or "")[:40],
+                "tempsEstime": round(float(w.get("tempsEstime") or 0), 2),
+                "tempsReel": round(float(w.get("tempsReel") or 0), 2),
+                "ecart_pct": round(((w["tempsReel"] - w["tempsEstime"]) / w["tempsEstime"]) * 100)
+                    if (w.get("tempsEstime") or 0) > 0 else 0
+            }
+            for w in top3_raw
+            if (w.get("tempsEstime") or 0) > 0
+        ]
+    except Exception as e:
+        logger.warning(f"Erreur top3 ecart_temps: {e}")
+        result["top_deviations_month"] = []
+
     # --- Widget 2: Heures estimées restantes (OT non terminés) ---
     pipeline_open = [
         {"$addFields": {
