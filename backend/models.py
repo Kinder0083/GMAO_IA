@@ -1553,24 +1553,24 @@ class ImprovementUpdate(BaseModel):
 # ==================== SETTINGS MODELS ====================
 class SystemSettings(BaseModel):
     inactivity_timeout_minutes: int = 15  # Temps d'inactivité en minutes avant déconnexion
-    timezone_offset: int = 1  # Décalage GMT en heures (ex: 1 pour GMT+1)
-    timezone_name: Optional[str] = "Europe/Paris"  # Nom IANA du fuseau horaire
+    timezone_offset: float = 1  # Décalage GMT en heures (calculé dynamiquement avec DST)
+    timezone_name: Optional[str] = "Europe/Paris"  # Nom IANA du fuseau horaire (source de vérité)
     ntp_server: str = "pool.ntp.org"  # Serveur NTP
 
 class SystemSettingsUpdate(BaseModel):
     inactivity_timeout_minutes: Optional[int] = None
-    timezone_offset: Optional[int] = None
+    timezone_offset: Optional[float] = None
     timezone_name: Optional[str] = None
     ntp_server: Optional[str] = None
 
 # Timezone Configuration Models
 class TimezoneConfig(BaseModel):
-    timezone_offset: int = 1  # GMT+X offset
+    timezone_offset: float = 1  # GMT+X offset effectif (DST inclus)
     timezone_name: Optional[str] = "Europe/Paris"
     ntp_server: str = "pool.ntp.org"
 
 class TimezoneConfigUpdate(BaseModel):
-    timezone_offset: Optional[int] = None
+    timezone_offset: Optional[float] = None
     timezone_name: Optional[str] = None
     ntp_server: Optional[str] = None
 

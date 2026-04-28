@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Clock, 
   Server, 
@@ -7,7 +7,10 @@ import {
   Globe, 
   AlertCircle, 
   CheckCircle, 
-  Search 
+  Search,
+  Sun,
+  Snowflake,
+  Calendar
 } from 'lucide-react';
 import api from '../../services/api';
 import { useToast } from '../../hooks/use-toast';
@@ -77,13 +80,20 @@ const TimezoneSettings = () => {
     try {
       setSavingTimezone(true);
       
-      await api.timezone.updateConfig(timezoneConfig);
+      // On envoie le nom IANA — l'offset est désormais calculé côté serveur (DST-aware)
+      await api.timezone.updateConfig({
+        timezone_name: timezoneConfig.timezone_name,
+        ntp_server: timezoneConfig.ntp_server,
+      });
       
       toast({
         title: 'Configuration sauvegardée',
-        description: 'Le fuseau horaire a été mis à jour avec succès'
+        description: 'Le fuseau horaire a été mis à jour. Le passage heure d\'été/hiver sera automatique.'
       });
       
+      // Recharger pour récupérer l'offset à jour
+      const configResponse = await api.timezone.getConfig();
+      setTimezoneConfig(configResponse.data);
       const timeResponse = await api.timezone.getCurrentTime();
       setCurrentServerTime(timeResponse.data);
       
@@ -143,8 +153,8 @@ const TimezoneSettings = () => {
   const handleSelectTimezone = (tz) => {
     setTimezoneConfig({
       ...timezoneConfig,
-      timezone_offset: tz.offset,
-      timezone_name: tz.name
+      timezone_offset: tz.current_offset ?? tz.offset,
+      timezone_name: tz.iana || tz.name,
     });
   };
 
@@ -165,13 +175,49 @@ const TimezoneSettings = () => {
     }
   };
 
-  // Filtrer les fuseaux horaires selon la recherche
-  const filteredTimezones = availableTimezones.filter(tz => {
-    if (!timezoneSearchQuery) return true;
+  // Filtrer + grouper par région
+  const filteredAndGrouped = useMemo(() => {
     const query = timezoneSearchQuery.toLowerCase();
-    return tz.name.toLowerCase().includes(query) || 
-           tz.cities.toLowerCase().includes(query);
-  });
+    const filtered = availableTimezones.filter(tz => {
+      if (!query) return true;
+      return (tz.name || '').toLowerCase().includes(query)
+          || (tz.iana || '').toLowerCase().includes(query)
+          || (tz.cities || '').toLowerCase().includes(query)
+          || (tz.region || '').toLowerCase().includes(query);
+    });
+    const groups = {};
+    for (const tz of filtered) {
+      const region = tz.region || 'Autres';
+      if (!groups[region]) groups[region] = [];
+      groups[region].push(tz);
+    }
+    return groups;
+  }, [availableTimezones, timezoneSearchQuery]);
+
+  // Format helper pour offset (gère les .5)
+  const fmtOffset = (off) => {
+    if (off === null || off === undefined) return '';
+    const sign = off >= 0 ? '+' : '-';
+    const abs = Math.abs(off);
+    const hours = Math.floor(abs);
+    const minutes = Math.round((abs - hours) * 60);
+    return minutes === 0 ? `GMT${sign}${hours}` : `GMT${sign}${hours}:${String(minutes).padStart(2, '0')}`;
+  };
+
+  // Format date/heure prochaine transition
+  const fmtTransition = (iso, transitionOffset) => {
+    if (!iso) return null;
+    try {
+      const d = new Date(iso);
+      // Affiche dans le fuseau local actuel (avant transition)
+      return d.toLocaleString('fr-FR', {
+        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+      });
+    } catch {
+      return iso;
+    }
+  };
 
   return (
     <div className="mt-6 bg-white rounded-lg shadow-sm border border-gray-200">
@@ -181,7 +227,7 @@ const TimezoneSettings = () => {
           <h2 className="text-lg font-semibold text-white">Fuseau Horaire et Synchronisation NTP</h2>
         </div>
         <p className="text-sm text-teal-100 mt-1">
-          Configurer le fuseau horaire de l'application et la synchronisation avec un serveur de temps
+          Configurer le fuseau horaire de l'application. Le passage heure d'été/hiver est automatique.
         </p>
       </div>
 
@@ -195,19 +241,19 @@ const TimezoneSettings = () => {
           <div className="space-y-6">
             {/* Indicateur de l'heure actuelle du serveur */}
             {currentServerTime && (
-              <div className="bg-teal-50 border border-teal-200 rounded-lg p-4">
-                <div className="flex items-center justify-between">
+              <div className="bg-teal-50 border border-teal-200 rounded-lg p-4" data-testid="current-server-time-card">
+                <div className="flex items-center justify-between flex-wrap gap-3">
                   <div className="flex items-center gap-3">
                     <div className="bg-teal-100 p-2 rounded-full">
                       <Clock className="h-5 w-5 text-teal-600" />
                     </div>
                     <div>
                       <p className="text-sm font-semibold text-teal-800">Heure actuelle du serveur</p>
-                      <p className="text-2xl font-mono font-bold text-teal-700">
+                      <p className="text-2xl font-mono font-bold text-teal-700" data-testid="current-server-time">
                         {currentServerTime.formatted_local}
                       </p>
                       <p className="text-xs text-teal-600 mt-1">
-                        {currentServerTime.timezone_name} (GMT{currentServerTime.timezone_offset >= 0 ? '+' : ''}{currentServerTime.timezone_offset})
+                        {currentServerTime.timezone_name} ({fmtOffset(currentServerTime.timezone_offset)})
                       </p>
                     </div>
                   </div>
@@ -216,8 +262,48 @@ const TimezoneSettings = () => {
                     <p className="text-sm font-mono text-gray-600">{currentServerTime.formatted_utc}</p>
                   </div>
                 </div>
+
+                {/* Badge DST + prochaine transition */}
+                <div className="mt-3 pt-3 border-t border-teal-200 flex items-center flex-wrap gap-3">
+                  {currentServerTime.is_dst ? (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-100 text-amber-800 text-xs font-semibold border border-amber-300"
+                      data-testid="dst-active-badge">
+                      <Sun className="h-3.5 w-3.5" /> Heure d'été en cours
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-100 text-blue-800 text-xs font-semibold border border-blue-300"
+                      data-testid="dst-inactive-badge">
+                      <Snowflake className="h-3.5 w-3.5" /> Heure d'hiver en cours
+                    </span>
+                  )}
+                  {currentServerTime.next_transition && (
+                    <span className="inline-flex items-center gap-1.5 text-xs text-teal-700" data-testid="next-transition-info">
+                      <Calendar className="h-3.5 w-3.5" />
+                      Prochain changement : {fmtTransition(currentServerTime.next_transition)}
+                      <span className="ml-1 text-teal-600">
+                        → {fmtOffset(currentServerTime.next_transition_offset)}
+                        {currentServerTime.next_is_dst_after !== null && (
+                          currentServerTime.next_is_dst_after ? ' (heure d\'été)' : ' (heure d\'hiver)'
+                        )}
+                      </span>
+                    </span>
+                  )}
+                  {!currentServerTime.next_transition && (
+                    <span className="text-xs text-gray-500" data-testid="no-dst-info">
+                      Ce fuseau n'observe pas de changement d'heure
+                    </span>
+                  )}
+                </div>
               </div>
             )}
+
+            {/* Bandeau d'information sur la gestion auto */}
+            <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 flex items-start gap-2">
+              <CheckCircle className="h-4 w-4 text-emerald-600 flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-emerald-800">
+                <span className="font-semibold">Gestion automatique du changement d'heure :</span> sélectionnez simplement votre fuseau (ex: Europe/Paris). Le passage heure d'été ↔ hiver se fait sans aucune intervention de votre part.
+              </p>
+            </div>
 
             {/* Sélection du fuseau horaire */}
             <div>
@@ -232,40 +318,60 @@ const TimezoneSettings = () => {
                   type="text"
                   value={timezoneSearchQuery}
                   onChange={(e) => setTimezoneSearchQuery(e.target.value)}
-                  placeholder="Rechercher par ville ou GMT..."
+                  placeholder="Rechercher par ville, région ou nom IANA (ex: Paris, Sydney, Asia)..."
                   className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                  data-testid="timezone-search-input"
                 />
               </div>
               
-              {/* Liste des fuseaux horaires */}
-              <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-lg">
-                {filteredTimezones.map((tz, index) => (
-                  <button
-                    key={index}
-                    onClick={() => handleSelectTimezone(tz)}
-                    className={`w-full px-4 py-3 text-left hover:bg-teal-50 border-b border-gray-100 last:border-b-0 transition-colors ${
-                      timezoneConfig.timezone_offset === tz.offset 
-                        ? 'bg-teal-100 border-l-4 border-l-teal-500' 
-                        : ''
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <span className="font-semibold text-gray-800">{tz.name}</span>
-                        <p className="text-xs text-gray-500 mt-0.5">{tz.cities}</p>
-                      </div>
-                      {timezoneConfig.timezone_offset === tz.offset && (
-                        <CheckCircle className="h-5 w-5 text-teal-600" />
-                      )}
+              {/* Liste groupée par région */}
+              <div className="max-h-72 overflow-y-auto border border-gray-200 rounded-lg" data-testid="timezone-list">
+                {Object.keys(filteredAndGrouped).length === 0 && (
+                  <p className="px-4 py-3 text-sm text-gray-500">Aucun fuseau ne correspond à la recherche.</p>
+                )}
+                {Object.entries(filteredAndGrouped).map(([region, list]) => (
+                  <div key={region}>
+                    <div className="bg-gray-50 px-3 py-1.5 text-xs font-semibold text-gray-600 uppercase tracking-wider sticky top-0 border-b border-gray-200">
+                      {region}
                     </div>
-                  </button>
+                    {list.map((tz, index) => {
+                      const selected = timezoneConfig.timezone_name === (tz.iana || tz.name);
+                      return (
+                        <button
+                          key={`${region}-${index}`}
+                          onClick={() => handleSelectTimezone(tz)}
+                          className={`w-full px-4 py-2.5 text-left hover:bg-teal-50 border-b border-gray-100 transition-colors ${
+                            selected ? 'bg-teal-100 border-l-4 border-l-teal-500' : ''
+                          }`}
+                          data-testid={`timezone-option-${tz.iana || tz.name}`}
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold text-gray-800">{tz.iana || tz.name}</span>
+                                {tz.is_dst && (
+                                  <Sun className="h-3.5 w-3.5 text-amber-500" title="Heure d'été en cours" />
+                                )}
+                              </div>
+                              <p className="text-xs text-gray-500 mt-0.5 truncate">{tz.cities}</p>
+                            </div>
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              <span className={`text-xs font-mono px-2 py-0.5 rounded ${tz.is_dst ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-700'}`}>
+                                {fmtOffset(tz.current_offset ?? tz.offset)}
+                              </span>
+                              {selected && <CheckCircle className="h-5 w-5 text-teal-600" />}
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
                 ))}
               </div>
               
               <p className="text-xs text-gray-500 mt-2">
-                Fuseau sélectionné : <span className="font-semibold">
-                  GMT{timezoneConfig.timezone_offset >= 0 ? '+' : ''}{timezoneConfig.timezone_offset}
-                </span> ({timezoneConfig.timezone_name})
+                Fuseau sélectionné : <span className="font-semibold">{timezoneConfig.timezone_name}</span>
+                {' '}(<span className="font-mono">{fmtOffset(timezoneConfig.timezone_offset)}</span> actuellement)
               </p>
             </div>
 
@@ -395,6 +501,7 @@ const TimezoneSettings = () => {
                 onClick={handleSaveTimezoneConfig}
                 disabled={savingTimezone}
                 className="flex items-center gap-2 px-6 py-3 bg-teal-600 text-white rounded-lg hover:bg-teal-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                data-testid="save-timezone-config-btn"
               >
                 {savingTimezone ? (
                   <>

@@ -33,6 +33,33 @@ Application GMAO (Gestion de Maintenance Assistée par Ordinateur) complète pou
 - Export PDF individuel des OT (jsPDF)
 - Export PDF en masse des OT avec mode sélection
 
+### Session 28 avril 2026 (suite) — Gestion automatique heure d'été/hiver (DST-aware)
+
+**Problème résolu** : Avant cette mise à jour, l'admin devait modifier manuellement l'offset GMT 2× par an au passage heure d'été ↔ hiver. La configuration stockait un offset numérique figé.
+
+**Solution autonome** :
+- **Backend** : Nouveau helper `timezone_helper.py` utilisant `zoneinfo` (lib standard Python 3.9+) pour calculer dynamiquement l'offset à partir d'un nom IANA (`Europe/Paris`, `America/New_York`, etc.)
+- L'offset effectif est désormais **recalculé en temps réel** à chaque appel des endpoints `/api/timezone/offset`, `/api/timezone/config`, `/api/timezone/current-time`
+- **Migration auto** au premier accès : si un ancien enregistrement n'a qu'un `timezone_offset` numérique, on déduit le nom IANA correspondant (mapping `OFFSET_TO_DEFAULT_IANA`) et on le persiste.
+- Nouvel endpoint `/api/timezone/dst-info?timezone_name=...` retournant : `is_dst`, `current_offset`, `standard_offset`, `next_transition` (date+heure ISO), `next_transition_offset`, `next_is_dst_after`
+- Liste IANA enrichie groupée par région (Europe, Amériques, Afrique, Asie, Pacifique)
+- **Frontend** :
+  - Badge dynamique 🌞 "Heure d'été en cours" / ❄️ "Heure d'hiver en cours" dans le widget heure
+  - Indication "Prochain changement : dimanche 25 octobre 2026 à 01:00 → GMT+1 (heure d'hiver)"
+  - Liste groupée par région avec offset courant et indicateur DST par fuseau
+  - Mention pour les fuseaux sans DST (ex: Asia/Kolkata, America/Phoenix) : "Ce fuseau n'observe pas de changement d'heure"
+- **Tests pytest** : 10/10 passés (`/app/backend/tests/test_timezone_helper.py`) — couvre Paris hiver/été, Kolkata sans DST, Phoenix sans DST, repli IANA invalide, prochain changement.
+
+**Files modifiés / créés** :
+- `/app/backend/timezone_helper.py` (NOUVEAU)
+- `/app/backend/timezone_routes.py` (refonte DST-aware)
+- `/app/backend/models.py` (offset `int` → `float` pour supporter +5:30, etc.)
+- `/app/backend/tests/test_timezone_helper.py` (NOUVEAU - 10 tests)
+- `/app/frontend/src/components/Settings/TimezoneSettings.jsx` (refonte UI)
+
+**Aucune intervention requise sur Proxmox** : la migration des données est automatique au premier appel.
+
+
 ### Session 28 avril 2026 — Évolution module M.E.S (cp/min + sous-équipement)
 
 **Fonctionnalités ajoutées** :
