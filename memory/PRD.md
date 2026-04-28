@@ -33,6 +33,41 @@ Application GMAO (Gestion de Maintenance Assistée par Ordinateur) complète pou
 - Export PDF individuel des OT (jsPDF)
 - Export PDF en masse des OT avec mode sélection
 
+### Session 28 avril 2026 — Évolution module M.E.S (cp/min + sous-équipement)
+
+**Fonctionnalités ajoutées** :
+1. **Type machine** : Champ "Type" dans les dialogues d'ajout/paramétrage M.E.S avec deux options :
+   - `Imp` (impulsion 1/0) — comportement historique conservé
+   - `cp/min` (cadence directe) — nouvelle option : la machine publie directement sa cadence en cp/min (ex: `45`)
+2. **Topic d'état séparé (cp/min)** : Champ conditionnel "Topic etat (ACTIVE/IDLE)" affiché uniquement quand `type = cp/min`. La machine publie son état explicite ("ACTIVE" / "IDLE") sur ce topic dédié.
+3. **Dropdown Équipement scindé** : Le dropdown unique "Equipement" est remplacé par deux menus :
+   - **Equipement parent** (obligatoire) — uniquement les équipements racines (sans `parent_id`)
+   - **Sous-équipement** (optionnel, en cascade depuis le parent)
+
+**Modifications techniques** :
+- **Backend `mes_service.py`** :
+  - Nouveaux champs sur `mes_machines` : `type` (Imp/cp/min, défaut "Imp" pour rétro-compatibilité), `mqtt_topic_state`, `sub_equipment_id`, `current_cadence`, `current_cadence_at`, `state_explicit`, `state_updated_at`
+  - `_subscribe_machine` souscrit aux deux topics quand type=cp/min
+  - `_handle_mqtt_message_sync` route le message reçu vers : impulsion (Imp), cadence directe (cp/min) ou état (cp/min state)
+  - `_record_direct_cadence_sync` synthétise des impulsions à partir de la cadence reçue × delta de temps écoulé (cap à 5 min)
+  - `_record_state_sync` met à jour `is_running` selon "ACTIVE" / "IDLE"
+  - `get_realtime_metrics` : pour cp/min utilise `current_cadence` directement (au lieu de compter les pulses), `is_running` selon état explicite
+  - `_check_alerts` : pour cp/min avec état explicite, alerte STOPPED basée sur `state_updated_at` au lieu de `last_pulse_at`
+  - `delete_machine` se désabonne des deux topics
+- **Frontend `MESPage.jsx`** :
+  - `CreateMachineModal` et `MachineSettingsModal` : split equipement parent/sous, dropdown Type, champ conditionnel Topic état
+  - Affichage liste/dashboard machine : "Parent → Sous-équipement"
+- **Rétro-compatibilité** : Les machines existantes sans champ `type` sont traitées comme `"Imp"` (default). Aucun impact sur le suivi en place.
+
+**Tests effectués** :
+- Backend : POST/PUT/DELETE `/api/mes/machines` avec tous les nouveaux champs (curl, OK)
+- Frontend : screenshot du modal "Ajouter une machine" et "Paramètres machine" avec switch Imp ↔ cp/min validé
+
+**Files modifiés** :
+- `/app/backend/mes_service.py`
+- `/app/frontend/src/pages/MESPage.jsx`
+
+
 ### Session 26 avril 2026 — Drill-down widgets Dashboard (raccourcis avec filtres)
 
 **Fonctionnalité ajoutée** : Chaque widget du tableau de bord est désormais un raccourci cliquable qui navigue vers la page source avec les filtres pré-appliqués correspondant aux données affichées.

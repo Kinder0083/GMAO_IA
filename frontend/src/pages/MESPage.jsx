@@ -416,7 +416,12 @@ const MachineCard = ({ machine, onSelect, onDelete }) => {
       <CardContent className="pt-4">
         <div className="flex items-start justify-between">
           <div>
-            <h3 className="font-semibold text-gray-900">{machine.equipment_name}</h3>
+            <h3 className="font-semibold text-gray-900">
+              {machine.equipment_name}
+              {machine.sub_equipment_name && (
+                <span className="text-gray-500 font-normal"> → {machine.sub_equipment_name}</span>
+              )}
+            </h3>
             <p className="text-xs text-gray-400 font-mono mt-0.5">{machine.mqtt_topic}</p>
           </div>
           <div className={`flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full ${
@@ -620,7 +625,12 @@ const MachineDashboard = ({ machineId, onBack }) => {
             <ArrowLeft className="h-5 w-5" />
           </button>
           <div>
-            <h1 className="text-xl font-bold text-gray-900" data-testid="mes-machine-name">{machine.equipment_name}</h1>
+            <h1 className="text-xl font-bold text-gray-900" data-testid="mes-machine-name">
+              {machine.equipment_name}
+              {machine.sub_equipment_name && (
+                <span className="text-gray-500 font-normal text-base"> → {machine.sub_equipment_name}</span>
+              )}
+            </h1>
             <p className="text-xs text-gray-400 font-mono">{machine.mqtt_topic} {machine.sensor_ip && `| IP: ${machine.sensor_ip}`}</p>
           </div>
           <div className={`flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full ${
@@ -809,6 +819,10 @@ const MachineSettingsModal = ({ machine, onClose }) => {
     trs_target: src.trs_target ?? 85,
     sensor_ip: machine.sensor_ip || '',
     mqtt_topic: machine.mqtt_topic || '',
+    mqtt_topic_state: machine.mqtt_topic_state || '',
+    type: machine.type || 'Imp',
+    equipment_id: machine.equipment_id || '',
+    sub_equipment_id: machine.sub_equipment_id || '',
     alert_stopped_minutes: (src.alerts || src)?.alert_stopped_minutes ?? src.alerts?.stopped_minutes ?? 5,
     alert_under_cadence: (src.alerts || src)?.alert_under_cadence ?? src.alerts?.under_cadence ?? 0,
     alert_over_cadence: (src.alerts || src)?.alert_over_cadence ?? src.alerts?.over_cadence ?? 0,
@@ -831,13 +845,45 @@ const MachineSettingsModal = ({ machine, onClose }) => {
   const [selectedRefId, setSelectedRefId] = useState(machine.active_reference_id || '');
   const [confirmDialog, setConfirmDialog] = useState(null); // {type, title, message, onConfirm}
   const [refNameInput, setRefNameInput] = useState('');
+  const [equipments, setEquipments] = useState([]);
+  const [childEquipments, setChildEquipments] = useState([]);
+  const [loadingChildren, setLoadingChildren] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
     axios.get(`${API}/api/mes/product-references`, { headers: getHeaders() })
       .then(r => setReferences(r.data))
       .catch(() => {});
+    axios.get(`${API}/api/equipments`, { headers: getHeaders() })
+      .then(r => {
+        const list = Array.isArray(r.data) ? r.data : r.data.data || [];
+        setEquipments(list.filter(eq => !eq.parent_id));
+      })
+      .catch(() => {});
+    // Charger les sous-équipements si un parent est déjà sélectionné
+    if (form.equipment_id) {
+      axios.get(`${API}/api/equipments/${form.equipment_id}/children`, { headers: getHeaders() })
+        .then(r => setChildEquipments(Array.isArray(r.data) ? r.data : (r.data.children || [])))
+        .catch(() => {});
+    }
   }, []);
+
+  const handleParentChange = async (eqId) => {
+    setForm(f => ({ ...f, equipment_id: eqId, sub_equipment_id: '' }));
+    setChildEquipments([]);
+    if (!eqId) return;
+    const eq = equipments.find(e => e.id === eqId);
+    if (!eq?.hasChildren) return;
+    setLoadingChildren(true);
+    try {
+      const { data } = await axios.get(`${API}/api/equipments/${eqId}/children`, { headers: getHeaders() });
+      setChildEquipments(Array.isArray(data) ? data : (data.children || []));
+    } catch {
+      setChildEquipments([]);
+    } finally {
+      setLoadingChildren(false);
+    }
+  };
 
   const handleRefSelect = async (refId) => {
     if (!refId) return;
@@ -999,15 +1045,64 @@ const MachineSettingsModal = ({ machine, onClose }) => {
             </div>
           </div>
 
+          {/* Equipement */}
+          <div className="space-y-3">
+            <h4 className="text-sm font-semibold text-gray-700 border-b pb-1">Equipement</h4>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-gray-600">Equipement parent *</label>
+                <select value={form.equipment_id}
+                  onChange={e => handleParentChange(e.target.value)}
+                  disabled={readOnly}
+                  className={`w-full mt-1 px-3 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-indigo-500 ${readOnly ? 'bg-gray-50 text-gray-500 cursor-not-allowed' : ''}`}
+                  data-testid="mes-setting-equipment-parent">
+                  <option value="">Selectionner...</option>
+                  {equipments.map(eq => <option key={eq.id} value={eq.id}>{eq.nom}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-600">Sous-equipement <span className="text-gray-400 font-normal text-xs">(optionnel)</span></label>
+                <select value={form.sub_equipment_id || ''}
+                  onChange={e => setForm(prev => ({ ...prev, sub_equipment_id: e.target.value }))}
+                  disabled={readOnly || !form.equipment_id || childEquipments.length === 0}
+                  className={`w-full mt-1 px-3 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-400`}
+                  data-testid="mes-setting-sub-equipment">
+                  <option value="">
+                    {!form.equipment_id ? 'Sélectionnez d\'abord un équipement' :
+                     loadingChildren ? 'Chargement...' :
+                     childEquipments.length === 0 ? 'Aucun sous-équipement' :
+                     '-- Aucun sous-équipement --'}
+                  </option>
+                  {childEquipments.map(child => <option key={child.id} value={child.id}>{child.nom}</option>)}
+                </select>
+              </div>
+            </div>
+          </div>
+
           {/* Capteur */}
           <div className="space-y-3">
             <h4 className="text-sm font-semibold text-gray-700 border-b pb-1">Capteur</h4>
             <div className="grid grid-cols-2 gap-3">
               <SettingsField label="Topic MQTT" field="mqtt_topic" type="text"
                 value={form.mqtt_topic} onChange={handleChange('mqtt_topic', 'text')} readOnly={readOnly} />
-              <SettingsField label="Adresse IP capteur" field="sensor_ip" type="text"
-                value={form.sensor_ip} onChange={handleChange('sensor_ip', 'text')} readOnly={readOnly} />
+              <div>
+                <label className="text-xs font-medium text-gray-600">Type</label>
+                <select value={form.type || 'Imp'}
+                  onChange={e => setForm(prev => ({ ...prev, type: e.target.value, mqtt_topic_state: e.target.value === 'Imp' ? '' : prev.mqtt_topic_state }))}
+                  disabled={readOnly}
+                  className={`w-full mt-1 px-3 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-indigo-500 ${readOnly ? 'bg-gray-50 text-gray-500 cursor-not-allowed' : ''}`}
+                  data-testid="mes-setting-type">
+                  <option value="Imp">Imp (impulsion 1/0)</option>
+                  <option value="cp/min">cp/min (cadence directe)</option>
+                </select>
+              </div>
             </div>
+            {form.type === 'cp/min' && (
+              <SettingsField label="Topic etat (ACTIVE/IDLE)" field="mqtt_topic_state" type="text"
+                value={form.mqtt_topic_state} onChange={handleChange('mqtt_topic_state', 'text')} readOnly={readOnly} />
+            )}
+            <SettingsField label="Adresse IP capteur" field="sensor_ip" type="text"
+              value={form.sensor_ip} onChange={handleChange('sensor_ip', 'text')} readOnly={readOnly} />
           </div>
 
           {/* Planning */}
@@ -1217,8 +1312,12 @@ const CreateMachineModal = ({ onClose, onCreated }) => {
   // Fermeture avec Echap (composant toujours ouvert quand monté)
   useEscapeToClose(true, onClose);
   const [equipments, setEquipments] = useState([]);
+  const [childEquipments, setChildEquipments] = useState([]);
+  const [loadingChildren, setLoadingChildren] = useState(false);
   const [form, setForm] = useState({
-    equipment_id: '', mqtt_topic: '', sensor_ip: '', theoretical_cadence: 6,
+    equipment_id: '', sub_equipment_id: '',
+    mqtt_topic: '', mqtt_topic_state: '', type: 'Imp',
+    sensor_ip: '', theoretical_cadence: 6,
     downtime_margin_pct: 30, alert_stopped_minutes: 5, alert_no_signal_minutes: 10,
     alert_under_cadence: 0, alert_over_cadence: 0, alert_daily_target: 0,
     schedule_is_24h: true, schedule_start_hour: 6, schedule_end_hour: 22,
@@ -1229,13 +1328,42 @@ const CreateMachineModal = ({ onClose, onCreated }) => {
 
   useEffect(() => {
     axios.get(`${API}/api/equipments`, { headers: getHeaders() })
-      .then(r => setEquipments(Array.isArray(r.data) ? r.data : r.data.data || []))
+      .then(r => {
+        const list = Array.isArray(r.data) ? r.data : r.data.data || [];
+        // On ne garde que les équipements parents (sans parent_id)
+        setEquipments(list.filter(eq => !eq.parent_id));
+      })
       .catch(() => {});
   }, []);
+
+  const loadChildren = async (parentId) => {
+    setLoadingChildren(true);
+    try {
+      const { data } = await axios.get(`${API}/api/equipments/${parentId}/children`, { headers: getHeaders() });
+      setChildEquipments(Array.isArray(data) ? data : (data.children || []));
+    } catch {
+      setChildEquipments([]);
+    } finally {
+      setLoadingChildren(false);
+    }
+  };
+
+  const handleParentChange = (eqId) => {
+    setForm(f => ({ ...f, equipment_id: eqId, sub_equipment_id: '' }));
+    setChildEquipments([]);
+    if (eqId) {
+      const eq = equipments.find(e => e.id === eqId);
+      if (eq?.hasChildren) loadChildren(eqId);
+    }
+  };
 
   const save = async () => {
     if (!form.equipment_id || !form.mqtt_topic) {
       toast({ title: 'Veuillez remplir les champs obligatoires', variant: 'destructive' });
+      return;
+    }
+    if (form.type === 'cp/min' && !form.mqtt_topic_state) {
+      toast({ title: 'Le topic d\'état est obligatoire pour cp/min', variant: 'destructive' });
       return;
     }
     setSaving(true);
@@ -1255,13 +1383,31 @@ const CreateMachineModal = ({ onClose, onCreated }) => {
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
         </div>
         <div className="px-6 py-4 space-y-4">
-          <div>
-            <label className="text-xs font-medium text-gray-600">Equipement *</label>
-            <select value={form.equipment_id} onChange={e => setForm({ ...form, equipment_id: e.target.value })}
-              className="w-full mt-1 px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-indigo-500" data-testid="mes-select-equipment">
-              <option value="">Selectionner un equipement</option>
-              {equipments.map(eq => <option key={eq.id} value={eq.id}>{eq.nom}</option>)}
-            </select>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-gray-600">Equipement parent *</label>
+              <select value={form.equipment_id} onChange={e => handleParentChange(e.target.value)}
+                className="w-full mt-1 px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-indigo-500" data-testid="mes-select-equipment">
+                <option value="">Selectionner un equipement</option>
+                {equipments.map(eq => <option key={eq.id} value={eq.id}>{eq.nom}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-600">Sous-equipement <span className="text-gray-400 font-normal text-xs">(optionnel)</span></label>
+              <select value={form.sub_equipment_id}
+                onChange={e => setForm({ ...form, sub_equipment_id: e.target.value })}
+                disabled={!form.equipment_id || childEquipments.length === 0}
+                className="w-full mt-1 px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-400"
+                data-testid="mes-select-sub-equipment">
+                <option value="">
+                  {!form.equipment_id ? 'Sélectionnez d\'abord un équipement' :
+                   loadingChildren ? 'Chargement...' :
+                   childEquipments.length === 0 ? 'Aucun sous-équipement' :
+                   '-- Aucun sous-équipement --'}
+                </option>
+                {childEquipments.map(child => <option key={child.id} value={child.id}>{child.nom}</option>)}
+              </select>
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -1272,12 +1418,32 @@ const CreateMachineModal = ({ onClose, onCreated }) => {
                 data-testid="mes-input-mqtt-topic" />
             </div>
             <div>
-              <label className="text-xs font-medium text-gray-600">IP capteur</label>
-              <input type="text" value={form.sensor_ip} placeholder="192.168.1.100"
-                onChange={e => setForm({ ...form, sensor_ip: e.target.value })}
-                className="w-full mt-1 px-3 py-2 text-sm border rounded-lg"
-                data-testid="mes-input-sensor-ip" />
+              <label className="text-xs font-medium text-gray-600">Type *</label>
+              <select value={form.type}
+                onChange={e => setForm({ ...form, type: e.target.value, mqtt_topic_state: e.target.value === 'Imp' ? '' : form.mqtt_topic_state })}
+                className="w-full mt-1 px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-indigo-500"
+                data-testid="mes-select-type">
+                <option value="Imp">Imp (impulsion 1/0)</option>
+                <option value="cp/min">cp/min (cadence directe)</option>
+              </select>
             </div>
+          </div>
+          {form.type === 'cp/min' && (
+            <div>
+              <label className="text-xs font-medium text-gray-600">Topic etat (ACTIVE/IDLE) *</label>
+              <input type="text" value={form.mqtt_topic_state} placeholder="factory/machine1/state"
+                onChange={e => setForm({ ...form, mqtt_topic_state: e.target.value })}
+                className="w-full mt-1 px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-indigo-500"
+                data-testid="mes-input-mqtt-topic-state" />
+              <p className="text-xs text-gray-500 mt-1">Topic MQTT séparé recevant "ACTIVE" ou "IDLE"</p>
+            </div>
+          )}
+          <div>
+            <label className="text-xs font-medium text-gray-600">IP capteur</label>
+            <input type="text" value={form.sensor_ip} placeholder="192.168.1.100"
+              onChange={e => setForm({ ...form, sensor_ip: e.target.value })}
+              className="w-full mt-1 px-3 py-2 text-sm border rounded-lg"
+              data-testid="mes-input-sensor-ip" />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>

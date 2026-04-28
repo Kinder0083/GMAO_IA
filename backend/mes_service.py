@@ -36,9 +36,21 @@ class MESService:
     # ==================== MACHINES CRUD ====================
 
     async def create_machine(self, data: dict) -> dict:
+        # Type: "Imp" (impulsion 1/0) ou "cp/min" (cadence directe)
+        machine_type = data.get("type", "Imp")
+        if machine_type not in ("Imp", "cp/min"):
+            machine_type = "Imp"
+
+        # Sub-equipment optionnel
+        sub_eq_id = data.get("sub_equipment_id")
+        sub_eq_obj = ObjectId(sub_eq_id) if sub_eq_id else None
+
         machine = {
             "equipment_id": ObjectId(data["equipment_id"]),
+            "sub_equipment_id": sub_eq_obj,
             "mqtt_topic": data["mqtt_topic"],
+            "type": machine_type,
+            "mqtt_topic_state": data.get("mqtt_topic_state", "") if machine_type == "cp/min" else "",
             "sensor_ip": data.get("sensor_ip", ""),
             "theoretical_cadence": float(data.get("theoretical_cadence", 6)),  # cp/min
             "downtime_margin_pct": float(data.get("downtime_margin_pct", 30)),  # %
@@ -78,10 +90,20 @@ class MESService:
             "mqtt_topic": str, "sensor_ip": str,
             "theoretical_cadence": float, "downtime_margin_pct": float, "active": bool,
             "trs_target": float,
+            "mqtt_topic_state": str,
         }
         for field, cast in fields_map.items():
             if field in data:
                 update[field] = cast(data[field])
+
+        # Type: "Imp" ou "cp/min"
+        if "type" in data:
+            t = data["type"]
+            if t in ("Imp", "cp/min"):
+                update["type"] = t
+                # Si on repasse en Imp, on vide le topic état
+                if t == "Imp":
+                    update["mqtt_topic_state"] = ""
 
         alert_fields = {
             "alert_stopped_minutes": ("alerts.stopped_minutes", int),
@@ -122,6 +144,10 @@ class MESService:
         if "equipment_id" in data:
             update["equipment_id"] = ObjectId(data["equipment_id"])
 
+        if "sub_equipment_id" in data:
+            sub = data["sub_equipment_id"]
+            update["sub_equipment_id"] = ObjectId(sub) if sub else None
+
         if update:
             await self.db.mes_machines.update_one({"_id": ObjectId(machine_id)}, {"$set": update})
 
@@ -132,10 +158,12 @@ class MESService:
 
     async def delete_machine(self, machine_id: str):
         machine = await self.db.mes_machines.find_one({"_id": ObjectId(machine_id)})
-        if machine and machine.get("mqtt_topic") in self._subscribed_topics:
-            if self.mqtt_manager:
-                self.mqtt_manager.unsubscribe(machine["mqtt_topic"])
-            self._subscribed_topics.discard(machine["mqtt_topic"])
+        if machine and self.mqtt_manager:
+            for tkey in ("mqtt_topic", "mqtt_topic_state"):
+                t = machine.get(tkey)
+                if t and t in self._subscribed_topics:
+                    self.mqtt_manager.unsubscribe(t)
+                    self._subscribed_topics.discard(t)
         await self.db.mes_machines.delete_one({"_id": ObjectId(machine_id)})
         await self.db.mes_pulses.delete_many({"machine_id": ObjectId(machine_id)})
         await self.db.mes_cadence_history.delete_many({"machine_id": ObjectId(machine_id)})
@@ -148,6 +176,15 @@ class MESService:
             serialized = self._serialize(m)
             eq = await self.db.equipments.find_one({"_id": m.get("equipment_id")}, {"nom": 1})
             serialized["equipment_name"] = eq["nom"] if eq else "Inconnu"
+            # Sous-équipement (optionnel)
+            sub_id = m.get("sub_equipment_id")
+            if sub_id:
+                sub = await self.db.equipments.find_one({"_id": sub_id}, {"nom": 1})
+                serialized["sub_equipment_name"] = sub["nom"] if sub else None
+            else:
+                serialized["sub_equipment_name"] = None
+            # Type par défaut "Imp" pour rétro-compatibilité
+            serialized["type"] = m.get("type", "Imp")
             # Include reference info
             ref_id = m.get("active_reference_id")
             if ref_id:
@@ -163,6 +200,15 @@ class MESService:
         serialized = self._serialize(m)
         eq = await self.db.equipments.find_one({"_id": m.get("equipment_id")}, {"nom": 1})
         serialized["equipment_name"] = eq["nom"] if eq else "Inconnu"
+        # Sous-équipement (optionnel)
+        sub_id = m.get("sub_equipment_id")
+        if sub_id:
+            sub = await self.db.equipments.find_one({"_id": sub_id}, {"nom": 1})
+            serialized["sub_equipment_name"] = sub["nom"] if sub else None
+        else:
+            serialized["sub_equipment_name"] = None
+        # Type par défaut "Imp" pour rétro-compatibilité
+        serialized["type"] = m.get("type", "Imp")
         # Include reference info
         ref_id = m.get("active_reference_id")
         if ref_id:
@@ -228,6 +274,25 @@ class MESService:
             "machine_id": mid, "timestamp": {"$gte": t_1min}
         })
 
+        # Pour les machines de type cp/min, on préfère la valeur de cadence
+        # reçue directement plutôt que le comptage des impulsions synthétisées.
+        machine_type_for_cad = machine.get("type", "Imp")
+        if machine_type_for_cad == "cp/min":
+            current_cad = machine.get("current_cadence")
+            cad_at = machine.get("current_cadence_at")
+            if isinstance(cad_at, str):
+                try:
+                    cad_at = datetime.fromisoformat(cad_at.replace("Z", "+00:00"))
+                except (ValueError, AttributeError):
+                    cad_at = None
+            if cad_at and cad_at.tzinfo is None:
+                cad_at = cad_at.replace(tzinfo=timezone.utc)
+            # Cadence considérée valide si reçue dans les 5 dernières minutes
+            if current_cad is not None and cad_at and (now - cad_at).total_seconds() <= 300:
+                count_1min = round(float(current_cad), 1)
+            else:
+                count_1min = 0
+
         # Pulses last hour -> cp/h
         t_1h = now - timedelta(hours=1)
         count_1h = await self.db.mes_pulses.count_documents({
@@ -248,10 +313,26 @@ class MESService:
 
         # Downtime calculation
         last_pulse = machine.get("last_pulse_at")
+        machine_type = machine.get("type", "Imp")
         is_running = False
         downtime_seconds = 0
 
-        if last_pulse:
+        # Pour cp/min avec état explicite : utiliser directement le flag is_running de la machine
+        if machine_type == "cp/min" and machine.get("state_explicit"):
+            is_running = bool(machine.get("is_running", False))
+            # downtime courant : calculé depuis state_updated_at si IDLE
+            if not is_running:
+                state_at = machine.get("state_updated_at")
+                if isinstance(state_at, str):
+                    try:
+                        state_at = datetime.fromisoformat(state_at.replace("Z", "+00:00"))
+                    except (ValueError, AttributeError):
+                        state_at = None
+                if state_at and state_at.tzinfo is None:
+                    state_at = state_at.replace(tzinfo=timezone.utc)
+                if state_at:
+                    downtime_seconds = (now - state_at).total_seconds()
+        elif last_pulse:
             # Correction : last_pulse_at peut être une chaîne ISO en DB
             if isinstance(last_pulse, str):
                 try:
@@ -388,9 +469,29 @@ class MESService:
 
         for machine in machines:
             mid = machine["_id"]
-            count = await self.db.mes_pulses.count_documents({
-                "machine_id": mid, "timestamp": {"$gte": t_1min, "$lt": now}
-            })
+            mtype = machine.get("type", "Imp")
+
+            if mtype == "cp/min":
+                # Pour cp/min, on stocke la dernière cadence reçue (si encore valide)
+                current_cad = machine.get("current_cadence")
+                cad_at = machine.get("current_cadence_at")
+                if isinstance(cad_at, str):
+                    try:
+                        cad_at = datetime.fromisoformat(cad_at.replace("Z", "+00:00"))
+                    except (ValueError, AttributeError):
+                        cad_at = None
+                if cad_at and cad_at.tzinfo is None:
+                    cad_at = cad_at.replace(tzinfo=timezone.utc)
+                # Cadence valide si reçue dans la dernière minute (et machine active)
+                if current_cad is not None and cad_at and (now - cad_at).total_seconds() <= 90:
+                    count = float(current_cad)
+                else:
+                    count = 0
+            else:
+                count = await self.db.mes_pulses.count_documents({
+                    "machine_id": mid, "timestamp": {"$gte": t_1min, "$lt": now}
+                })
+
             await self.db.mes_cadence_history.insert_one({
                 "machine_id": mid,
                 "timestamp": now.replace(second=0, microsecond=0),
@@ -473,6 +574,7 @@ class MESService:
 
         # Check stopped
         stopped_min = alerts_config.get("stopped_minutes", 0)
+        machine_type_alert = machine.get("type", "Imp")
         last_p = machine.get("last_pulse_at")
         # Correction migration DB : last_pulse_at peut être une chaîne ISO après migration
         if last_p and isinstance(last_p, str):
@@ -482,7 +584,24 @@ class MESService:
                 last_p = None
         if last_p and last_p.tzinfo is None:
             last_p = last_p.replace(tzinfo=timezone.utc)
-        if stopped_min > 0 and last_p:
+
+        # Pour cp/min avec état explicite: l'arrêt est basé sur is_running=False et state_updated_at
+        if machine_type_alert == "cp/min" and machine.get("state_explicit"):
+            if stopped_min > 0 and not machine.get("is_running", True):
+                state_at = machine.get("state_updated_at")
+                if isinstance(state_at, str):
+                    try:
+                        state_at = datetime.fromisoformat(state_at.replace('Z', '+00:00'))
+                    except (ValueError, TypeError):
+                        state_at = None
+                if state_at and state_at.tzinfo is None:
+                    state_at = state_at.replace(tzinfo=timezone.utc)
+                if state_at:
+                    elapsed = (now - state_at).total_seconds() / 60
+                    if elapsed >= stopped_min:
+                        await self._create_alert(machine, "STOPPED",
+                            f"Machine à l'arrêt depuis {int(elapsed)} min")
+        elif stopped_min > 0 and last_p:
             elapsed = (now - last_p).total_seconds() / 60
             if elapsed >= stopped_min:
                 await self._create_alert(machine, "STOPPED",
@@ -661,23 +780,35 @@ class MESService:
     # ==================== MQTT SUBSCRIPTION ====================
 
     def _subscribe_machine(self, machine):
-        topic = machine.get("mqtt_topic")
-        if not topic or not self.mqtt_manager:
+        # Liste des topics à souscrire pour cette machine
+        topics = []
+        main_topic = machine.get("mqtt_topic")
+        if main_topic:
+            topics.append(main_topic)
+        # Pour le type cp/min, on souscrit aussi au topic d'état
+        if machine.get("type") == "cp/min":
+            state_topic = machine.get("mqtt_topic_state")
+            if state_topic:
+                topics.append(state_topic)
+
+        if not topics or not self.mqtt_manager:
             return
-        if not self.mqtt_manager.is_connected:
-            # MQTT pas encore connecté: mettre en file d'attente
-            self._pending_topics.add(topic)
-            logger.warning(f"[MES] MQTT non connecté, topic en attente: {topic}")
-            return
-        if topic not in self._subscribed_topics:
-            result = self.mqtt_manager.subscribe(topic, callback=self._on_mqtt_message)
-            if result:
-                self._subscribed_topics.add(topic)
-                self._pending_topics.discard(topic)
-                logger.info(f"[MES] Abonné au topic: {topic}")
-            else:
+
+        for topic in topics:
+            if not self.mqtt_manager.is_connected:
+                # MQTT pas encore connecté: mettre en file d'attente
                 self._pending_topics.add(topic)
-                logger.error(f"[MES] Échec abonnement topic: {topic}")
+                logger.warning(f"[MES] MQTT non connecté, topic en attente: {topic}")
+                continue
+            if topic not in self._subscribed_topics:
+                result = self.mqtt_manager.subscribe(topic, callback=self._on_mqtt_message)
+                if result:
+                    self._subscribed_topics.add(topic)
+                    self._pending_topics.discard(topic)
+                    logger.info(f"[MES] Abonné au topic: {topic}")
+                else:
+                    self._pending_topics.add(topic)
+                    logger.error(f"[MES] Échec abonnement topic: {topic}")
 
     def _resubscribe_all(self):
         """Re-souscrire à tous les topics (appelé quand MQTT se reconnecte)"""
@@ -702,83 +833,174 @@ class MESService:
                 logger.warning(f"[MES] MQTT non connecté, topic remis en attente: {topic}")
 
     def _on_mqtt_message(self, topic, payload, qos):
-        """Callback MQTT - reçoit les impulsions
+        """Callback MQTT - reçoit les messages des machines M.E.S.
         Signature: (topic: str, payload: str, qos: int) depuis mqtt_manager._on_message
         Note: Ce callback est appelé depuis le thread paho-mqtt, pas le thread principal asyncio
+
+        Le topic peut correspondre à :
+          - mqtt_topic (topic principal) : impulsion (Imp) ou cadence directe (cp/min)
+          - mqtt_topic_state (uniquement type cp/min) : état explicite ACTIVE/IDLE
         """
         logger.info(f"[MES] 📥 Message MQTT reçu: topic={topic}, payload={payload}, qos={qos}")
-        
+
         try:
-            # Convertir le payload en entier
-            value = int(float(str(payload).strip()))
-            logger.info(f"[MES] ✅ Pulse MQTT parsé: topic={topic}, value={value}")
-            
-            # Utiliser pymongo synchrone car on est dans un thread séparé
-            self._record_pulse_sync(topic, value)
-            
-        except ValueError as ve:
-            logger.warning(f"[MES] ⚠️ Payload non numérique: {payload} -> {ve}")
+            payload_str = str(payload).strip()
+            self._handle_mqtt_message_sync(topic, payload_str)
         except Exception as e:
             logger.error(f"[MES] ❌ Erreur traitement message MQTT: {e}")
             import traceback
             logger.error(traceback.format_exc())
-    
-    def _record_pulse_sync(self, machine_id_or_topic: str, value: int = 1):
-        """Version synchrone de record_pulse pour le callback MQTT (thread séparé)"""
+
+    def _handle_mqtt_message_sync(self, topic: str, payload: str):
+        """Routage du message MQTT vers le bon handler selon le topic et le type de machine.
+        Exécute en mode synchrone (thread paho-mqtt).
+        """
         from pymongo import MongoClient
-        
-        logger.info(f"[MES] record_pulse_sync appelé: topic={machine_id_or_topic}, value={value}")
-        
+
+        mongo_url = os.environ.get('MONGO_URL', 'mongodb://localhost:27017')
+        db_name = os.environ.get('DB_NAME', 'gmao_iris')
+        mongo_client = MongoClient(mongo_url, serverSelectionTimeoutMS=5000)
         try:
-            mongo_url = os.environ.get('MONGO_URL', 'mongodb://localhost:27017')
-            db_name = os.environ.get('DB_NAME', 'gmao_iris')
-            
-            mongo_client = MongoClient(mongo_url, serverSelectionTimeoutMS=5000)
             db_sync = mongo_client[db_name]
-            
-            # Trouver la machine par topic
-            if ObjectId.is_valid(machine_id_or_topic):
-                machine = db_sync.mes_machines.find_one({"_id": ObjectId(machine_id_or_topic)})
-                logger.info(f"[MES] Recherche par ObjectId: {machine_id_or_topic} -> trouvé: {machine is not None}")
-            else:
-                machine = db_sync.mes_machines.find_one({"mqtt_topic": machine_id_or_topic, "active": True})
-                logger.info(f"[MES] Recherche par topic: {machine_id_or_topic} -> trouvé: {machine is not None}")
-            
-            if not machine:
-                logger.warning(f"[MES] ⚠️ Aucune machine trouvée pour: {machine_id_or_topic}")
-                mongo_client.close()
+
+            # 1) Recherche machine par topic principal (Imp ou cadence cp/min)
+            machine = db_sync.mes_machines.find_one({"mqtt_topic": topic, "active": True})
+            if machine:
+                mtype = machine.get("type", "Imp")
+                if mtype == "cp/min":
+                    self._record_direct_cadence_sync(db_sync, machine, payload)
+                else:
+                    self._record_pulse_machine_sync(db_sync, machine, payload)
                 return
-            
-            if value != 1:
-                logger.info(f"[MES] Valeur ignorée (!=1): {value}")
-                mongo_client.close()
-                return
-            
-            now = datetime.now(timezone.utc)
-            mid = machine["_id"]
-            
-            logger.info(f"[MES] 📝 Enregistrement pulse pour machine {mid}...")
-            
-            # Store pulse
-            db_sync.mes_pulses.insert_one({
-                "machine_id": mid,
-                "timestamp": now,
+
+            # 2) Recherche machine par topic d'état (cp/min uniquement)
+            machine_state = db_sync.mes_machines.find_one({
+                "mqtt_topic_state": topic,
+                "type": "cp/min",
+                "active": True,
             })
-            logger.info(f"[MES] ✅ Pulse enregistré dans mes_pulses")
-            
-            # Update machine state
-            db_sync.mes_machines.update_one(
-                {"_id": mid},
-                {"$set": {"last_pulse_at": now, "is_running": True}}
-            )
-            logger.info(f"[MES] ✅ État machine mis à jour (is_running=True)")
-            
+            if machine_state:
+                self._record_state_sync(db_sync, machine_state, payload)
+                return
+
+            logger.warning(f"[MES] ⚠️ Aucune machine trouvée pour le topic: {topic}")
+        finally:
             mongo_client.close()
-            
-        except Exception as e:
-            logger.error(f"[MES] ❌ Erreur record_pulse_sync: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
+
+    def _record_pulse_machine_sync(self, db_sync, machine, payload: str):
+        """Traite une impulsion (Imp) reçue. Compatible avec l'ancien format."""
+        try:
+            value = int(float(payload))
+        except ValueError:
+            logger.warning(f"[MES] ⚠️ Payload Imp non numérique: {payload}")
+            return
+
+        if value != 1:
+            logger.info(f"[MES] Valeur Imp ignorée (!=1): {value}")
+            return
+
+        now = datetime.now(timezone.utc)
+        mid = machine["_id"]
+        db_sync.mes_pulses.insert_one({"machine_id": mid, "timestamp": now})
+        db_sync.mes_machines.update_one(
+            {"_id": mid},
+            {"$set": {"last_pulse_at": now, "is_running": True}}
+        )
+        logger.info(f"[MES] ✅ Pulse Imp enregistré pour machine {mid}")
+
+    def _record_direct_cadence_sync(self, db_sync, machine, payload: str):
+        """Traite une cadence directe (cp/min) reçue.
+        Le payload est un nombre (entier ou décimal) représentant la cadence courante.
+        On stocke la valeur sur la machine et on synthétise des impulsions pour
+        rester compatible avec les calculs existants.
+        """
+        try:
+            cadence_value = float(payload)
+        except ValueError:
+            logger.warning(f"[MES] ⚠️ Payload cp/min non numérique: {payload}")
+            return
+
+        if cadence_value < 0:
+            cadence_value = 0
+
+        now = datetime.now(timezone.utc)
+        mid = machine["_id"]
+
+        # Récupère l'horodatage de la dernière cadence reçue pour calculer
+        # le nombre d'impulsions à synthétiser depuis la dernière mise à jour.
+        last_cad_at = machine.get("current_cadence_at") or machine.get("last_pulse_at")
+        if isinstance(last_cad_at, str):
+            try:
+                last_cad_at = datetime.fromisoformat(last_cad_at.replace("Z", "+00:00"))
+            except (ValueError, AttributeError):
+                last_cad_at = None
+        if last_cad_at and last_cad_at.tzinfo is None:
+            last_cad_at = last_cad_at.replace(tzinfo=timezone.utc)
+
+        # Synthétiser des impulsions correspondant aux pièces produites
+        # depuis la dernière mise à jour de cadence.
+        # Production = cadence (cp/min) * delta_minutes
+        # On limite delta à 5 min max pour éviter les "rattrapages" abusifs après une coupure.
+        if last_cad_at:
+            delta_seconds = (now - last_cad_at).total_seconds()
+            delta_seconds = max(0, min(delta_seconds, 300))  # cap 5 min
+        else:
+            delta_seconds = 60.0  # par défaut, 1 minute
+
+        # Utilise la cadence précédente pour la période écoulée (plus juste)
+        prev_cadence = float(machine.get("current_cadence", cadence_value) or cadence_value)
+        pulses_to_add = int(round(prev_cadence * delta_seconds / 60.0))
+
+        if pulses_to_add > 0:
+            # Distribuer les pulses uniformément sur la période écoulée
+            interval = delta_seconds / pulses_to_add if pulses_to_add > 0 else 0
+            base_ts = last_cad_at if last_cad_at else (now - timedelta(seconds=delta_seconds))
+            docs = [
+                {"machine_id": mid, "timestamp": base_ts + timedelta(seconds=interval * (i + 1))}
+                for i in range(pulses_to_add)
+            ]
+            db_sync.mes_pulses.insert_many(docs)
+
+        # Détermine is_running : si l'état n'est pas explicitement contrôlé
+        # par mqtt_topic_state, on infère depuis la cadence (>0 = running).
+        # Si state_explicit, on conserve l'état déjà défini par le state topic.
+        update_fields = {
+            "current_cadence": cadence_value,
+            "current_cadence_at": now,
+            "last_pulse_at": now,
+        }
+        if not machine.get("state_explicit"):
+            update_fields["is_running"] = cadence_value > 0
+
+        db_sync.mes_machines.update_one({"_id": mid}, {"$set": update_fields})
+        logger.info(f"[MES] ✅ Cadence cp/min={cadence_value} (pulses synthétisés={pulses_to_add}) pour machine {mid}")
+
+    def _record_state_sync(self, db_sync, machine, payload: str):
+        """Traite un message d'état explicite (ACTIVE / IDLE) pour une machine cp/min."""
+        state_str = payload.strip().upper()
+        if state_str in ("ACTIVE", "RUNNING", "ON", "1", "TRUE"):
+            is_running = True
+        elif state_str in ("IDLE", "STOPPED", "OFF", "0", "FALSE"):
+            is_running = False
+        else:
+            logger.warning(f"[MES] ⚠️ État inconnu pour cp/min: {payload}")
+            return
+
+        now = datetime.now(timezone.utc)
+        mid = machine["_id"]
+        update = {
+            "is_running": is_running,
+            "state_explicit": True,
+            "state_updated_at": now,
+        }
+        # Si la machine repasse ACTIVE on met à jour last_pulse_at pour
+        # éviter le déclenchement d'alerte "stopped" basée sur le timeout.
+        if is_running:
+            update["last_pulse_at"] = now
+
+        db_sync.mes_machines.update_one({"_id": mid}, {"$set": update})
+        logger.info(f"[MES] ✅ État cp/min mis à jour: {state_str} -> is_running={is_running} pour machine {mid}")
+
 
     async def subscribe_all(self):
         """Subscribe to all active machine topics"""
