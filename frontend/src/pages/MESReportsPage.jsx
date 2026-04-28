@@ -69,6 +69,7 @@ const MESReportsPage = () => {
   const [scheduledReports, setScheduledReports] = useState([]);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState(null);
+  const [activeTab, setActiveTab] = useState('manual');
 
   // Fermeture du modal planning avec Echap
   useEscapeToClose(showScheduleModal, () => setShowScheduleModal(false));
