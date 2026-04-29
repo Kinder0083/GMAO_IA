@@ -1817,6 +1817,12 @@ async def startup_scheduler():
         # M.E.S - Calcul cadence chaque minute (abonnement MQTT sera fait APRÈS connexion)
         from mes_routes import mes_service as _mes_ref
         if _mes_ref:
+            # Création des index M.E.S. (critique pour les performances avec des
+            # millions de pulses)
+            try:
+                await _mes_ref.ensure_indexes()
+            except Exception as e:
+                logger.warning(f"   - M.E.S index: erreur création ({e})")
             from apscheduler.triggers.interval import IntervalTrigger
             scheduler.add_job(
                 _mes_ref.calculate_minute_cadence,

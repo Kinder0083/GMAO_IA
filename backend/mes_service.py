@@ -33,6 +33,37 @@ class MESService:
         logger.info("[MES] 🔌 MQTT connecté, re-souscription aux topics M.E.S....")
         self._resubscribe_all()
 
+    async def ensure_indexes(self):
+        """Crée les index nécessaires pour les performances M.E.S.
+        Idempotent : si l'index existe déjà, MongoDB ignore.
+        """
+        try:
+            # Index composé pour les requêtes sur mes_pulses (le plus critique:
+            # find by machine_id + timestamp range + sort by timestamp)
+            await self.db.mes_pulses.create_index(
+                [("machine_id", 1), ("timestamp", 1)],
+                name="machine_id_timestamp_idx",
+                background=True,
+            )
+            await self.db.mes_pulses.create_index(
+                [("timestamp", 1)],
+                name="timestamp_idx",
+                background=True,
+            )
+            await self.db.mes_cadence_history.create_index(
+                [("machine_id", 1), ("timestamp", 1)],
+                name="machine_id_timestamp_idx",
+                background=True,
+            )
+            await self.db.mes_alerts.create_index(
+                [("machine_id", 1), ("created_at", -1)],
+                name="machine_id_created_at_idx",
+                background=True,
+            )
+            logger.info("[MES] ✅ Index assurés sur mes_pulses, mes_cadence_history, mes_alerts")
+        except Exception as e:
+            logger.warning(f"[MES] ⚠️ Création des index échouée (non bloquant): {e}")
+
     # ==================== MACHINES CRUD ====================
 
     async def create_machine(self, data: dict) -> dict:
@@ -427,10 +458,14 @@ class MESService:
         expected_interval = 60.0 / theoretical if theoretical > 0 else 10
         threshold = expected_interval * (1 + margin_pct / 100)
 
-        pulses = await self.db.mes_pulses.find(
+        # Note: allow_disk_use=True permet à MongoDB de trier sur disque si la
+        # plage retourne >100MB de données (cas des grosses installations MES
+        # avec plusieurs millions de pulses).
+        cursor = self.db.mes_pulses.find(
             {"machine_id": machine_id, "timestamp": {"$gte": start, "$lte": end}},
             {"timestamp": 1}
-        ).sort("timestamp", 1).to_list(100000)
+        ).sort("timestamp", 1).allow_disk_use(True)
+        pulses = await cursor.to_list(100000)
 
         if not pulses:
             return (end - start).total_seconds()
