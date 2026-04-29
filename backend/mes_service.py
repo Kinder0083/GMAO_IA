@@ -60,7 +60,13 @@ class MESService:
                 name="machine_id_created_at_idx",
                 background=True,
             )
-            logger.info("[MES] ✅ Index assurés sur mes_pulses, mes_cadence_history, mes_alerts")
+            await self.db.mes_daily_summary.create_index(
+                [("machine_id", 1), ("date", 1)],
+                name="machine_id_date_idx",
+                unique=True,
+                background=True,
+            )
+            logger.info("[MES] ✅ Index assurés sur mes_pulses, mes_cadence_history, mes_alerts, mes_daily_summary")
         except Exception as e:
             logger.warning(f"[MES] ⚠️ Création des index échouée (non bloquant): {e}")
 
@@ -82,6 +88,14 @@ class MESService:
             "mqtt_topic": data["mqtt_topic"],
             "type": machine_type,
             "mqtt_topic_state": data.get("mqtt_topic_state", "") if machine_type == "cp/min" else "",
+            # Mode ESP32 optimisé : si renseigné, on utilise le compteur cumulé (total)
+            # publié par l'ESP32 plutôt que de synthétiser des pulses en BDD.
+            # Cela divise la volumétrie par 100+ pour les installations à grosse cadence.
+            "mqtt_topic_total": data.get("mqtt_topic_total", "") if machine_type == "cp/min" else "",
+            "current_total": 0,
+            "current_total_at": None,
+            "total_baseline": 0,  # total à minuit (pour calculer la production du jour)
+            "total_baseline_at": None,
             "sensor_ip": data.get("sensor_ip", ""),
             "theoretical_cadence": float(data.get("theoretical_cadence", 6)),  # cp/min
             "downtime_margin_pct": float(data.get("downtime_margin_pct", 30)),  # %
@@ -122,6 +136,7 @@ class MESService:
             "theoretical_cadence": float, "downtime_margin_pct": float, "active": bool,
             "trs_target": float,
             "mqtt_topic_state": str,
+            "mqtt_topic_total": str,
         }
         for field, cast in fields_map.items():
             if field in data:
@@ -190,7 +205,7 @@ class MESService:
     async def delete_machine(self, machine_id: str):
         machine = await self.db.mes_machines.find_one({"_id": ObjectId(machine_id)})
         if machine and self.mqtt_manager:
-            for tkey in ("mqtt_topic", "mqtt_topic_state"):
+            for tkey in ("mqtt_topic", "mqtt_topic_state", "mqtt_topic_total"):
                 t = machine.get(tkey)
                 if t and t in self._subscribed_topics:
                     self.mqtt_manager.unsubscribe(t)
@@ -199,6 +214,7 @@ class MESService:
         await self.db.mes_pulses.delete_many({"machine_id": ObjectId(machine_id)})
         await self.db.mes_cadence_history.delete_many({"machine_id": ObjectId(machine_id)})
         await self.db.mes_alerts.delete_many({"machine_id": ObjectId(machine_id)})
+        await self.db.mes_daily_summary.delete_many({"machine_id": ObjectId(machine_id)})
 
     async def get_machines(self) -> list:
         machines = await self.db.mes_machines.find().to_list(500)
@@ -298,17 +314,28 @@ class MESService:
         now = datetime.now(timezone.utc)
         theoretical = machine.get("theoretical_cadence", 6)
         margin_pct = machine.get("downtime_margin_pct", 30)
+        esp32_mode = bool(machine.get("mqtt_topic_total"))
 
-        # Pulses last 60 seconds -> cp/min
-        t_1min = now - timedelta(seconds=60)
-        count_1min = await self.db.mes_pulses.count_documents({
-            "machine_id": mid, "timestamp": {"$gte": t_1min}
-        })
-
-        # Pour les machines de type cp/min, on préfère la valeur de cadence
-        # reçue directement plutôt que le comptage des impulsions synthétisées.
-        machine_type_for_cad = machine.get("type", "Imp")
-        if machine_type_for_cad == "cp/min":
+        # ===== Production today (compteur cumulé en mode ESP32) =====
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        if esp32_mode:
+            current_total = int(machine.get("current_total") or 0)
+            baseline = int(machine.get("total_baseline") or 0)
+            count_today = max(current_total - baseline, 0)
+            # production sur 24h glissantes : on lit le delta dans cadence_history
+            t_24h = now - timedelta(hours=24)
+            history_24h = await self.db.mes_cadence_history.find(
+                {"machine_id": mid, "timestamp": {"$gte": t_24h}, "total": {"$exists": True}},
+                {"timestamp": 1, "total": 1}
+            ).sort("timestamp", 1).to_list(2000)
+            if history_24h:
+                # max(current_total, dernier historique) - min(début historique)
+                first_total = history_24h[0].get("total", current_total)
+                count_24h = max(current_total - first_total, 0)
+            else:
+                count_24h = count_today
+            count_1h = await self._sum_production_window(mid, now - timedelta(hours=1), now, current_total)
+            # Cadence : valeur courante reçue
             current_cad = machine.get("current_cadence")
             cad_at = machine.get("current_cadence_at")
             if isinstance(cad_at, str):
@@ -318,29 +345,42 @@ class MESService:
                     cad_at = None
             if cad_at and cad_at.tzinfo is None:
                 cad_at = cad_at.replace(tzinfo=timezone.utc)
-            # Cadence considérée valide si reçue dans les 5 dernières minutes
             if current_cad is not None and cad_at and (now - cad_at).total_seconds() <= 300:
                 count_1min = round(float(current_cad), 1)
             else:
                 count_1min = 0
-
-        # Pulses last hour -> cp/h
-        t_1h = now - timedelta(hours=1)
-        count_1h = await self.db.mes_pulses.count_documents({
-            "machine_id": mid, "timestamp": {"$gte": t_1h}
-        })
-
-        # Pulses today (since midnight UTC)
-        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        count_today = await self.db.mes_pulses.count_documents({
-            "machine_id": mid, "timestamp": {"$gte": today_start}
-        })
-
-        # Pulses last 24h
-        t_24h = now - timedelta(hours=24)
-        count_24h = await self.db.mes_pulses.count_documents({
-            "machine_id": mid, "timestamp": {"$gte": t_24h}
-        })
+        else:
+            # Mode legacy : on compte les pulses
+            t_1min = now - timedelta(seconds=60)
+            count_1min = await self.db.mes_pulses.count_documents({
+                "machine_id": mid, "timestamp": {"$gte": t_1min}
+            })
+            machine_type_for_cad = machine.get("type", "Imp")
+            if machine_type_for_cad == "cp/min":
+                current_cad = machine.get("current_cadence")
+                cad_at = machine.get("current_cadence_at")
+                if isinstance(cad_at, str):
+                    try:
+                        cad_at = datetime.fromisoformat(cad_at.replace("Z", "+00:00"))
+                    except (ValueError, AttributeError):
+                        cad_at = None
+                if cad_at and cad_at.tzinfo is None:
+                    cad_at = cad_at.replace(tzinfo=timezone.utc)
+                if current_cad is not None and cad_at and (now - cad_at).total_seconds() <= 300:
+                    count_1min = round(float(current_cad), 1)
+                else:
+                    count_1min = 0
+            t_1h = now - timedelta(hours=1)
+            count_1h = await self.db.mes_pulses.count_documents({
+                "machine_id": mid, "timestamp": {"$gte": t_1h}
+            })
+            count_today = await self.db.mes_pulses.count_documents({
+                "machine_id": mid, "timestamp": {"$gte": today_start}
+            })
+            t_24h = now - timedelta(hours=24)
+            count_24h = await self.db.mes_pulses.count_documents({
+                "machine_id": mid, "timestamp": {"$gte": t_24h}
+            })
 
         # Downtime calculation
         last_pulse = machine.get("last_pulse_at")
@@ -454,13 +494,40 @@ class MESService:
         }
 
     async def _calc_downtime(self, machine_id, start, end, theoretical, margin_pct):
-        """Calculate total downtime between start and end"""
+        """Calcul du temps d'arrêt entre start et end.
+
+        Mode ESP32 : utilise mes_cadence_history (60s par doc).
+        Une minute où cadence=0 ET is_running=False compte comme arrêt.
+        Volume traité : ~1440 docs/jour/machine au lieu de millions de pulses.
+        """
+        machine = await self.db.mes_machines.find_one({"_id": machine_id})
+        esp32_mode = bool(machine and machine.get("mqtt_topic_total"))
+
+        if esp32_mode:
+            # Source de vérité : mes_cadence_history
+            cursor = self.db.mes_cadence_history.find(
+                {"machine_id": machine_id, "timestamp": {"$gte": start, "$lte": end}},
+                {"timestamp": 1, "cadence": 1, "is_running": 1}
+            ).sort("timestamp", 1)
+            docs = await cursor.to_list(200000)
+
+            if not docs:
+                return (end - start).total_seconds()
+
+            total_downtime = 0
+            for d in docs:
+                # Une minute = 60s ; si arrêt, on compte 60s
+                running = d.get("is_running")
+                if running is None:
+                    # Fallback : utiliser cadence
+                    running = (d.get("cadence", 0) or 0) > 0
+                if not running:
+                    total_downtime += 60
+            return total_downtime
+
+        # Mode legacy (Imp ou cp/min sans ESP32)
         expected_interval = 60.0 / theoretical if theoretical > 0 else 10
         threshold = expected_interval * (1 + margin_pct / 100)
-
-        # Note: allow_disk_use=True permet à MongoDB de trier sur disque si la
-        # plage retourne >100MB de données (cas des grosses installations MES
-        # avec plusieurs millions de pulses).
         cursor = self.db.mes_pulses.find(
             {"machine_id": machine_id, "timestamp": {"$gte": start, "$lte": end}},
             {"timestamp": 1}
@@ -474,7 +541,6 @@ class MESService:
         prev_time = start
         for p in pulses:
             ts = p["timestamp"]
-            # Correction : timestamp peut être une chaîne ISO en DB
             if isinstance(ts, str):
                 try:
                     ts = datetime.fromisoformat(ts.replace("Z", "+00:00"))
@@ -487,27 +553,29 @@ class MESService:
                 total_downtime += gap
             prev_time = ts
 
-        # Gap after last pulse
         gap = (end - prev_time).total_seconds()
         if gap > threshold:
             total_downtime += gap
-
         return total_downtime
 
     # ==================== CADENCE HISTORY ====================
 
     async def calculate_minute_cadence(self):
-        """Called every minute by background task to store cadence history"""
+        """Worker minute : enregistre cadence + total + état dans mes_cadence_history.
+        En mode ESP32 optimisé, c'est la SEULE source de vérité long terme — fini les pulses bruts.
+        """
         machines = await self.db.mes_machines.find({"active": True}).to_list(500)
         now = datetime.now(timezone.utc)
         t_1min = now - timedelta(seconds=60)
+        ts_minute = now.replace(second=0, microsecond=0)
 
         for machine in machines:
             mid = machine["_id"]
             mtype = machine.get("type", "Imp")
+            esp32_mode = bool(machine.get("mqtt_topic_total"))
 
             if mtype == "cp/min":
-                # Pour cp/min, on stocke la dernière cadence reçue (si encore valide)
+                # Validité de la cadence (reçue dans les 90 dernières secondes)
                 current_cad = machine.get("current_cadence")
                 cad_at = machine.get("current_cadence_at")
                 if isinstance(cad_at, str):
@@ -517,7 +585,6 @@ class MESService:
                         cad_at = None
                 if cad_at and cad_at.tzinfo is None:
                     cad_at = cad_at.replace(tzinfo=timezone.utc)
-                # Cadence valide si reçue dans la dernière minute (et machine active)
                 if current_cad is not None and cad_at and (now - cad_at).total_seconds() <= 90:
                     count = float(current_cad)
                 else:
@@ -527,12 +594,24 @@ class MESService:
                     "machine_id": mid, "timestamp": {"$gte": t_1min, "$lt": now}
                 })
 
-            await self.db.mes_cadence_history.insert_one({
+            # is_running : explicite si dispo, sinon dérivé de cadence
+            if machine.get("state_explicit"):
+                is_running = bool(machine.get("is_running", False))
+            else:
+                is_running = count > 0
+
+            doc = {
                 "machine_id": mid,
-                "timestamp": now.replace(second=0, microsecond=0),
+                "timestamp": ts_minute,
                 "cadence": count,
                 "theoretical": machine.get("theoretical_cadence", 0),
-            })
+                "is_running": is_running,
+            }
+            # Stocke aussi le compteur cumulé en mode ESP32 (pour delta journalier instantané)
+            if esp32_mode and machine.get("current_total") is not None:
+                doc["total"] = int(machine.get("current_total") or 0)
+
+            await self.db.mes_cadence_history.insert_one(doc)
 
             # Check alerts
             await self._check_alerts(machine, count, now)
@@ -825,6 +904,10 @@ class MESService:
             state_topic = machine.get("mqtt_topic_state")
             if state_topic:
                 topics.append(state_topic)
+            # Mode ESP32 optimisé : topic du compteur cumulé
+            total_topic = machine.get("mqtt_topic_total")
+            if total_topic:
+                topics.append(total_topic)
 
         if not topics or not self.mqtt_manager:
             return
@@ -898,7 +981,7 @@ class MESService:
         try:
             db_sync = mongo_client[db_name]
 
-            # 1) Recherche machine par topic principal (Imp ou cadence cp/min)
+            # 1) Topic principal (cadence ou impulsion)
             machine = db_sync.mes_machines.find_one({"mqtt_topic": topic, "active": True})
             if machine:
                 mtype = machine.get("type", "Imp")
@@ -908,14 +991,20 @@ class MESService:
                     self._record_pulse_machine_sync(db_sync, machine, payload)
                 return
 
-            # 2) Recherche machine par topic d'état (cp/min uniquement)
+            # 2) Topic d'état (cp/min uniquement)
             machine_state = db_sync.mes_machines.find_one({
-                "mqtt_topic_state": topic,
-                "type": "cp/min",
-                "active": True,
+                "mqtt_topic_state": topic, "type": "cp/min", "active": True,
             })
             if machine_state:
                 self._record_state_sync(db_sync, machine_state, payload)
+                return
+
+            # 3) Topic du compteur cumulé (mode ESP32 optimisé)
+            machine_total = db_sync.mes_machines.find_one({
+                "mqtt_topic_total": topic, "type": "cp/min", "active": True,
+            })
+            if machine_total:
+                self._record_total_sync(db_sync, machine_total, payload)
                 return
 
             logger.warning(f"[MES] ⚠️ Aucune machine trouvée pour le topic: {topic}")
@@ -945,9 +1034,14 @@ class MESService:
 
     def _record_direct_cadence_sync(self, db_sync, machine, payload: str):
         """Traite une cadence directe (cp/min) reçue.
-        Le payload est un nombre (entier ou décimal) représentant la cadence courante.
-        On stocke la valeur sur la machine et on synthétise des impulsions pour
-        rester compatible avec les calculs existants.
+        Le payload est un nombre représentant la cadence courante.
+
+        Comportement :
+        - Mode ESP32 optimisé (mqtt_topic_total renseigné) : on stocke uniquement
+          la cadence courante sur la machine. Aucune synthèse de pulses (la
+          production est suivie via le compteur total publié séparément).
+        - Mode legacy : synthèse de pulses pour rester compatible avec les
+          calculs existants (utilisé par les machines sans ESP32 publiant un total).
         """
         try:
             cadence_value = float(payload)
@@ -960,45 +1054,37 @@ class MESService:
 
         now = datetime.now(timezone.utc)
         mid = machine["_id"]
+        esp32_mode = bool(machine.get("mqtt_topic_total"))
 
-        # Récupère l'horodatage de la dernière cadence reçue pour calculer
-        # le nombre d'impulsions à synthétiser depuis la dernière mise à jour.
-        last_cad_at = machine.get("current_cadence_at") or machine.get("last_pulse_at")
-        if isinstance(last_cad_at, str):
-            try:
-                last_cad_at = datetime.fromisoformat(last_cad_at.replace("Z", "+00:00"))
-            except (ValueError, AttributeError):
-                last_cad_at = None
-        if last_cad_at and last_cad_at.tzinfo is None:
-            last_cad_at = last_cad_at.replace(tzinfo=timezone.utc)
+        if not esp32_mode:
+            # Mode legacy : on garde la synthèse de pulses pour rétro-compat
+            last_cad_at = machine.get("current_cadence_at") or machine.get("last_pulse_at")
+            if isinstance(last_cad_at, str):
+                try:
+                    last_cad_at = datetime.fromisoformat(last_cad_at.replace("Z", "+00:00"))
+                except (ValueError, AttributeError):
+                    last_cad_at = None
+            if last_cad_at and last_cad_at.tzinfo is None:
+                last_cad_at = last_cad_at.replace(tzinfo=timezone.utc)
 
-        # Synthétiser des impulsions correspondant aux pièces produites
-        # depuis la dernière mise à jour de cadence.
-        # Production = cadence (cp/min) * delta_minutes
-        # On limite delta à 5 min max pour éviter les "rattrapages" abusifs après une coupure.
-        if last_cad_at:
-            delta_seconds = (now - last_cad_at).total_seconds()
-            delta_seconds = max(0, min(delta_seconds, 300))  # cap 5 min
-        else:
-            delta_seconds = 60.0  # par défaut, 1 minute
+            if last_cad_at:
+                delta_seconds = (now - last_cad_at).total_seconds()
+                delta_seconds = max(0, min(delta_seconds, 300))
+            else:
+                delta_seconds = 60.0
 
-        # Utilise la cadence précédente pour la période écoulée (plus juste)
-        prev_cadence = float(machine.get("current_cadence", cadence_value) or cadence_value)
-        pulses_to_add = int(round(prev_cadence * delta_seconds / 60.0))
+            prev_cadence = float(machine.get("current_cadence", cadence_value) or cadence_value)
+            pulses_to_add = int(round(prev_cadence * delta_seconds / 60.0))
 
-        if pulses_to_add > 0:
-            # Distribuer les pulses uniformément sur la période écoulée
-            interval = delta_seconds / pulses_to_add if pulses_to_add > 0 else 0
-            base_ts = last_cad_at if last_cad_at else (now - timedelta(seconds=delta_seconds))
-            docs = [
-                {"machine_id": mid, "timestamp": base_ts + timedelta(seconds=interval * (i + 1))}
-                for i in range(pulses_to_add)
-            ]
-            db_sync.mes_pulses.insert_many(docs)
+            if pulses_to_add > 0:
+                interval = delta_seconds / pulses_to_add if pulses_to_add > 0 else 0
+                base_ts = last_cad_at if last_cad_at else (now - timedelta(seconds=delta_seconds))
+                docs = [
+                    {"machine_id": mid, "timestamp": base_ts + timedelta(seconds=interval * (i + 1))}
+                    for i in range(pulses_to_add)
+                ]
+                db_sync.mes_pulses.insert_many(docs)
 
-        # Détermine is_running : si l'état n'est pas explicitement contrôlé
-        # par mqtt_topic_state, on infère depuis la cadence (>0 = running).
-        # Si state_explicit, on conserve l'état déjà défini par le state topic.
         update_fields = {
             "current_cadence": cadence_value,
             "current_cadence_at": now,
@@ -1008,7 +1094,45 @@ class MESService:
             update_fields["is_running"] = cadence_value > 0
 
         db_sync.mes_machines.update_one({"_id": mid}, {"$set": update_fields})
-        logger.info(f"[MES] ✅ Cadence cp/min={cadence_value} (pulses synthétisés={pulses_to_add}) pour machine {mid}")
+
+    def _record_total_sync(self, db_sync, machine, payload: str):
+        """Mode ESP32 optimisé : reçoit le compteur cumulé de l'ESP32.
+        Stocke directement la valeur sur la machine, calcule un baseline
+        à minuit pour permettre le calcul de production journalière sans
+        avoir besoin de stocker chaque pulse.
+        """
+        try:
+            total_value = int(float(payload))
+        except ValueError:
+            logger.warning(f"[MES] ⚠️ Payload total non numérique: {payload}")
+            return
+
+        if total_value < 0:
+            total_value = 0
+
+        now = datetime.now(timezone.utc)
+        mid = machine["_id"]
+
+        # Initialise le baseline du jour si absent ou si on a changé de jour
+        baseline = machine.get("total_baseline")
+        baseline_at = machine.get("total_baseline_at")
+        if isinstance(baseline_at, str):
+            try:
+                baseline_at = datetime.fromisoformat(baseline_at.replace("Z", "+00:00"))
+            except (ValueError, AttributeError):
+                baseline_at = None
+        if baseline_at and baseline_at.tzinfo is None:
+            baseline_at = baseline_at.replace(tzinfo=timezone.utc)
+
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        update_fields = {"current_total": total_value, "current_total_at": now}
+
+        # Reset baseline si nouveau jour ou si l'ESP32 a redémarré (compteur recule)
+        if baseline_at is None or baseline_at < today_start or total_value < (baseline or 0):
+            update_fields["total_baseline"] = total_value
+            update_fields["total_baseline_at"] = now
+
+        db_sync.mes_machines.update_one({"_id": mid}, {"$set": update_fields})
 
     def _record_state_sync(self, db_sync, machine, payload: str):
         """Traite un message d'état explicite (ACTIVE / IDLE) pour une machine cp/min."""
@@ -1311,6 +1435,90 @@ class MESService:
 
     # ==================== DATA CLEANUP ====================
 
+    async def _sum_production_window(self, machine_id, start, end, current_total):
+        """Calcule la production sur une fenêtre [start, end] en mode ESP32.
+        Lit le delta dans mes_cadence_history.
+        """
+        history = await self.db.mes_cadence_history.find(
+            {"machine_id": machine_id, "timestamp": {"$gte": start, "$lte": end}, "total": {"$exists": True}},
+            {"total": 1}
+        ).sort("timestamp", 1).to_list(10000)
+        if not history:
+            return 0
+        first = history[0].get("total", current_total)
+        return max(int(current_total) - int(first), 0)
+
+    async def aggregate_daily_summary(self, target_date: datetime = None):
+        """Agrège les données d'un jour entier dans mes_daily_summary.
+        Appelé chaque jour à 00:05 (UTC) pour la veille, ou à la demande.
+        """
+        if target_date is None:
+            target_date = datetime.now(timezone.utc) - timedelta(days=1)
+        day_start = target_date.replace(hour=0, minute=0, second=0, microsecond=0)
+        day_end = day_start + timedelta(days=1)
+
+        machines = await self.db.mes_machines.find({}).to_list(500)
+        for machine in machines:
+            mid = machine["_id"]
+            theoretical = machine.get("theoretical_cadence", 0)
+
+            # Récupère tous les docs minute du jour
+            docs = await self.db.mes_cadence_history.find(
+                {"machine_id": mid, "timestamp": {"$gte": day_start, "$lt": day_end}},
+                {"cadence": 1, "is_running": 1, "total": 1, "timestamp": 1}
+            ).sort("timestamp", 1).to_list(2000)
+
+            if not docs:
+                continue
+
+            cadences = [d.get("cadence", 0) or 0 for d in docs]
+            cadence_avg = sum(cadences) / len(cadences) if cadences else 0
+            cadence_max = max(cadences) if cadences else 0
+
+            running_minutes = sum(1 for d in docs if d.get("is_running"))
+            idle_minutes = len(docs) - running_minutes
+
+            # Production journalière (delta total ou somme cadences * 1min)
+            production = 0
+            totals = [d.get("total") for d in docs if d.get("total") is not None]
+            if len(totals) >= 2:
+                production = max(totals[-1] - totals[0], 0)
+            else:
+                # Fallback : somme cadence par minute
+                production = int(round(sum(cadences) / 1.0))  # cadence est en cp/min
+
+            # Rebuts du jour
+            rejects = await self.get_rejects_total(mid, day_start, day_end)
+
+            # Alertes du jour
+            alerts_count = await self.db.mes_alerts.count_documents({
+                "machine_id": mid, "created_at": {"$gte": day_start, "$lt": day_end}
+            })
+
+            summary = {
+                "machine_id": mid,
+                "date": day_start,
+                "production": int(production),
+                "good_parts": max(int(production) - int(rejects), 0),
+                "rejects": int(rejects),
+                "running_minutes": running_minutes,
+                "idle_minutes": idle_minutes,
+                "running_seconds": running_minutes * 60,
+                "idle_seconds": idle_minutes * 60,
+                "cadence_avg": round(cadence_avg, 2),
+                "cadence_max": round(cadence_max, 2),
+                "theoretical": theoretical,
+                "alerts_count": alerts_count,
+                "computed_at": datetime.now(timezone.utc),
+            }
+            # Upsert pour pouvoir relancer sur le même jour
+            await self.db.mes_daily_summary.update_one(
+                {"machine_id": mid, "date": day_start},
+                {"$set": summary},
+                upsert=True,
+            )
+        logger.info(f"[MES] ✅ Daily summary calculé pour {day_start.date()} ({len(machines)} machines)")
+
     DEFAULT_RETENTION_DAYS = 365
     MIN_RETENTION_DAYS = 7
     MAX_RETENTION_DAYS = 3650  # 10 ans
@@ -1333,7 +1541,11 @@ class MESService:
         return days
 
     async def cleanup_old_data(self):
-        """Remove pulses older than the configured retention period."""
+        """Politique de rétention multi-niveaux :
+        - mes_pulses : conservé jusqu'à `retention_days` (legacy uniquement, sera vidé pour ESP32)
+        - mes_cadence_history : conservé pour `retention_days` (granularité minute)
+        - mes_daily_summary : JAMAIS purgé (granularité jour, négligeable en volume)
+        """
         days = await self.get_retention_days()
         cutoff = datetime.now(timezone.utc) - timedelta(days=days)
         r1 = await self.db.mes_pulses.delete_many({"timestamp": {"$lt": cutoff}})

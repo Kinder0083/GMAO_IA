@@ -1835,10 +1835,17 @@ async def startup_scheduler():
                 _mes_ref.cleanup_old_data,
                 CronTrigger(hour=4, minute=0),
                 id='mes_cleanup',
-                name='M.E.S - Nettoyage données > 1 an',
+                name='M.E.S - Nettoyage données > rétention',
                 replace_existing=True
             )
-            logger.info("   - M.E.S cadence: chaque minute")
+            scheduler.add_job(
+                _mes_ref.aggregate_daily_summary,
+                CronTrigger(hour=0, minute=5),
+                id='mes_daily_summary',
+                name='M.E.S - Agrégation journalière (jour précédent)',
+                replace_existing=True
+            )
+            logger.info("   - M.E.S cadence: chaque minute, daily summary: 00:05, cleanup: 04:00")
         
         # Auto-connexion MQTT si configuré (DOIT être fait AVANT les abonnements M.E.S.)
         mqtt_connected = False

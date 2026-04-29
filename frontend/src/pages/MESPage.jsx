@@ -1002,6 +1002,7 @@ const MachineSettingsModal = ({ machine, onClose }) => {
     sensor_ip: machine.sensor_ip || '',
     mqtt_topic: machine.mqtt_topic || '',
     mqtt_topic_state: machine.mqtt_topic_state || '',
+    mqtt_topic_total: machine.mqtt_topic_total || '',
     type: machine.type || 'Imp',
     equipment_id: machine.equipment_id || '',
     sub_equipment_id: machine.sub_equipment_id || '',
@@ -1270,7 +1271,7 @@ const MachineSettingsModal = ({ machine, onClose }) => {
               <div>
                 <label className="text-xs font-medium text-gray-600">Type</label>
                 <select value={form.type || 'Imp'}
-                  onChange={e => setForm(prev => ({ ...prev, type: e.target.value, mqtt_topic_state: e.target.value === 'Imp' ? '' : prev.mqtt_topic_state }))}
+                  onChange={e => setForm(prev => ({ ...prev, type: e.target.value, mqtt_topic_state: e.target.value === 'Imp' ? '' : prev.mqtt_topic_state, mqtt_topic_total: e.target.value === 'Imp' ? '' : prev.mqtt_topic_total }))}
                   disabled={readOnly}
                   className={`w-full mt-1 px-3 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-indigo-500 ${readOnly ? 'bg-gray-50 text-gray-500 cursor-not-allowed' : ''}`}
                   data-testid="mes-setting-type">
@@ -1280,8 +1281,15 @@ const MachineSettingsModal = ({ machine, onClose }) => {
               </div>
             </div>
             {form.type === 'cp/min' && (
-              <SettingsField label="Topic etat (ACTIVE/IDLE)" field="mqtt_topic_state" type="text"
-                value={form.mqtt_topic_state} onChange={handleChange('mqtt_topic_state', 'text')} readOnly={readOnly} />
+              <>
+                <SettingsField label="Topic etat (ACTIVE/IDLE)" field="mqtt_topic_state" type="text"
+                  value={form.mqtt_topic_state} onChange={handleChange('mqtt_topic_state', 'text')} readOnly={readOnly} />
+                <SettingsField label="Topic compteur cumulé (ESP32, optionnel)" field="mqtt_topic_total" type="text"
+                  value={form.mqtt_topic_total} onChange={handleChange('mqtt_topic_total', 'text')} readOnly={readOnly} />
+                {form.mqtt_topic_total && (
+                  <p className="text-xs text-emerald-600 -mt-2 ml-1">⚡ Mode ESP32 actif : production suivie via le compteur cumulé (zéro pulse stocké).</p>
+                )}
+              </>
             )}
             <SettingsField label="Adresse IP capteur" field="sensor_ip" type="text"
               value={form.sensor_ip} onChange={handleChange('sensor_ip', 'text')} readOnly={readOnly} />
@@ -1498,7 +1506,7 @@ const CreateMachineModal = ({ onClose, onCreated }) => {
   const [loadingChildren, setLoadingChildren] = useState(false);
   const [form, setForm] = useState({
     equipment_id: '', sub_equipment_id: '',
-    mqtt_topic: '', mqtt_topic_state: '', type: 'Imp',
+    mqtt_topic: '', mqtt_topic_state: '', mqtt_topic_total: '', type: 'Imp',
     sensor_ip: '', theoretical_cadence: 6,
     downtime_margin_pct: 30, alert_stopped_minutes: 5, alert_no_signal_minutes: 10,
     alert_under_cadence: 0, alert_over_cadence: 0, alert_daily_target: 0,
@@ -1602,7 +1610,7 @@ const CreateMachineModal = ({ onClose, onCreated }) => {
             <div>
               <label className="text-xs font-medium text-gray-600">Type *</label>
               <select value={form.type}
-                onChange={e => setForm({ ...form, type: e.target.value, mqtt_topic_state: e.target.value === 'Imp' ? '' : form.mqtt_topic_state })}
+                onChange={e => setForm({ ...form, type: e.target.value, mqtt_topic_state: e.target.value === 'Imp' ? '' : form.mqtt_topic_state, mqtt_topic_total: e.target.value === 'Imp' ? '' : form.mqtt_topic_total })}
                 className="w-full mt-1 px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-indigo-500"
                 data-testid="mes-select-type">
                 <option value="Imp">Imp (impulsion 1/0)</option>
@@ -1611,14 +1619,26 @@ const CreateMachineModal = ({ onClose, onCreated }) => {
             </div>
           </div>
           {form.type === 'cp/min' && (
-            <div>
-              <label className="text-xs font-medium text-gray-600">Topic etat (ACTIVE/IDLE) *</label>
-              <input type="text" value={form.mqtt_topic_state} placeholder="factory/machine1/state"
-                onChange={e => setForm({ ...form, mqtt_topic_state: e.target.value })}
-                className="w-full mt-1 px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-indigo-500"
-                data-testid="mes-input-mqtt-topic-state" />
-              <p className="text-xs text-gray-500 mt-1">Topic MQTT séparé recevant "ACTIVE" ou "IDLE"</p>
-            </div>
+            <>
+              <div>
+                <label className="text-xs font-medium text-gray-600">Topic etat (ACTIVE/IDLE) *</label>
+                <input type="text" value={form.mqtt_topic_state} placeholder="atelier/machine1/etat_machine"
+                  onChange={e => setForm({ ...form, mqtt_topic_state: e.target.value })}
+                  className="w-full mt-1 px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  data-testid="mes-input-mqtt-topic-state" />
+                <p className="text-xs text-gray-500 mt-1">Topic MQTT séparé recevant "ACTIVE" ou "IDLE"</p>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-600">
+                  Topic compteur cumulé <span className="text-gray-400 font-normal">(optionnel mais recommandé)</span>
+                </label>
+                <input type="text" value={form.mqtt_topic_total} placeholder="atelier/machine1/total"
+                  onChange={e => setForm({ ...form, mqtt_topic_total: e.target.value })}
+                  className="w-full mt-1 px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  data-testid="mes-input-mqtt-topic-total" />
+                <p className="text-xs text-emerald-600 mt-1">⚡ Mode ESP32 optimisé : si renseigné, la production est suivie via le compteur cumulé. Aucune impulsion stockée en BDD (volumétrie ÷ 100).</p>
+              </div>
+            </>
           )}
           <div>
             <label className="text-xs font-medium text-gray-600">IP capteur</label>
