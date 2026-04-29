@@ -203,6 +203,17 @@ async def cleanup_now(current_user: dict = Depends(get_current_admin_user)):
     return {"success": True, **(result or {})}
 
 
+# ==================== RAPPORTS DE POSTE (3×8) ====================
+
+@router.get("/machines/{machine_id}/shifts",
+    summary="Rapports de poste 3×8 d'une machine",
+    description="Liste les derniers rapports de poste reçus depuis l'ESP32 via topic shift_end.",
+    responses={**STANDARD_ERRORS}
+)
+async def get_machine_shifts(machine_id: str, limit: int = 30, current_user: dict = Depends(get_current_user)):
+    return await mes_service.get_shift_summaries(machine_id, limit=limit)
+
+
 # ==================== REJECT REASONS (Admin) ====================
 
 @router.get("/reject-reasons",

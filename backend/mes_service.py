@@ -66,7 +66,12 @@ class MESService:
                 unique=True,
                 background=True,
             )
-            logger.info("[MES] ✅ Index assurés sur mes_pulses, mes_cadence_history, mes_alerts, mes_daily_summary")
+            await self.db.mes_shift_summary.create_index(
+                [("machine_id", 1), ("ended_at", -1)],
+                name="machine_id_ended_at_idx",
+                background=True,
+            )
+            logger.info("[MES] ✅ Index assurés sur mes_pulses, mes_cadence_history, mes_alerts, mes_daily_summary, mes_shift_summary")
         except Exception as e:
             logger.warning(f"[MES] ⚠️ Création des index échouée (non bloquant): {e}")
 
@@ -92,6 +97,9 @@ class MESService:
             # publié par l'ESP32 plutôt que de synthétiser des pulses en BDD.
             # Cela divise la volumétrie par 100+ pour les installations à grosse cadence.
             "mqtt_topic_total": data.get("mqtt_topic_total", "") if machine_type == "cp/min" else "",
+            # Topic de fin de poste (3×8) : reçoit un JSON {ts, total_final, event} à chaque
+            # changement de poste (5h, 13h, 21h). Permet de générer des rapports par équipe.
+            "mqtt_topic_shift_end": data.get("mqtt_topic_shift_end", "") if machine_type == "cp/min" else "",
             "current_total": 0,
             "current_total_at": None,
             "total_baseline": 0,  # total à minuit (pour calculer la production du jour)
@@ -137,6 +145,7 @@ class MESService:
             "trs_target": float,
             "mqtt_topic_state": str,
             "mqtt_topic_total": str,
+            "mqtt_topic_shift_end": str,
         }
         for field, cast in fields_map.items():
             if field in data:
@@ -205,7 +214,7 @@ class MESService:
     async def delete_machine(self, machine_id: str):
         machine = await self.db.mes_machines.find_one({"_id": ObjectId(machine_id)})
         if machine and self.mqtt_manager:
-            for tkey in ("mqtt_topic", "mqtt_topic_state", "mqtt_topic_total"):
+            for tkey in ("mqtt_topic", "mqtt_topic_state", "mqtt_topic_total", "mqtt_topic_shift_end"):
                 t = machine.get(tkey)
                 if t and t in self._subscribed_topics:
                     self.mqtt_manager.unsubscribe(t)
@@ -215,6 +224,7 @@ class MESService:
         await self.db.mes_cadence_history.delete_many({"machine_id": ObjectId(machine_id)})
         await self.db.mes_alerts.delete_many({"machine_id": ObjectId(machine_id)})
         await self.db.mes_daily_summary.delete_many({"machine_id": ObjectId(machine_id)})
+        await self.db.mes_shift_summary.delete_many({"machine_id": ObjectId(machine_id)})
 
     async def get_machines(self) -> list:
         machines = await self.db.mes_machines.find().to_list(500)
@@ -908,6 +918,10 @@ class MESService:
             total_topic = machine.get("mqtt_topic_total")
             if total_topic:
                 topics.append(total_topic)
+            # Topic de fin de poste (rapport 3×8 automatique)
+            shift_topic = machine.get("mqtt_topic_shift_end")
+            if shift_topic:
+                topics.append(shift_topic)
 
         if not topics or not self.mqtt_manager:
             return
@@ -1005,6 +1019,14 @@ class MESService:
             })
             if machine_total:
                 self._record_total_sync(db_sync, machine_total, payload)
+                return
+
+            # 4) Topic de fin de poste (3×8) — payload JSON {ts, total_final, event}
+            machine_shift = db_sync.mes_machines.find_one({
+                "mqtt_topic_shift_end": topic, "active": True,
+            })
+            if machine_shift:
+                self._record_shift_end_sync(db_sync, machine_shift, payload)
                 return
 
             logger.warning(f"[MES] ⚠️ Aucune machine trouvée pour le topic: {topic}")
@@ -1133,6 +1155,132 @@ class MESService:
             update_fields["total_baseline_at"] = now
 
         db_sync.mes_machines.update_one({"_id": mid}, {"$set": update_fields})
+
+    # ---- Mapping heure UTC du shift_end → libellé du poste qui se termine ----
+    # ESP32 envoie shift_end à 05:00, 13:00, 21:00 (heure locale).
+    # Comme ESP32 émet en heure locale ISO sans TZ, on s'appuie sur l'heure
+    # locale du serveur pour déterminer le poste. Tolérance de ±90 min.
+    SHIFT_BOUNDARIES = [
+        (5,  "nuit",   21, 5),    # arrivée 05:00 → fin du poste de NUIT (21h-05h)
+        (13, "matin",  5,  13),   # arrivée 13:00 → fin du poste de MATIN (05h-13h)
+        (21, "aprem",  13, 21),   # arrivée 21:00 → fin du poste APRES-MIDI (13h-21h)
+    ]
+
+    def _detect_shift(self, ts_local: datetime):
+        """Renvoie (label, start_hour, end_hour) du poste qui se termine
+        en fonction de l'heure de réception."""
+        h = ts_local.hour + ts_local.minute / 60
+        # On cherche la frontière la plus proche
+        best = None
+        best_dist = 99
+        for boundary, label, start_h, end_h in self.SHIFT_BOUNDARIES:
+            dist = min(abs(h - boundary), abs(h - boundary - 24), abs(h - boundary + 24))
+            if dist < best_dist:
+                best_dist = dist
+                best = (label, start_h, end_h)
+        return best
+
+    def _record_shift_end_sync(self, db_sync, machine, payload: str):
+        """Traite un message shift_end (3×8) publié par l'ESP32.
+        Payload attendu : {"ts":"2026-04-29T05:00:00","total_final":1578,"event":"shift_end"}
+        """
+        import json as _json
+        try:
+            data = _json.loads(payload)
+        except (ValueError, TypeError) as e:
+            logger.warning(f"[MES] ⚠️ Payload shift_end non-JSON: {payload[:120]} ({e})")
+            return
+
+        if data.get("event") != "shift_end":
+            logger.info(f"[MES] shift_end ignoré (event != shift_end): {data}")
+            return
+
+        # Parse le timestamp de fin (heure locale ISO sans TZ)
+        ts_str = data.get("ts")
+        try:
+            ts_end = datetime.fromisoformat(ts_str) if ts_str else datetime.now()
+        except (ValueError, TypeError):
+            ts_end = datetime.now()
+
+        # Stocke en UTC. L'ESP32 émet en heure locale, on suppose le même fuseau
+        # que le serveur (sinon, l'admin doit aligner les TZ).
+        if ts_end.tzinfo is None:
+            ts_end = ts_end.astimezone(timezone.utc) if hasattr(ts_end, 'astimezone') else ts_end.replace(tzinfo=timezone.utc)
+
+        total_final = int(data.get("total_final", 0) or 0)
+        mid = machine["_id"]
+
+        # Détection du poste qui se termine
+        shift_info = self._detect_shift(ts_end)
+        if shift_info is None:
+            logger.warning(f"[MES] ⚠️ Impossible de déterminer le poste pour {ts_end}")
+            return
+        shift_label, start_h, end_h = shift_info
+
+        # Calcul de la fenêtre du poste (en remontant)
+        shift_start = ts_end.replace(minute=0, second=0, microsecond=0)
+        # Si l'arrivée est à 05:00 → poste 21h-05h commence la veille à 21:00
+        if start_h > end_h:  # poste de nuit (21h → 05h)
+            shift_start = shift_start - timedelta(hours=8)
+        else:
+            shift_start = shift_start - timedelta(hours=(end_h - start_h))
+
+        # Calculer la production réelle du poste : delta entre total_final
+        # et le dernier shift_summary connu (ou 0 si premier shift)
+        last_shift = db_sync.mes_shift_summary.find_one(
+            {"machine_id": mid},
+            sort=[("ended_at", -1)]
+        )
+        if last_shift and last_shift.get("total_final") is not None:
+            production = max(total_final - int(last_shift["total_final"]), 0)
+        else:
+            production = total_final
+
+        # Récupère cadence moyenne du poste depuis cadence_history
+        cad_docs = list(db_sync.mes_cadence_history.find(
+            {"machine_id": mid, "timestamp": {"$gte": shift_start, "$lt": ts_end}},
+            {"cadence": 1, "is_running": 1}
+        ))
+        running_minutes = sum(1 for d in cad_docs if d.get("is_running"))
+        cadences = [d.get("cadence", 0) or 0 for d in cad_docs]
+        cad_avg = round(sum(cadences) / len(cadences), 2) if cadences else 0
+        cad_max = max(cadences) if cadences else 0
+        idle_minutes = max(len(cad_docs) - running_minutes, 0)
+
+        # Comptage rebuts du poste
+        rejects_count = db_sync.mes_rejects.count_documents({
+            "machine_id": mid, "timestamp": {"$gte": shift_start, "$lt": ts_end}
+        }) if "mes_rejects" in db_sync.list_collection_names() else 0
+
+        # Alertes du poste
+        alerts_count = db_sync.mes_alerts.count_documents({
+            "machine_id": mid, "created_at": {"$gte": shift_start, "$lt": ts_end}
+        })
+
+        summary = {
+            "machine_id": mid,
+            "shift_label": shift_label,
+            "started_at": shift_start,
+            "ended_at": ts_end,
+            "production": production,
+            "total_final": total_final,
+            "good_parts": max(production - rejects_count, 0),
+            "rejects": rejects_count,
+            "running_minutes": running_minutes,
+            "idle_minutes": idle_minutes,
+            "cadence_avg": cad_avg,
+            "cadence_max": cad_max,
+            "alerts_count": alerts_count,
+            "received_at": datetime.now(timezone.utc),
+        }
+
+        # Upsert sur (machine_id, ended_at) pour idempotence
+        db_sync.mes_shift_summary.update_one(
+            {"machine_id": mid, "ended_at": ts_end},
+            {"$set": summary},
+            upsert=True,
+        )
+        logger.info(f"[MES] ✅ Shift {shift_label} clôturé pour machine {mid}: production={production}, cad_avg={cad_avg}")
 
     def _record_state_sync(self, db_sync, machine, payload: str):
         """Traite un message d'état explicite (ACTIVE / IDLE) pour une machine cp/min."""
@@ -1432,6 +1580,23 @@ class MESService:
 
     async def delete_reject(self, reject_id: str):
         await self.db.mes_rejects.delete_one({"_id": ObjectId(reject_id)})
+
+    async def get_shift_summaries(self, machine_id: str, limit: int = 30) -> list:
+        """Récupère les N derniers rapports de poste d'une machine (3×8)."""
+        cursor = self.db.mes_shift_summary.find(
+            {"machine_id": ObjectId(machine_id)}
+        ).sort("ended_at", -1).limit(int(limit))
+        docs = await cursor.to_list(int(limit))
+        result = []
+        for d in docs:
+            d["_id"] = str(d["_id"])
+            d["machine_id"] = str(d["machine_id"])
+            for k in ("started_at", "ended_at", "received_at"):
+                v = d.get(k)
+                if isinstance(v, datetime):
+                    d[k] = v.isoformat()
+            result.append(d)
+        return result
 
     # ==================== DATA CLEANUP ====================
 

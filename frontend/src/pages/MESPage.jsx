@@ -647,6 +647,96 @@ const MachineCard = ({ machine, onSelect, onDelete }) => {
   );
 };
 
+// ==================== SHIFTS PANEL (3×8) ====================
+const ShiftsPanel = ({ machineId }) => {
+  const [shifts, setShifts] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let alive = true;
+    const load = async () => {
+      try {
+        const { data } = await axios.get(`${API}/api/mes/machines/${machineId}/shifts?limit=15`, { headers: getHeaders() });
+        if (alive) setShifts(Array.isArray(data) ? data : []);
+      } catch {
+        if (alive) setShifts([]);
+      } finally {
+        if (alive) setLoading(false);
+      }
+    };
+    load();
+    const interval = setInterval(load, 60000); // refresh chaque minute
+    return () => { alive = false; clearInterval(interval); };
+  }, [machineId]);
+
+  const labelStyle = (label) => {
+    if (label === 'matin') return 'bg-amber-100 text-amber-800 border-amber-200';
+    if (label === 'aprem') return 'bg-orange-100 text-orange-800 border-orange-200';
+    if (label === 'nuit') return 'bg-indigo-100 text-indigo-800 border-indigo-200';
+    return 'bg-gray-100 text-gray-700 border-gray-200';
+  };
+
+  const formatTime = (iso) => {
+    if (!iso) return '--:--';
+    try { return new Date(iso).toLocaleString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }); }
+    catch { return iso; }
+  };
+
+  return (
+    <Card data-testid="mes-shifts-panel">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Clock className="h-5 w-5 text-indigo-600" />
+          Rapports de poste (3×8)
+          <span className="text-sm font-normal text-gray-500 ml-1">— derniers postes clôturés par l'ESP32</span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {loading ? (
+          <div className="flex justify-center py-6"><Loader2 className="h-6 w-6 animate-spin text-indigo-500" /></div>
+        ) : shifts.length === 0 ? (
+          <p className="text-sm text-gray-500 text-center py-6">Aucun rapport de poste reçu pour le moment. Le prochain `shift_end` MQTT générera automatiquement un rapport.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-xs uppercase text-gray-500 border-b">
+                <tr>
+                  <th className="text-left py-2 pr-3">Poste</th>
+                  <th className="text-left py-2 pr-3">Début</th>
+                  <th className="text-left py-2 pr-3">Fin</th>
+                  <th className="text-right py-2 pr-3">Production</th>
+                  <th className="text-right py-2 pr-3">Bons</th>
+                  <th className="text-right py-2 pr-3">Rebuts</th>
+                  <th className="text-right py-2 pr-3">Cadence moy.</th>
+                  <th className="text-right py-2">Temps actif</th>
+                </tr>
+              </thead>
+              <tbody>
+                {shifts.map(s => (
+                  <tr key={s._id} className="border-b last:border-b-0 hover:bg-gray-50">
+                    <td className="py-2 pr-3">
+                      <span className={`inline-block px-2 py-0.5 rounded-full border text-xs font-semibold uppercase ${labelStyle(s.shift_label)}`}>
+                        {s.shift_label || '?'}
+                      </span>
+                    </td>
+                    <td className="py-2 pr-3 font-mono text-xs">{formatTime(s.started_at)}</td>
+                    <td className="py-2 pr-3 font-mono text-xs">{formatTime(s.ended_at)}</td>
+                    <td className="py-2 pr-3 text-right font-semibold">{(s.production || 0).toLocaleString('fr-FR')}</td>
+                    <td className="py-2 pr-3 text-right text-green-700">{(s.good_parts || 0).toLocaleString('fr-FR')}</td>
+                    <td className="py-2 pr-3 text-right text-red-600">{s.rejects || 0}</td>
+                    <td className="py-2 pr-3 text-right">{s.cadence_avg || 0} <span className="text-xs text-gray-500">cp/min</span></td>
+                    <td className="py-2 text-right text-xs text-gray-600">{Math.round((s.running_minutes || 0) / 60 * 10) / 10}h</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+};
+
 // ==================== MACHINE DASHBOARD ====================
 const MachineDashboard = ({ machineId, onBack }) => {
   const [machine, setMachine] = useState(null);
@@ -969,6 +1059,9 @@ const MachineDashboard = ({ machineId, onBack }) => {
         </CardContent>
       </Card>
 
+      {/* Rapports de poste 3×8 (visible si shift_end configuré) */}
+      {machine.mqtt_topic_shift_end && <ShiftsPanel machineId={machineId} />}
+
       {/* Settings Modal */}
       {editing && <MachineSettingsModal machine={machine} onClose={() => { setEditing(false); loadMachine(); loadMetrics(); }} />}
     </div>
@@ -1003,6 +1096,7 @@ const MachineSettingsModal = ({ machine, onClose }) => {
     mqtt_topic: machine.mqtt_topic || '',
     mqtt_topic_state: machine.mqtt_topic_state || '',
     mqtt_topic_total: machine.mqtt_topic_total || '',
+    mqtt_topic_shift_end: machine.mqtt_topic_shift_end || '',
     type: machine.type || 'Imp',
     equipment_id: machine.equipment_id || '',
     sub_equipment_id: machine.sub_equipment_id || '',
@@ -1271,7 +1365,7 @@ const MachineSettingsModal = ({ machine, onClose }) => {
               <div>
                 <label className="text-xs font-medium text-gray-600">Type</label>
                 <select value={form.type || 'Imp'}
-                  onChange={e => setForm(prev => ({ ...prev, type: e.target.value, mqtt_topic_state: e.target.value === 'Imp' ? '' : prev.mqtt_topic_state, mqtt_topic_total: e.target.value === 'Imp' ? '' : prev.mqtt_topic_total }))}
+                  onChange={e => setForm(prev => ({ ...prev, type: e.target.value, mqtt_topic_state: e.target.value === 'Imp' ? '' : prev.mqtt_topic_state, mqtt_topic_total: e.target.value === 'Imp' ? '' : prev.mqtt_topic_total, mqtt_topic_shift_end: e.target.value === 'Imp' ? '' : prev.mqtt_topic_shift_end }))}
                   disabled={readOnly}
                   className={`w-full mt-1 px-3 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-indigo-500 ${readOnly ? 'bg-gray-50 text-gray-500 cursor-not-allowed' : ''}`}
                   data-testid="mes-setting-type">
@@ -1288,6 +1382,11 @@ const MachineSettingsModal = ({ machine, onClose }) => {
                   value={form.mqtt_topic_total} onChange={handleChange('mqtt_topic_total', 'text')} readOnly={readOnly} />
                 {form.mqtt_topic_total && (
                   <p className="text-xs text-emerald-600 -mt-2 ml-1">⚡ Mode ESP32 actif : production suivie via le compteur cumulé (zéro pulse stocké).</p>
+                )}
+                <SettingsField label="Topic fin de poste 3×8 (optionnel)" field="mqtt_topic_shift_end" type="text"
+                  value={form.mqtt_topic_shift_end} onChange={handleChange('mqtt_topic_shift_end', 'text')} readOnly={readOnly} />
+                {form.mqtt_topic_shift_end && (
+                  <p className="text-xs text-blue-600 -mt-2 ml-1">📊 Rapports automatiques par poste (matin/aprem/nuit).</p>
                 )}
               </>
             )}
@@ -1506,7 +1605,7 @@ const CreateMachineModal = ({ onClose, onCreated }) => {
   const [loadingChildren, setLoadingChildren] = useState(false);
   const [form, setForm] = useState({
     equipment_id: '', sub_equipment_id: '',
-    mqtt_topic: '', mqtt_topic_state: '', mqtt_topic_total: '', type: 'Imp',
+    mqtt_topic: '', mqtt_topic_state: '', mqtt_topic_total: '', mqtt_topic_shift_end: '', type: 'Imp',
     sensor_ip: '', theoretical_cadence: 6,
     downtime_margin_pct: 30, alert_stopped_minutes: 5, alert_no_signal_minutes: 10,
     alert_under_cadence: 0, alert_over_cadence: 0, alert_daily_target: 0,
@@ -1610,7 +1709,7 @@ const CreateMachineModal = ({ onClose, onCreated }) => {
             <div>
               <label className="text-xs font-medium text-gray-600">Type *</label>
               <select value={form.type}
-                onChange={e => setForm({ ...form, type: e.target.value, mqtt_topic_state: e.target.value === 'Imp' ? '' : form.mqtt_topic_state, mqtt_topic_total: e.target.value === 'Imp' ? '' : form.mqtt_topic_total })}
+                onChange={e => setForm({ ...form, type: e.target.value, mqtt_topic_state: e.target.value === 'Imp' ? '' : form.mqtt_topic_state, mqtt_topic_total: e.target.value === 'Imp' ? '' : form.mqtt_topic_total, mqtt_topic_shift_end: e.target.value === 'Imp' ? '' : form.mqtt_topic_shift_end })}
                 className="w-full mt-1 px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-indigo-500"
                 data-testid="mes-select-type">
                 <option value="Imp">Imp (impulsion 1/0)</option>
@@ -1637,6 +1736,16 @@ const CreateMachineModal = ({ onClose, onCreated }) => {
                   className="w-full mt-1 px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-indigo-500"
                   data-testid="mes-input-mqtt-topic-total" />
                 <p className="text-xs text-emerald-600 mt-1">⚡ Mode ESP32 optimisé : si renseigné, la production est suivie via le compteur cumulé. Aucune impulsion stockée en BDD (volumétrie ÷ 100).</p>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-600">
+                  Topic fin de poste 3×8 <span className="text-gray-400 font-normal">(optionnel)</span>
+                </label>
+                <input type="text" value={form.mqtt_topic_shift_end} placeholder="atelier/machine1/shift_end"
+                  onChange={e => setForm({ ...form, mqtt_topic_shift_end: e.target.value })}
+                  className="w-full mt-1 px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  data-testid="mes-input-mqtt-topic-shift-end" />
+                <p className="text-xs text-blue-600 mt-1">📊 Génère automatiquement un rapport par poste (matin/aprem/nuit) à 05:00, 13:00, 21:00.</p>
               </div>
             </>
           )}
