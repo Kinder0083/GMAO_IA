@@ -2092,6 +2092,255 @@ class MESService:
             {"$set": {"last_sent_at": datetime.now(timezone.utc)}}
         )
 
+    # ==================== REPORTS V2 — Multi-machines aggregations ====================
+
+    @staticmethod
+    def _resolve_period(period: str):
+        """Renvoie (start, end, prev_start, prev_end) pour la période demandée."""
+        now = datetime.now(timezone.utc)
+        today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        if period == "today":
+            start, end = today, now
+            prev_start, prev_end = today - timedelta(days=1), today
+        elif period == "yesterday":
+            start, end = today - timedelta(days=1), today
+            prev_start, prev_end = today - timedelta(days=2), today - timedelta(days=1)
+        elif period == "week":
+            start = today - timedelta(days=today.weekday())
+            end = now
+            prev_start, prev_end = start - timedelta(days=7), start
+        elif period == "last_week":
+            this_monday = today - timedelta(days=today.weekday())
+            start, end = this_monday - timedelta(days=7), this_monday
+            prev_start, prev_end = start - timedelta(days=7), start
+        elif period == "month":
+            start, end = today.replace(day=1), now
+            prev_start = (start - timedelta(days=1)).replace(day=1)
+            prev_end = start
+        elif period == "last_month":
+            first_this = today.replace(day=1)
+            start = (first_this - timedelta(days=1)).replace(day=1)
+            end = first_this
+            prev_start = (start - timedelta(days=1)).replace(day=1)
+            prev_end = start
+        else:
+            start = today - timedelta(days=7)
+            end = now
+            prev_start, prev_end = start - timedelta(days=7), start
+        return start, end, prev_start, prev_end
+
+    async def _aggregate_kpis_for_machines(self, machine_ids, start, end):
+        """Lit mes_daily_summary pour la période et calcule les KPI agrégés."""
+        match = {"date": {"$gte": start, "$lt": end}}
+        if machine_ids:
+            ids_obj = [ObjectId(mid) if not isinstance(mid, ObjectId) else mid for mid in machine_ids]
+            match["machine_id"] = {"$in": ids_obj}
+        docs = await self.db.mes_daily_summary.find(match, {
+            "machine_id": 1, "date": 1, "production": 1, "good_parts": 1, "rejects": 1,
+            "running_minutes": 1, "idle_minutes": 1, "cadence_avg": 1, "theoretical": 1,
+            "alerts_count": 1
+        }).to_list(20000)
+
+        total_prod = sum(d.get("production", 0) or 0 for d in docs)
+        total_good = sum(d.get("good_parts", 0) or 0 for d in docs)
+        total_rejects = sum(d.get("rejects", 0) or 0 for d in docs)
+        running = sum(d.get("running_minutes", 0) or 0 for d in docs)
+        idle = sum(d.get("idle_minutes", 0) or 0 for d in docs)
+        alerts = sum(d.get("alerts_count", 0) or 0 for d in docs)
+
+        availability = running / (running + idle) if (running + idle) > 0 else 0
+        quality = (total_good / total_prod) if total_prod > 0 else 1.0
+        prod_theo = sum((d.get("theoretical", 0) or 0) * (d.get("running_minutes", 0) or 0) for d in docs)
+        performance = (total_prod / prod_theo) if prod_theo > 0 else 0
+        trs = round(availability * quality * performance * 100, 1)
+
+        return {
+            "production": total_prod,
+            "good_parts": total_good,
+            "rejects": total_rejects,
+            "rejects_pct": round((total_rejects / total_prod * 100) if total_prod > 0 else 0, 2),
+            "running_hours": round(running / 60, 1),
+            "idle_hours": round(idle / 60, 1),
+            "alerts_count": alerts,
+            "availability_pct": round(availability * 100, 1),
+            "quality_pct": round(quality * 100, 1),
+            "performance_pct": round(performance * 100, 1),
+            "trs_pct": trs,
+            "machines_count": len(set(str(d.get("machine_id")) for d in docs)),
+            "raw_docs": docs,
+        }
+
+    async def get_reports_overview(self, period: str, machine_ids=None, compare: bool = True):
+        """KPI site + ranking machines + comparaison vs période précédente."""
+        start, end, prev_start, prev_end = self._resolve_period(period)
+        match_m = {} if not machine_ids else {"_id": {"$in": [ObjectId(m) for m in machine_ids]}}
+        machines_list = await self.db.mes_machines.find(match_m).to_list(500)
+        all_ids = [m["_id"] for m in machines_list]
+
+        current = await self._aggregate_kpis_for_machines(all_ids, start, end)
+        previous = await self._aggregate_kpis_for_machines(all_ids, prev_start, prev_end) if compare else None
+
+        per_machine = {}
+        for d in current["raw_docs"]:
+            mid = str(d.get("machine_id"))
+            if mid not in per_machine:
+                per_machine[mid] = {"production": 0, "good": 0, "rejects": 0,
+                                    "running": 0, "idle": 0, "prod_theo": 0}
+            entry = per_machine[mid]
+            entry["production"] += d.get("production", 0) or 0
+            entry["good"] += d.get("good_parts", 0) or 0
+            entry["rejects"] += d.get("rejects", 0) or 0
+            entry["running"] += d.get("running_minutes", 0) or 0
+            entry["idle"] += d.get("idle_minutes", 0) or 0
+            entry["prod_theo"] += (d.get("theoretical", 0) or 0) * (d.get("running_minutes", 0) or 0)
+
+        ranking = []
+        for m in machines_list:
+            mid = str(m["_id"])
+            entry = per_machine.get(mid, {"production": 0, "good": 0, "rejects": 0, "running": 0, "idle": 0, "prod_theo": 0})
+            eq = await self.db.equipments.find_one({"_id": m.get("equipment_id")}, {"nom": 1})
+            label = eq["nom"] if eq else "?"
+            avail = entry["running"] / (entry["running"] + entry["idle"]) if (entry["running"] + entry["idle"]) > 0 else 0
+            qual = entry["good"] / entry["production"] if entry["production"] > 0 else 1.0
+            perf = entry["production"] / entry["prod_theo"] if entry["prod_theo"] > 0 else 0
+            trs = round(avail * qual * perf * 100, 1)
+            ranking.append({
+                "machine_id": mid, "machine_name": label,
+                "production": entry["production"], "rejects": entry["rejects"],
+                "running_hours": round(entry["running"] / 60, 1), "trs_pct": trs,
+            })
+
+        ranking.sort(key=lambda x: x["trs_pct"], reverse=True)
+        del current["raw_docs"]
+        if previous:
+            del previous["raw_docs"]
+
+        delta = None
+        if previous:
+            delta = {
+                "trs_pct": round(current["trs_pct"] - previous["trs_pct"], 1),
+                "production_pct": round(((current["production"] - previous["production"]) / previous["production"] * 100) if previous["production"] > 0 else 0, 1),
+                "rejects_pct": round(current["rejects_pct"] - previous["rejects_pct"], 2),
+                "alerts_delta": current["alerts_count"] - previous["alerts_count"],
+            }
+
+        return {
+            "period": period,
+            "start": start.isoformat(), "end": end.isoformat(),
+            "kpi": current, "previous": previous, "delta": delta,
+            "ranking": ranking,
+            "top": ranking[:5],
+            "flop": [r for r in ranking[::-1] if r["trs_pct"] > 0][:5],
+        }
+
+    async def get_reports_heatmap(self, period: str, metric: str = "trs", machine_ids=None):
+        """Matrice machines × jours pour heatmap."""
+        start, end, _, _ = self._resolve_period(period)
+        match = {"date": {"$gte": start, "$lt": end}}
+        if machine_ids:
+            match["machine_id"] = {"$in": [ObjectId(m) for m in machine_ids]}
+        docs = await self.db.mes_daily_summary.find(match).to_list(20000)
+
+        match_m = {} if not machine_ids else {"_id": {"$in": [ObjectId(m) for m in machine_ids]}}
+        machines_list = await self.db.mes_machines.find(match_m).to_list(500)
+
+        days = []
+        cur = start
+        while cur < end:
+            days.append(cur.replace(hour=0, minute=0, second=0, microsecond=0))
+            cur += timedelta(days=1)
+
+        idx = {}
+        for d in docs:
+            mid = str(d.get("machine_id"))
+            day_key = d.get("date")
+            if isinstance(day_key, datetime):
+                day_key = day_key.replace(hour=0, minute=0, second=0, microsecond=0)
+            idx[(mid, day_key)] = d
+
+        rows = []
+        for m in machines_list:
+            mid = str(m["_id"])
+            eq = await self.db.equipments.find_one({"_id": m.get("equipment_id")}, {"nom": 1})
+            label = eq["nom"] if eq else "?"
+            cells = []
+            for day in days:
+                d = idx.get((mid, day))
+                if not d:
+                    cells.append({"date": day.isoformat(), "value": None})
+                    continue
+                if metric == "trs":
+                    running = d.get("running_minutes", 0) or 0
+                    idle = d.get("idle_minutes", 0) or 0
+                    avail = running / (running + idle) if (running + idle) > 0 else 0
+                    qual = d.get("good_parts", 0) / d.get("production", 1) if d.get("production", 0) > 0 else 1.0
+                    prod_theo = (d.get("theoretical", 0) or 0) * running
+                    perf = d.get("production", 0) / prod_theo if prod_theo > 0 else 0
+                    val = round(avail * qual * perf * 100, 1)
+                elif metric == "production":
+                    val = d.get("production", 0) or 0
+                elif metric == "rejects_pct":
+                    val = round((d.get("rejects", 0) / d.get("production", 1) * 100) if d.get("production", 0) > 0 else 0, 2)
+                else:
+                    val = 0
+                cells.append({"date": day.isoformat(), "value": val})
+            rows.append({"machine_id": mid, "machine_name": label, "cells": cells})
+
+        return {"metric": metric, "period": period,
+                "days": [d.isoformat() for d in days], "rows": rows}
+
+    async def get_reports_shifts_summary(self, period: str, machine_ids=None):
+        """Agrège les rapports de poste (mes_shift_summary) par poste."""
+        start, end, _, _ = self._resolve_period(period)
+        match = {"ended_at": {"$gte": start, "$lt": end}}
+        if machine_ids:
+            match["machine_id"] = {"$in": [ObjectId(m) for m in machine_ids]}
+        docs = await self.db.mes_shift_summary.find(match).to_list(10000)
+
+        by_shift = {lbl: {"production": 0, "good": 0, "rejects": 0, "running": 0, "idle": 0, "shifts_count": 0}
+                    for lbl in ("matin", "aprem", "nuit")}
+        machine_per_shift = {lbl: {} for lbl in ("matin", "aprem", "nuit")}
+
+        for d in docs:
+            label = d.get("shift_label", "matin")
+            if label not in by_shift:
+                continue
+            by_shift[label]["production"] += d.get("production", 0) or 0
+            by_shift[label]["good"] += d.get("good_parts", 0) or 0
+            by_shift[label]["rejects"] += d.get("rejects", 0) or 0
+            by_shift[label]["running"] += d.get("running_minutes", 0) or 0
+            by_shift[label]["idle"] += d.get("idle_minutes", 0) or 0
+            by_shift[label]["shifts_count"] += 1
+            mid = str(d.get("machine_id"))
+            machine_per_shift[label][mid] = machine_per_shift[label].get(mid, 0) + (d.get("production", 0) or 0)
+
+        result = {}
+        for label, data in by_shift.items():
+            running, idle = data["running"], data["idle"]
+            avail = running / (running + idle) if (running + idle) > 0 else 0
+            quality = data["good"] / data["production"] if data["production"] > 0 else 1.0
+            top_mid, top_prod = (None, 0)
+            if machine_per_shift[label]:
+                top_mid, top_prod = max(machine_per_shift[label].items(), key=lambda x: x[1])
+            top_machine_name = None
+            if top_mid:
+                m = await self.db.mes_machines.find_one({"_id": ObjectId(top_mid)}, {"equipment_id": 1})
+                if m:
+                    eq = await self.db.equipments.find_one({"_id": m.get("equipment_id")}, {"nom": 1})
+                    top_machine_name = eq["nom"] if eq else None
+            result[label] = {
+                "production": data["production"], "good_parts": data["good"],
+                "rejects": data["rejects"], "running_hours": round(running / 60, 1),
+                "idle_hours": round(idle / 60, 1), "shifts_count": data["shifts_count"],
+                "availability_pct": round(avail * 100, 1),
+                "quality_pct": round(quality * 100, 1),
+                "top_machine": {"id": top_mid, "name": top_machine_name, "production": top_prod} if top_mid else None,
+            }
+        return {
+            "period": period, "start": start.isoformat(), "end": end.isoformat(),
+            "shifts": result, "total_shifts_received": len(docs),
+        }
+
     # ==================== UTILS ====================
 
     def _serialize(self, doc):

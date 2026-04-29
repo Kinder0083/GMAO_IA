@@ -6,7 +6,8 @@ import useEscapeToClose from '../hooks/useEscapeToClose';
 import { FileText, Download, Calendar, Filter, BarChart3, TrendingUp,
   Package, AlertTriangle, ShieldAlert, Loader2, RefreshCw,
   ChevronDown, CheckCircle2, XCircle, Clock, Target, Gauge,
-  Mail, Plus, Trash2, Play, Settings, Bell
+  Mail, Plus, Trash2, Play, Settings, Bell, ArrowUp, ArrowDown,
+  Minus, Trophy, AlertCircle, Sun, Sunset, Moon
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import {
@@ -55,6 +56,282 @@ const DAYS_OF_WEEK = [
 
 const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899'];
 
+// ==================== OVERVIEW TAB COMPONENT ====================
+
+const OVERVIEW_PERIODS = [
+  { id: 'today', label: "Aujourd'hui" },
+  { id: 'yesterday', label: 'Hier' },
+  { id: 'week', label: 'Cette semaine' },
+  { id: 'last_week', label: 'Semaine passée' },
+  { id: 'month', label: 'Ce mois' },
+  { id: 'last_month', label: 'Mois passé' },
+];
+
+const HEATMAP_METRICS = [
+  { id: 'trs', label: 'TRS (%)', unit: '%' },
+  { id: 'production', label: 'Production (pièces)', unit: '' },
+  { id: 'rejects_pct', label: 'Rebuts (%)', unit: '%' },
+];
+
+const SHIFT_LABELS = {
+  matin: { label: 'Matin', icon: Sun, color: 'amber', range: '05h - 13h' },
+  aprem: { label: 'Après-midi', icon: Sunset, color: 'orange', range: '13h - 21h' },
+  nuit: { label: 'Nuit', icon: Moon, color: 'indigo', range: '21h - 05h' },
+};
+
+const KpiCard = ({ label, value, unit, delta, deltaType, icon: Icon, color = 'indigo' }) => {
+  const colorMap = {
+    indigo: 'from-indigo-500 to-indigo-600',
+    emerald: 'from-emerald-500 to-emerald-600',
+    amber: 'from-amber-500 to-amber-600',
+    rose: 'from-rose-500 to-rose-600',
+    purple: 'from-purple-500 to-purple-600',
+  };
+  const DeltaIcon = delta > 0 ? ArrowUp : delta < 0 ? ArrowDown : Minus;
+  const deltaPositiveColor = deltaType === 'inverse' ? 'text-rose-100' : 'text-emerald-100';
+  const deltaNegativeColor = deltaType === 'inverse' ? 'text-emerald-100' : 'text-rose-100';
+  const deltaColor = delta > 0 ? deltaPositiveColor : delta < 0 ? deltaNegativeColor : 'text-white/60';
+  return (
+    <div className={`bg-gradient-to-br ${colorMap[color]} rounded-xl p-4 shadow-lg text-white`} data-testid={`kpi-${label.toLowerCase().replace(/\s/g,'-')}`}>
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="text-xs font-medium text-white/80 uppercase tracking-wider">{label}</p>
+          <p className="text-3xl font-bold mt-1">{value}<span className="text-lg font-normal ml-1">{unit}</span></p>
+        </div>
+        {Icon && <Icon className="h-8 w-8 text-white/40" />}
+      </div>
+      {delta !== null && delta !== undefined && (
+        <div className={`mt-2 text-xs font-semibold flex items-center gap-1 ${deltaColor}`}>
+          <DeltaIcon className="h-3.5 w-3.5" />
+          {delta > 0 ? '+' : ''}{delta}{unit === '%' ? ' pts' : ''}
+          <span className="text-white/60 ml-1 font-normal">vs période précédente</span>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const TopFlopList = ({ items, title, isFlop = false }) => (
+  <Card>
+    <CardHeader className="pb-2">
+      <CardTitle className="text-sm font-semibold flex items-center gap-2">
+        {isFlop ? <AlertCircle className="h-4 w-4 text-rose-500" /> : <Trophy className="h-4 w-4 text-amber-500" />}
+        {title}
+      </CardTitle>
+    </CardHeader>
+    <CardContent>
+      {items.length === 0 ? (
+        <p className="text-sm text-gray-400 text-center py-3">Aucune donnée</p>
+      ) : (
+        <div className="space-y-1.5">
+          {items.map((m, i) => {
+            const trsColor = m.trs_pct >= 80 ? 'text-emerald-600' : m.trs_pct >= 60 ? 'text-amber-600' : 'text-rose-600';
+            return (
+              <div key={m.machine_id} className="flex items-center justify-between gap-2 px-2 py-1.5 hover:bg-gray-50 rounded text-sm">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-gray-400 font-mono w-5">{i + 1}.</span>
+                  <span className="font-medium truncate">{m.machine_name}</span>
+                </div>
+                <span className={`font-bold font-mono text-base ${trsColor}`}>{m.trs_pct}%</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </CardContent>
+  </Card>
+);
+
+const HeatmapGrid = ({ data, metric }) => {
+  if (!data || !data.rows || data.rows.length === 0) {
+    return <p className="text-sm text-gray-400 text-center py-6">Aucune donnée pour cette période. Les données journalières sont disponibles à partir du lendemain (00h05 UTC).</p>;
+  }
+  const colorFor = (val) => {
+    if (val === null || val === undefined) return 'bg-gray-100 text-gray-300';
+    if (metric === 'rejects_pct') {
+      if (val > 5) return 'bg-rose-500 text-white';
+      if (val > 2) return 'bg-amber-400 text-white';
+      if (val > 0.5) return 'bg-yellow-300 text-gray-700';
+      return 'bg-emerald-400 text-white';
+    }
+    if (metric === 'production') {
+      if (val > 10000) return 'bg-emerald-500 text-white';
+      if (val > 5000) return 'bg-emerald-400 text-white';
+      if (val > 1000) return 'bg-yellow-300 text-gray-700';
+      return 'bg-rose-400 text-white';
+    }
+    if (val >= 85) return 'bg-emerald-500 text-white';
+    if (val >= 70) return 'bg-emerald-300 text-gray-700';
+    if (val >= 50) return 'bg-amber-400 text-white';
+    return 'bg-rose-500 text-white';
+  };
+  const fmtDay = (iso) => {
+    try { return new Date(iso).toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit' }); }
+    catch { return iso; }
+  };
+  return (
+    <div className="overflow-x-auto" data-testid="heatmap-grid">
+      <table className="text-xs">
+        <thead>
+          <tr>
+            <th className="text-left pr-2 sticky left-0 bg-white z-10">Machine</th>
+            {data.days.map(d => (
+              <th key={d} className="text-center px-1 font-medium text-gray-500 min-w-[44px]">{fmtDay(d)}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {data.rows.map(row => (
+            <tr key={row.machine_id}>
+              <td className="text-left pr-2 py-0.5 sticky left-0 bg-white z-10 text-sm font-medium truncate max-w-[140px]">{row.machine_name}</td>
+              {row.cells.map((c, i) => (
+                <td key={i} className="p-0.5">
+                  <div className={`h-7 w-11 rounded text-center flex items-center justify-center font-semibold ${colorFor(c.value)}`}
+                    title={`${row.machine_name} — ${fmtDay(c.date)} : ${c.value === null ? 'Pas de donnée' : c.value}${HEATMAP_METRICS.find(m=>m.id===metric)?.unit||''}`}>
+                    {c.value === null ? '—' : (metric === 'production' ? Math.round(c.value/1000) + 'k' : Math.round(c.value))}
+                  </div>
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
+const ShiftCard = ({ label, info }) => {
+  const cfg = SHIFT_LABELS[label];
+  const Icon = cfg.icon;
+  const colorMap = {
+    amber: 'from-amber-500 to-amber-600',
+    orange: 'from-orange-500 to-orange-600',
+    indigo: 'from-indigo-500 to-indigo-600',
+  };
+  return (
+    <Card>
+      <div className={`px-4 py-2 bg-gradient-to-r ${colorMap[cfg.color]} text-white rounded-t-lg`}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Icon className="h-5 w-5" />
+            <span className="font-bold uppercase">{cfg.label}</span>
+          </div>
+          <span className="text-xs opacity-80">{cfg.range}</span>
+        </div>
+      </div>
+      <CardContent className="pt-3">
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <p className="text-xs text-gray-500">Production</p>
+            <p className="text-2xl font-bold text-gray-900">{(info.production || 0).toLocaleString('fr-FR')}</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-500">Disponibilité</p>
+            <p className="text-2xl font-bold text-gray-900">{info.availability_pct}%</p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-500">Rebuts</p>
+            <p className="text-base font-semibold text-rose-600">{info.rejects} <span className="text-xs text-gray-400">({Math.round(100 - info.quality_pct)}%)</span></p>
+          </div>
+          <div>
+            <p className="text-xs text-gray-500">Postes reçus</p>
+            <p className="text-base font-semibold text-gray-700">{info.shifts_count}</p>
+          </div>
+        </div>
+        {info.top_machine && (
+          <div className="mt-3 pt-3 border-t flex items-center justify-between text-xs">
+            <span className="text-gray-500 flex items-center gap-1"><Trophy className="h-3.5 w-3.5 text-amber-500" /> Top machine</span>
+            <span className="font-semibold">{info.top_machine.name} <span className="text-gray-400">({(info.top_machine.production || 0).toLocaleString('fr-FR')})</span></span>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+};
+
+const OverviewTab = ({ data, heatmap, shiftsSum, period, onPeriodChange, metric, onMetricChange, loading }) => {
+  if (loading || !data) {
+    return <div className="flex justify-center py-20"><Loader2 className="h-10 w-10 animate-spin text-indigo-500" /></div>;
+  }
+  const { kpi, delta, top, flop } = data;
+  return (
+    <div className="space-y-6" data-testid="overview-content">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-sm font-medium text-gray-700 flex items-center gap-1">
+            <Calendar className="h-4 w-4" /> Période :
+          </span>
+          {OVERVIEW_PERIODS.map(p => (
+            <button key={p.id}
+              onClick={() => onPeriodChange(p.id)}
+              className={`px-3 py-1.5 text-xs rounded-lg border transition ${period === p.id ? 'bg-indigo-600 border-indigo-600 text-white font-semibold' : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'}`}
+              data-testid={`overview-period-${p.id}`}>
+              {p.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <KpiCard label="TRS site" value={kpi.trs_pct} unit="%" delta={delta?.trs_pct} icon={Gauge} color="indigo" />
+        <KpiCard label="Production" value={kpi.production.toLocaleString('fr-FR')} unit="" delta={delta?.production_pct} icon={Package} color="emerald" />
+        <KpiCard label="Rebuts" value={kpi.rejects_pct} unit="%" delta={delta?.rejects_pct} deltaType="inverse" icon={ShieldAlert} color="rose" />
+        <KpiCard label="Alertes" value={kpi.alerts_count} unit="" delta={delta?.alerts_delta} deltaType="inverse" icon={AlertTriangle} color="amber" />
+      </div>
+      <div className="grid grid-cols-3 md:grid-cols-3 gap-3">
+        <KpiCard label="Disponibilité" value={kpi.availability_pct} unit="%" icon={Clock} color="purple" />
+        <KpiCard label="Performance" value={kpi.performance_pct} unit="%" icon={TrendingUp} color="purple" />
+        <KpiCard label="Qualité" value={kpi.quality_pct} unit="%" icon={CheckCircle2} color="purple" />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <TopFlopList items={top} title="Top 5 machines (TRS)" />
+        <TopFlopList items={flop} title="Flop 5 machines (TRS)" isFlop />
+      </div>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <BarChart3 className="h-5 w-5 text-indigo-600" /> Heatmap machines × jours
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-500">Métrique :</span>
+              {HEATMAP_METRICS.map(m => (
+                <button key={m.id}
+                  onClick={() => onMetricChange(m.id)}
+                  className={`px-2.5 py-1 text-xs rounded border ${metric === m.id ? 'bg-indigo-100 border-indigo-500 text-indigo-700 font-semibold' : 'bg-white border-gray-200 hover:bg-gray-50'}`}>
+                  {m.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <HeatmapGrid data={heatmap} metric={metric} />
+        </CardContent>
+      </Card>
+
+      {shiftsSum && (
+        <div>
+          <h3 className="text-base font-semibold text-gray-900 mb-2 flex items-center gap-2">
+            <Clock className="h-5 w-5 text-indigo-600" /> Production par poste 3×8
+            {shiftsSum.total_shifts_received === 0 && (
+              <span className="text-xs text-gray-400 font-normal ml-2">— aucun rapport de poste reçu sur cette période</span>
+            )}
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {Object.entries(shiftsSum.shifts).map(([label, info]) => (
+              <ShiftCard key={label} label={label} info={info} />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+
 const MESReportsPage = () => {
   const [machines, setMachines] = useState([]);
   const [selectedMachines, setSelectedMachines] = useState(['all']);
@@ -69,7 +346,33 @@ const MESReportsPage = () => {
   const [scheduledReports, setScheduledReports] = useState([]);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState(null);
-  const [activeTab, setActiveTab] = useState('manual');
+  const [activeTab, setActiveTab] = useState('overview');
+  const [overviewData, setOverviewData] = useState(null);
+  const [heatmapData, setHeatmapData] = useState(null);
+  const [shiftsSumData, setShiftsSumData] = useState(null);
+  const [overviewPeriod, setOverviewPeriod] = useState('week');
+  const [heatmapMetric, setHeatmapMetric] = useState('trs');
+  const [overviewLoading, setOverviewLoading] = useState(false);
+
+  const loadOverview = useCallback(async () => {
+    setOverviewLoading(true);
+    try {
+      const [r1, r2, r3] = await Promise.all([
+        axios.get(`${API}/api/mes/reports/overview?period=${overviewPeriod}&compare=true`, { headers: getHeaders() }),
+        axios.get(`${API}/api/mes/reports/heatmap?period=${overviewPeriod}&metric=${heatmapMetric}`, { headers: getHeaders() }),
+        axios.get(`${API}/api/mes/reports/shifts-summary?period=${overviewPeriod}`, { headers: getHeaders() }),
+      ]);
+      setOverviewData(r1.data);
+      setHeatmapData(r2.data);
+      setShiftsSumData(r3.data);
+    } catch {
+      // silent
+    } finally {
+      setOverviewLoading(false);
+    }
+  }, [overviewPeriod, heatmapMetric]);
+
+  useEffect(() => { if (activeTab === 'overview') loadOverview(); }, [activeTab, loadOverview]);
 
   // Fermeture du modal planning avec Echap
   useEscapeToClose(showScheduleModal, () => setShowScheduleModal(false));
@@ -374,6 +677,18 @@ const MESReportsPage = () => {
       {/* Tabs */}
       <div className="flex gap-2 border-b">
         <button
+          onClick={() => setActiveTab('overview')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition ${
+            activeTab === 'overview'
+              ? 'text-indigo-600 border-indigo-600'
+              : 'text-gray-500 border-transparent hover:text-gray-700'
+          }`}
+          data-testid="tab-overview"
+        >
+          <BarChart3 className="h-4 w-4 inline mr-2" />
+          Vue d'ensemble
+        </button>
+        <button
           onClick={() => setActiveTab('manual')}
           className={`px-4 py-2 text-sm font-medium border-b-2 transition ${
             activeTab === 'manual' 
@@ -398,6 +713,20 @@ const MESReportsPage = () => {
           Rapports planifies ({scheduledReports.length})
         </button>
       </div>
+
+      {/* OVERVIEW TAB — Vue d'ensemble multi-machines */}
+      {activeTab === 'overview' && (
+        <OverviewTab
+          data={overviewData}
+          heatmap={heatmapData}
+          shiftsSum={shiftsSumData}
+          period={overviewPeriod}
+          onPeriodChange={setOverviewPeriod}
+          metric={heatmapMetric}
+          onMetricChange={setHeatmapMetric}
+          loading={overviewLoading}
+        />
+      )}
 
       {/* SCHEDULED REPORTS TAB */}
       {activeTab === 'scheduled' && (

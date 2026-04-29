@@ -866,3 +866,49 @@ async def send_scheduled_report_now(report_id: str, current_user: dict = Depends
     else:
         raise HTTPException(500, "Scheduler non disponible")
 
+
+
+# ==================== RAPPORTS V2 — Pour 25+ machines ====================
+
+@router.get("/reports/overview",
+    summary="Vue d'ensemble multi-machines (KPI site + Top/Flop)",
+    description="Retourne en un seul appel : KPI agrégés du site, ranking machines, comparaison période précédente. Optimisé pour 25+ machines via mes_daily_summary.",
+    responses={**STANDARD_ERRORS}
+)
+async def reports_overview(
+    period: str = "week",
+    machine_ids: str = "all",
+    compare: bool = True,
+    current_user: dict = Depends(get_current_user)
+):
+    ids = [m.strip() for m in machine_ids.split(",") if m.strip() and m.strip() != "all"]
+    return await mes_service.get_reports_overview(period=period, machine_ids=ids or None, compare=compare)
+
+
+@router.get("/reports/heatmap",
+    summary="Heatmap TRS machines × jours",
+    description="Matrice machines × jours pour visualisation type heatmap. Idéal pour repérer en un coup d'œil les machines/jours problématiques.",
+    responses={**STANDARD_ERRORS}
+)
+async def reports_heatmap(
+    period: str = "week",
+    metric: str = "trs",
+    machine_ids: str = "all",
+    current_user: dict = Depends(get_current_user)
+):
+    ids = [m.strip() for m in machine_ids.split(",") if m.strip() and m.strip() != "all"]
+    return await mes_service.get_reports_heatmap(period=period, metric=metric, machine_ids=ids or None)
+
+
+@router.get("/reports/shifts-summary",
+    summary="Rapport agrégé par poste 3×8 (matin/aprem/nuit)",
+    description="Agrège la production et le TRS par poste sur la période choisie, toutes machines confondues + détail par machine.",
+    responses={**STANDARD_ERRORS}
+)
+async def reports_shifts_summary(
+    period: str = "week",
+    machine_ids: str = "all",
+    current_user: dict = Depends(get_current_user)
+):
+    ids = [m.strip() for m in machine_ids.split(",") if m.strip() and m.strip() != "all"]
+    return await mes_service.get_reports_shifts_summary(period=period, machine_ids=ids or None)
