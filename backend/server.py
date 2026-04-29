@@ -757,7 +757,8 @@ async def _compute_time_widgets(database, now):
     maint_responsables = await database.service_responsables.find(
         {"service": maint_regex}, {"_id": 0, "user_id": 1}
     ).to_list(50)
-    resp_ids = set(r.get("user_id") for r in maint_responsables if r.get("user_id"))
+    # resp_ids = set des user_id responsables, normalisés en string
+    resp_ids = {str(r.get("user_id")) for r in maint_responsables if r.get("user_id")}
 
     all_maint_users = await database.users.find(
         {
@@ -766,10 +767,15 @@ async def _compute_time_widgets(database, now):
             "statut": {"$not": {"$regex": "^inactif$", "$options": "i"}},
             **NOT_DELETED
         },
-        {"_id": 0, "id": 1}
+        {"id": 1, "_id": 1}
     ).to_list(500)
-    techs = [u for u in all_maint_users if u.get("id") and u["id"] not in resp_ids]
-    result["maintenance_techs_count"] = len(techs)
+    # Gérer à la fois les users avec `id` (UUID) et ceux avec `_id` uniquement (ObjectId)
+    tech_ids = set()
+    for u in all_maint_users:
+        uid = u.get("id") or str(u.get("_id", ""))
+        if uid and uid not in resp_ids:
+            tech_ids.add(uid)
+    result["maintenance_techs_count"] = len(tech_ids)
 
     return result
 
