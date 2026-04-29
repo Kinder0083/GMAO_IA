@@ -26,8 +26,26 @@ import os
 import sys
 import re
 from datetime import datetime, timezone
-from pymongo import MongoClient
-from dotenv import load_dotenv
+
+# --- Vérification des dépendances avec message d'aide explicite ---
+try:
+    from pymongo import MongoClient
+    from dotenv import load_dotenv
+except ModuleNotFoundError as e:
+    missing = str(e).split("'")[1] if "'" in str(e) else str(e)
+    sys.stderr.write(f"\n[ERREUR] Module Python manquant : {missing}\n\n")
+    sys.stderr.write("Ce script doit être exécuté avec l'environnement Python du backend.\n\n")
+    sys.stderr.write("Solutions possibles :\n\n")
+    sys.stderr.write("  1) Activer le venv du backend (recommandé) :\n")
+    sys.stderr.write("     cd /opt/gmao-iris/backend\n")
+    sys.stderr.write("     source ../venv/bin/activate  # ou 'source venv/bin/activate'\n")
+    sys.stderr.write("     python3 scripts/normalize_db_types.py --dry-run\n\n")
+    sys.stderr.write("  2) Installer les dépendances en système (root) :\n")
+    sys.stderr.write("     pip3 install pymongo python-dotenv\n")
+    sys.stderr.write("     python3 /opt/gmao-iris/backend/scripts/normalize_db_types.py --dry-run\n\n")
+    sys.stderr.write("  3) Utiliser directement le python du venv sans l'activer :\n")
+    sys.stderr.write("     /opt/gmao-iris/venv/bin/python3 /opt/gmao-iris/backend/scripts/normalize_db_types.py --dry-run\n\n")
+    sys.exit(2)
 
 DRY_RUN = "--dry-run" in sys.argv
 
