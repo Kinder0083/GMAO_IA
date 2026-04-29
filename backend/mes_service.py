@@ -1311,13 +1311,58 @@ class MESService:
 
     # ==================== DATA CLEANUP ====================
 
+    DEFAULT_RETENTION_DAYS = 365
+    MIN_RETENTION_DAYS = 7
+    MAX_RETENTION_DAYS = 3650  # 10 ans
+
+    async def get_retention_days(self) -> int:
+        """Récupère la durée de rétention configurée (jours). Default 365."""
+        cfg = await self.db.mes_config.find_one({"_id": "default"})
+        if cfg and isinstance(cfg.get("retention_days"), (int, float)):
+            return max(self.MIN_RETENTION_DAYS, min(self.MAX_RETENTION_DAYS, int(cfg["retention_days"])))
+        return self.DEFAULT_RETENTION_DAYS
+
+    async def set_retention_days(self, days: int) -> int:
+        """Définit la durée de rétention. Retourne la valeur effective (clampée)."""
+        days = max(self.MIN_RETENTION_DAYS, min(self.MAX_RETENTION_DAYS, int(days)))
+        await self.db.mes_config.update_one(
+            {"_id": "default"},
+            {"$set": {"retention_days": days, "updated_at": datetime.now(timezone.utc)}},
+            upsert=True,
+        )
+        return days
+
     async def cleanup_old_data(self):
-        """Remove pulses older than 1 year"""
-        cutoff = datetime.now(timezone.utc) - timedelta(days=365)
+        """Remove pulses older than the configured retention period."""
+        days = await self.get_retention_days()
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
         r1 = await self.db.mes_pulses.delete_many({"timestamp": {"$lt": cutoff}})
         r2 = await self.db.mes_cadence_history.delete_many({"timestamp": {"$lt": cutoff}})
         if r1.deleted_count or r2.deleted_count:
-            logger.info(f"[MES] Nettoyage: {r1.deleted_count} pulses, {r2.deleted_count} cadences supprimés")
+            logger.info(f"[MES] Nettoyage (rétention {days}j): {r1.deleted_count} pulses, {r2.deleted_count} cadences supprimés")
+        return {"days": days, "pulses_deleted": r1.deleted_count, "cadence_deleted": r2.deleted_count}
+
+    async def get_storage_stats(self) -> dict:
+        """Stats de volumétrie M.E.S. pour aider l'admin à choisir la rétention."""
+        n_pulses = await self.db.mes_pulses.estimated_document_count()
+        n_cadence = await self.db.mes_cadence_history.estimated_document_count()
+        # Date du plus ancien pulse
+        oldest = await self.db.mes_pulses.find_one(
+            {}, {"timestamp": 1}, sort=[("timestamp", 1)]
+        )
+        oldest_ts = oldest["timestamp"] if oldest else None
+        if isinstance(oldest_ts, str):
+            try:
+                oldest_ts = datetime.fromisoformat(oldest_ts.replace("Z", "+00:00"))
+            except (ValueError, AttributeError):
+                oldest_ts = None
+        days = await self.get_retention_days()
+        return {
+            "pulses_count": n_pulses,
+            "cadence_count": n_cadence,
+            "oldest_pulse": oldest_ts.isoformat() if oldest_ts else None,
+            "retention_days": days,
+        }
 
     # ==================== REPORTING ====================
 

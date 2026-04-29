@@ -157,6 +157,52 @@ async def simulate_pulse(machine_id: str, current_user: dict = Depends(get_curre
     return {"success": True, "message": "Impulsion simulée"}
 
 
+# ==================== CONFIGURATION (Rétention) ====================
+
+@router.get("/config/retention",
+    summary="Obtenir la configuration de rétention M.E.S",
+    description="Récupère la durée de rétention en jours et les statistiques de volumétrie.",
+    responses={**STANDARD_ERRORS}
+)
+async def get_mes_retention(current_user: dict = Depends(get_current_user)):
+    stats = await mes_service.get_storage_stats()
+    return {
+        "retention_days": stats["retention_days"],
+        "min_days": mes_service.MIN_RETENTION_DAYS,
+        "max_days": mes_service.MAX_RETENTION_DAYS,
+        "pulses_count": stats["pulses_count"],
+        "cadence_count": stats["cadence_count"],
+        "oldest_pulse": stats["oldest_pulse"],
+    }
+
+
+@router.put("/config/retention",
+    summary="Modifier la durée de rétention M.E.S (admin)",
+    description="Définit la durée de rétention en jours. Le prochain nettoyage automatique appliquera cette nouvelle valeur.",
+    responses={**STANDARD_ERRORS}
+)
+async def set_mes_retention(payload: dict, current_user: dict = Depends(get_current_admin_user)):
+    days = payload.get("retention_days")
+    if days is None:
+        raise HTTPException(status_code=400, detail="retention_days requis")
+    try:
+        days = int(days)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="retention_days doit être un entier")
+    effective = await mes_service.set_retention_days(days)
+    return {"success": True, "retention_days": effective}
+
+
+@router.post("/config/cleanup-now",
+    summary="Lancer le nettoyage immédiat (admin)",
+    description="Force l'exécution immédiate du nettoyage des données M.E.S anciennes selon la rétention configurée.",
+    responses={**STANDARD_ERRORS}
+)
+async def cleanup_now(current_user: dict = Depends(get_current_admin_user)):
+    result = await mes_service.cleanup_old_data()
+    return {"success": True, **(result or {})}
+
+
 # ==================== REJECT REASONS (Admin) ====================
 
 @router.get("/reject-reasons",

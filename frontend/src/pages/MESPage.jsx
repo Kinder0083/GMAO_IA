@@ -359,8 +359,182 @@ const TRSWeeklyChart = ({ data, trsTarget }) => {
   );
 };
 
+// ==================== RETENTION MODAL ====================
+const RetentionModal = ({ onClose }) => {
+  const [config, setConfig] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [cleaning, setCleaning] = useState(false);
+  const [days, setDays] = useState(365);
+  const { toast } = useToast();
+  useEscapeToClose(true, onClose);
+
+  const load = useCallback(async () => {
+    try {
+      const { data } = await axios.get(`${API}/api/mes/config/retention`, { headers: getHeaders() });
+      setConfig(data);
+      setDays(data.retention_days);
+    } catch (e) {
+      toast({ title: 'Erreur', description: 'Impossible de charger la configuration', variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
+  }, [toast]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const { data } = await axios.put(`${API}/api/mes/config/retention`, { retention_days: days }, { headers: getHeaders() });
+      toast({ title: 'Sauvegardé', description: `Rétention : ${data.retention_days} jours` });
+      load();
+    } catch (e) {
+      toast({ title: 'Erreur', description: e.response?.data?.detail || 'Sauvegarde impossible', variant: 'destructive' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const cleanupNow = async () => {
+    if (!window.confirm(`Lancer immédiatement le nettoyage des données M.E.S de plus de ${days} jours ?`)) return;
+    setCleaning(true);
+    try {
+      const { data } = await axios.post(`${API}/api/mes/config/cleanup-now`, {}, { headers: getHeaders() });
+      toast({ title: 'Nettoyage terminé', description: `${data.pulses_deleted || 0} pulses, ${data.cadence_deleted || 0} cadences supprimés` });
+      load();
+    } catch (e) {
+      toast({ title: 'Erreur', description: e.response?.data?.detail || 'Nettoyage impossible', variant: 'destructive' });
+    } finally {
+      setCleaning(false);
+    }
+  };
+
+  const presets = [
+    { label: '30 j', value: 30 },
+    { label: '90 j', value: 90 },
+    { label: '6 mois', value: 180 },
+    { label: '1 an', value: 365 },
+    { label: '2 ans', value: 730 },
+  ];
+
+  // Calcul d'estimation : combien de docs seraient supprimés à la prochaine purge
+  const estimatedFreed = (() => {
+    if (!config?.oldest_pulse) return null;
+    const oldest = new Date(config.oldest_pulse);
+    const cutoff = new Date(Date.now() - days * 86400000);
+    if (oldest >= cutoff) return 0;
+    // Approximation linéaire : fraction du temps couvert avant la coupure
+    const totalSpan = Date.now() - oldest.getTime();
+    const oldSpan = cutoff.getTime() - oldest.getTime();
+    if (totalSpan <= 0) return 0;
+    return Math.round((config.pulses_count || 0) * (oldSpan / totalSpan));
+  })();
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" data-testid="mes-retention-modal">
+      <div className="bg-white rounded-xl shadow-xl max-w-lg w-full mx-4">
+        <div className="px-6 py-4 border-b flex items-center justify-between">
+          <h3 className="text-lg font-semibold flex items-center gap-2">
+            <Clock className="h-5 w-5 text-indigo-600" />
+            Rétention des données M.E.S
+          </h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+        </div>
+        <div className="px-6 py-5 space-y-5">
+          {loading ? (
+            <div className="text-center py-6"><Loader2 className="h-6 w-6 animate-spin text-indigo-500 mx-auto" /></div>
+          ) : (
+            <>
+              {/* Stats actuelles */}
+              <div className="bg-indigo-50/50 border border-indigo-100 rounded-lg p-3 text-sm">
+                <p className="font-semibold text-indigo-900 mb-2">État actuel</p>
+                <div className="grid grid-cols-2 gap-2 text-gray-700">
+                  <div>
+                    <span className="text-gray-500 text-xs">Impulsions stockées</span>
+                    <p className="font-mono font-semibold">{(config.pulses_count || 0).toLocaleString('fr-FR')}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-500 text-xs">Cadences (1/min)</span>
+                    <p className="font-mono font-semibold">{(config.cadence_count || 0).toLocaleString('fr-FR')}</p>
+                  </div>
+                  {config.oldest_pulse && (
+                    <div className="col-span-2">
+                      <span className="text-gray-500 text-xs">Plus ancienne donnée</span>
+                      <p className="font-mono">{new Date(config.oldest_pulse).toLocaleString('fr-FR')}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Presets */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Durée de conservation</label>
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {presets.map(p => (
+                    <button key={p.value}
+                      type="button"
+                      onClick={() => setDays(p.value)}
+                      className={`px-3 py-1.5 text-xs rounded-lg border ${days === p.value ? 'bg-indigo-100 border-indigo-500 text-indigo-700 font-semibold' : 'bg-white border-gray-200 hover:bg-gray-50'}`}
+                      data-testid={`retention-preset-${p.value}`}>
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-2">
+                  <input type="number" min={config.min_days} max={config.max_days}
+                    value={days}
+                    onChange={e => setDays(Math.max(config.min_days, Math.min(config.max_days, parseInt(e.target.value) || 0)))}
+                    className="w-32 px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-indigo-500"
+                    data-testid="retention-input-days" />
+                  <span className="text-sm text-gray-600">jours (entre {config.min_days} et {config.max_days})</span>
+                </div>
+              </div>
+
+              {/* Estimation impact */}
+              {estimatedFreed !== null && estimatedFreed > 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm">
+                  <p className="text-amber-900">
+                    ⚠️ Le prochain nettoyage supprimerait environ <span className="font-mono font-bold">{estimatedFreed.toLocaleString('fr-FR')}</span> impulsions plus anciennes que <span className="font-semibold">{days} jours</span>.
+                  </p>
+                </div>
+              )}
+              {estimatedFreed === 0 && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-800">
+                  ✅ Toutes vos données sont dans la fenêtre de rétention actuelle.
+                </div>
+              )}
+
+              <p className="text-xs text-gray-500">
+                Les données plus anciennes que cette durée sont supprimées automatiquement chaque nuit à 04:00. Les rapports historiques agrégés (statistiques par jour/semaine) restent disponibles pour les analyses.
+              </p>
+            </>
+          )}
+        </div>
+        <div className="px-6 py-3 border-t flex items-center justify-between gap-2">
+          <button onClick={cleanupNow} disabled={cleaning || loading}
+            className="px-4 py-2 text-sm bg-red-50 text-red-700 border border-red-200 rounded-lg hover:bg-red-100 disabled:opacity-50"
+            data-testid="retention-cleanup-now-btn">
+            {cleaning ? <Loader2 className="h-4 w-4 animate-spin inline mr-1" /> : <Trash2 className="h-4 w-4 inline mr-1" />}
+            Nettoyer maintenant
+          </button>
+          <div className="flex gap-2">
+            <button onClick={onClose} className="px-4 py-2 text-sm border rounded-lg hover:bg-gray-50">Fermer</button>
+            <button onClick={save} disabled={saving || loading || (config && days === config.retention_days)}
+              className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+              data-testid="retention-save-btn">
+              {saving ? <Loader2 className="h-4 w-4 animate-spin inline mr-1" /> : null}
+              Sauvegarder
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ==================== MACHINE LIST ====================
-const MachineList = ({ machines, onSelect, onCreate, onDelete, loading }) => (
+const MachineList = ({ machines, onSelect, onCreate, onDelete, loading, onOpenRetention }) => (
   <div className="space-y-4">
     <div className="flex items-center justify-between">
       <div>
@@ -370,10 +544,18 @@ const MachineList = ({ machines, onSelect, onCreate, onDelete, loading }) => (
         </h1>
         <p className="text-sm text-gray-500 mt-1">Manufacturing Execution System</p>
       </div>
-      <button data-testid="mes-add-machine" onClick={onCreate}
-        className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">
-        <Plus className="h-4 w-4" /> Ajouter une machine
-      </button>
+      <div className="flex items-center gap-2">
+        <button onClick={onOpenRetention}
+          className="flex items-center gap-2 px-3 py-2 text-sm bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50"
+          data-testid="mes-open-retention-btn"
+          title="Configurer la rétention des données M.E.S">
+          <Clock className="h-4 w-4" /> Rétention
+        </button>
+        <button data-testid="mes-add-machine" onClick={onCreate}
+          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">
+          <Plus className="h-4 w-4" /> Ajouter une machine
+        </button>
+      </div>
     </div>
 
     {loading ? (
@@ -1479,6 +1661,7 @@ const MESPage = () => {
   const [machines, setMachines] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [showRetention, setShowRetention] = useState(false);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
@@ -1509,8 +1692,10 @@ const MESPage = () => {
   return (
     <>
       <MachineList machines={machines} onSelect={setSelectedId} onCreate={() => setShowCreate(true)}
-        onDelete={handleDelete} loading={loading} />
+        onDelete={handleDelete} loading={loading}
+        onOpenRetention={() => setShowRetention(true)} />
       {showCreate && <CreateMachineModal onClose={() => setShowCreate(false)} onCreated={() => { setShowCreate(false); loadMachines(); }} />}
+      {showRetention && <RetentionModal onClose={() => setShowRetention(false)} />}
     </>
   );
 };
