@@ -55,6 +55,12 @@ Stack : React + FastAPI + MongoDB + MQTT + ESP32 edge-computing.
   type avec lien `Ouvrir →` qui navigue vers `/work-orders?open=<uuid>` ou
   `/improvements?open=<uuid>` pour réassignation manuelle. Le badge topbar
   exclut les checks informational du compteur (uniquement actionable_issues).
+- 2026-04-30 : **Modal "Réassigner pointages orphelins"** dans le panneau
+  Cohérence des données. Bouton "Réassigner" sur chaque ligne d'OT/amélioration
+  ouvre un modal listant les pointages concernés + Select des users actifs.
+  Réassignation en masse (loop sur `PUT /<col>/{id}/time-entries/{entry_id}`),
+  toast progressif (succès/partiel/échec), re-scan auto après succès.
+  Composant `OrphanReassignDialog.jsx`.
 
 ## Backlog priorisé
 ### P1

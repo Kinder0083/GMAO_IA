@@ -8,6 +8,7 @@ import {
   Search,
   ChevronDown,
   ChevronRight,
+  UserCheck,
 } from 'lucide-react';
 import axios from 'axios';
 import { BACKEND_URL } from '../../utils/config';
@@ -15,6 +16,7 @@ import { useToast } from '../../hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
+import OrphanReassignDialog from './OrphanReassignDialog';
 
 /**
  * DataIntegritySettings
@@ -31,10 +33,12 @@ const DataIntegritySettings = () => {
   const [scanning, setScanning] = useState(false);
   const [repairingId, setRepairingId] = useState(null);
   const [expanded, setExpanded] = useState({});
+  const [reassignDoc, setReassignDoc] = useState(null);
 
   const token = localStorage.getItem('token');
   const headers = { Authorization: `Bearer ${token}` };
 
+  // runScan exposed for OrphanReassignDialog onReassigned callback
   const runScan = async () => {
     setScanning(true);
     try {
@@ -238,7 +242,11 @@ const DataIntegritySettings = () => {
 
                     {(isExpanded || (isInformational && hasIssues)) && hasIssues && (
                       <div className={`mt-3 border-t pt-3 ${isInformational ? 'border-sky-200' : 'border-amber-200'}`}>
-                        <CheckDetails checkId={check.id} details={check.details} />
+                        <CheckDetails
+                          checkId={check.id}
+                          details={check.details}
+                          onReassignClick={(d) => setReassignDoc(d)}
+                        />
                       </div>
                     )}
                   </div>
@@ -248,6 +256,15 @@ const DataIntegritySettings = () => {
           </div>
         )}
       </CardContent>
+      <OrphanReassignDialog
+        open={!!reassignDoc}
+        doc={reassignDoc}
+        onClose={() => setReassignDoc(null)}
+        onReassigned={() => {
+          // Re-scan pour rafraîchir la liste après réassignation
+          runScan();
+        }}
+      />
     </Card>
   );
 };
@@ -255,7 +272,7 @@ const DataIntegritySettings = () => {
 /**
  * Affichage tabulaire propre selon le type de check.
  */
-const CheckDetails = ({ checkId, details }) => {
+const CheckDetails = ({ checkId, details, onReassignClick }) => {
   if (!details || details.length === 0) return null;
 
   if (checkId === 'user_actif_statut_sync') {
@@ -375,26 +392,44 @@ const CheckDetails = ({ checkId, details }) => {
                   </tr>
                 </thead>
                 <tbody>
-                  {items.map((d) => (
-                    <tr key={d.doc_id} className="border-b border-amber-100 last:border-0 hover:bg-amber-100/40">
-                      <td className="py-1 pr-2 font-mono text-amber-800">{d.numero || '—'}</td>
-                      <td className="py-1 pr-2 truncate max-w-[260px]" title={d.titre}>{d.titre}</td>
-                      <td className="py-1 pr-2 text-gray-500">{d.statut || '—'}</td>
-                      <td className="py-1 pr-2 font-medium">
-                        {d.orphan_count} pointage{d.orphan_count > 1 ? 's' : ''}{' '}
-                        <span className="text-gray-500">({d.entries.reduce((s, e) => s + (e.hours || 0), 0).toFixed(1)}h)</span>
-                      </td>
-                      <td className="py-1">
-                        <a
-                          href={d.open_url}
-                          className="inline-flex items-center gap-1 text-sky-600 hover:underline font-medium"
-                          data-testid={`orphan-open-${d.collection}-${d.doc_id}`}
-                        >
-                          Ouvrir →
-                        </a>
-                      </td>
-                    </tr>
-                  ))}
+                  {items.map((d) => {
+                    const canReassign =
+                      (d.collection === 'work_orders' || d.collection === 'improvements') &&
+                      onReassignClick;
+                    return (
+                      <tr key={d.doc_id} className="border-b border-amber-100 last:border-0 hover:bg-amber-100/40">
+                        <td className="py-1 pr-2 font-mono text-amber-800">{d.numero || '—'}</td>
+                        <td className="py-1 pr-2 truncate max-w-[260px]" title={d.titre}>{d.titre}</td>
+                        <td className="py-1 pr-2 text-gray-500">{d.statut || '—'}</td>
+                        <td className="py-1 pr-2 font-medium">
+                          {d.orphan_count} pointage{d.orphan_count > 1 ? 's' : ''}{' '}
+                          <span className="text-gray-500">({d.entries.reduce((s, e) => s + (e.hours || 0), 0).toFixed(1)}h)</span>
+                        </td>
+                        <td className="py-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {canReassign && (
+                              <button
+                                type="button"
+                                onClick={() => onReassignClick(d)}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-200 font-medium"
+                                data-testid={`orphan-reassign-${d.collection}-${d.doc_id}`}
+                              >
+                                <UserCheck size={12} />
+                                Réassigner
+                              </button>
+                            )}
+                            <a
+                              href={d.open_url}
+                              className="inline-flex items-center gap-1 text-sky-600 hover:underline font-medium"
+                              data-testid={`orphan-open-${d.collection}-${d.doc_id}`}
+                            >
+                              Ouvrir →
+                            </a>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
