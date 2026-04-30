@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 ###############################################################################
-# GMAO Iris v1.5.0 - Installation Auto-Détection (Proxmox 9.0 / Debian 12)
+# GMAO Iris v1.12.0 - Installation Auto-Détection (Proxmox 9.0 / Debian 12)
 #
 # Installation automatisée complète :
 # - Création container LXC Debian 12
@@ -9,6 +9,7 @@
 # - Clonage du dépôt GitHub et build complet
 # - Configuration réseau (statique/DHCP/Tailscale)
 # - Création des comptes administrateurs
+# - Création automatique des index MongoDB optimisés (M.E.S. + cohérence)
 # - Mise à jour automatique via UI intégrée
 #
 # Compatible Proxmox 9.0+
@@ -29,7 +30,7 @@ warn() { echo -e "${YELLOW}⚠${NC} $1"; }
 
 clear
 echo "╔════════════════════════════════════════════════════════════════╗"
-echo "║   GMAO IRIS v1.5.0 - Installation Auto (Proxmox 9.0 Ready)    ║"
+echo "║   GMAO IRIS v1.12.0 - Installation Auto (Proxmox 9.0 Ready)   ║"
 echo "╚════════════════════════════════════════════════════════════════╝"
 echo ""
 
@@ -739,6 +740,21 @@ else
     echo "⚠️  Avertissement: Problème création admins (vous pourrez utiliser buenogy@gmail.com / Admin2024!)"
 fi
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# Créer les index MongoDB optimisés (M.E.S. + cohérence des données)
+# ═══════════════════════════════════════════════════════════════════════════════
+echo "📊 Création des index MongoDB optimisés..."
+# Le venv est encore actif ici (deactivate plus bas)
+if [ -f /opt/gmao-iris/backend/scripts/ensure_mes_indexes.py ]; then
+    cd /opt/gmao-iris/backend
+    python3 scripts/ensure_mes_indexes.py 2>&1 | head -30 || {
+        echo "⚠️  Avertissement: création des index échouée (les index seront créés à la demande au runtime)"
+    }
+    echo "✅ Index MongoDB initialisés"
+else
+    echo "ℹ️  Script ensure_mes_indexes.py absent — les index seront créés automatiquement par le backend"
+fi
+
 deactivate
 
 # Frontend build
@@ -813,6 +829,16 @@ if [ -f "\$FRONTEND_DIR/package.json" ]; then
     fi
 fi
 echo "   ✅ Frontend compilé"
+
+# 3 bis. Créer/maintenir les index MongoDB (M.E.S. + cohérence)
+echo "📊 Étape 3 bis: Index MongoDB..."
+if [ -f "\$BACKEND_DIR/scripts/ensure_mes_indexes.py" ]; then
+    cd "\$BACKEND_DIR"
+    "\$VENV_DIR/bin/python3" scripts/ensure_mes_indexes.py 2>&1 | tail -10 || true
+    echo "   ✅ Index MongoDB vérifiés"
+else
+    echo "   ℹ️  Script ensure_mes_indexes.py absent (sera ignoré)"
+fi
 
 # 4. Redémarrer le backend
 echo "🔄 Étape 4: Redémarrage du backend..."

@@ -195,14 +195,15 @@
         "sec-mes-01",
         "sec-mes-02",
         "sec-mes-03",
-        "sec-mes-04"
+        "sec-mes-04",
+        "sec-mes-esp32"
       ],
       "target_roles": [],
       "target_modules": [
         "mes"
       ],
       "created_at": "2026-02-14T09:00:17.183691+00:00",
-      "updated_at": "2026-02-14T09:00:17.183691+00:00"
+      "updated_at": "2026-04-30T17:32:44.011994+00:00"
     },
     {
       "id": "ch-011",
@@ -497,10 +498,11 @@
       "sections": [
         "sec-027-01",
         "sec-027-02",
-        "sec-027-03"
+        "sec-027-03",
+        "sec-027-overview"
       ],
       "created_at": "2026-02-14T14:48:44.227204+00:00",
-      "updated_at": "2026-02-14T14:48:44.227204+00:00"
+      "updated_at": "2026-04-30T17:32:44.011994+00:00"
     },
     {
       "id": "ch-028",
@@ -748,6 +750,26 @@
           "content": "En cliquant sur la cloche, un menu deroulant s'ouvre avec :\n\n- Le detail de chaque categorie avec son compteur\n- Un clic sur une categorie redirige vers la page correspondante avec le filtre pre-applique\n- Une legende des couleurs en bas du menu\n\nLes compteurs sont rafraichis automatiquement toutes les 5 minutes et lors de la creation/modification d'elements."
         }
       ]
+    },
+    {
+      "id": "ch-coherence-data",
+      "title": "🛡️ Cohérence des données",
+      "description": "Surveillance et réparation automatique des incohérences en base",
+      "icon": "ShieldCheck",
+      "order": 99,
+      "sections": [
+        "sec-coherence-01",
+        "sec-coherence-02",
+        "sec-coherence-03"
+      ],
+      "target_roles": [
+        "ADMIN"
+      ],
+      "target_modules": [
+        "settings"
+      ],
+      "created_at": "2026-04-30T17:36:33.114188+00:00",
+      "updated_at": "2026-04-30T17:36:33.114188+00:00"
     }
   ],
   "sections": [
@@ -3476,6 +3498,125 @@
       ],
       "created_at": "2026-03-14T17:05:29.434163+00:00",
       "updated_at": "2026-03-14T17:05:29.434163+00:00"
+    },
+    {
+      "id": "sec-mes-esp32",
+      "title": "Architecture ESP32 edge-computing (cp/min, shifts 3x8)",
+      "content": "Depuis la v1.12.0, le module M.E.S. supporte une architecture moderne où chaque machine (ESP32) calcule sa cadence localement et publie les résultats sur MQTT. Le backend ne stocke plus de pulses bruts.\n\n**Configuration d'une machine M.E.S.**\n\nPour ajouter ou modifier une machine, allez dans **M.E.S. → Configuration**.\n\n📍 **Champs clés :**\n- **Type** : choisissez `Imp` (impulsions traditionnelles) ou `cp/min` (cadence directe envoyée par l'ESP32 — recommandé)\n- **Équipement parent / sous-équipement** : pour les lignes de production complexes à plusieurs sous-systèmes, utilisez la hiérarchie\n- **Topic MQTT cadence** (`mqtt_topic`) : valeur courante (cp/min ou pulse)\n- **Topic MQTT état** (`mqtt_topic_state`) : doit publier `ACTIVE` ou `IDLE` (état explicite, plus fiable que la déduction par pulses)\n- **Topic MQTT total** (`mqtt_topic_total`) : compteur cumulé de pièces produites (publié par l'ESP32)\n- **Topic MQTT fin de poste** (`mqtt_topic_shift_end`) : déclenche la création automatique d'un compte-rendu de poste 3x8 (matin/après-midi/nuit)\n\n⚙️ **Délai de rétention** : les agrégations (cadence par minute, jour, poste) sont automatiquement purgées après le délai configuré dans **Paramètres → Données**. Permet de garder une base saine sur le long terme.\n\n📊 **Trois niveaux d'agrégation** sont stockés en base :\n- `mes_cadence_history` : 1 doc par machine et par minute\n- `mes_daily_summary` : 1 doc par machine et par jour\n- `mes_shift_summary` : 1 doc par machine et par poste",
+      "order": 99,
+      "parent_id": "ch-mes",
+      "target_roles": [],
+      "target_modules": [
+        "mes"
+      ],
+      "level": "advanced",
+      "images": [],
+      "video_url": null,
+      "keywords": [
+        "mes",
+        "esp32",
+        "cp/min",
+        "shifts",
+        "3x8",
+        "cadence",
+        "mqtt"
+      ],
+      "created_at": "2026-04-30T17:32:44.011994+00:00",
+      "updated_at": "2026-04-30T17:36:33.114188+00:00"
+    },
+    {
+      "id": "sec-027-overview",
+      "title": "Onglet Vue d'ensemble (Top/Flop, Heatmap, Postes)",
+      "content": "L'onglet **Vue d'ensemble** de la page Rapports M.E.S. offre un tableau de bord exécutif synthétisant l'ensemble du site :\n\n📈 **KPIs site** :\n- TRS global moyen sur la période\n- Production totale (pièces)\n- Nombre de machines actives sur la période\n\n🏆 **Top / Flop machines** :\n- Top 5 des machines avec le meilleur TRS\n- Flop 5 des machines en sous-performance — clic sur une machine pour investiguer dans l'onglet Détail\n\n🌡️ **Heatmap horaire** : visualisation par heure et jour de la semaine de l'activité de production. Permet d'identifier les creux et les pics récurrents.\n\n🕐 **Métriques par poste 3x8** : production et TRS par poste (matin / après-midi / nuit), agrégés sur la période.\n\n🎯 **Filtres avancés** : période (jour, semaine, mois, custom), machines, postes.",
+      "order": 99,
+      "parent_id": "ch-027",
+      "target_roles": [],
+      "target_modules": [
+        "mes"
+      ],
+      "level": "intermediate",
+      "images": [],
+      "video_url": null,
+      "keywords": [
+        "mes",
+        "rapports",
+        "vue d'ensemble",
+        "trs",
+        "top flop",
+        "heatmap"
+      ],
+      "created_at": "2026-04-30T17:32:44.011994+00:00",
+      "updated_at": "2026-04-30T17:36:33.114188+00:00"
+    },
+    {
+      "id": "sec-coherence-01",
+      "title": "Présentation du panneau Cohérence des données",
+      "content": "Le panneau **Cohérence des données** (Paramètres spéciaux → Cohérence des données) détecte et répare automatiquement les incohérences connues qui peuvent apparaître en base au fil du temps : champs désynchronisés, doublons, pointages orphelins, etc.\n\n📌 **Accès** : réservé aux administrateurs.\n\n**Comment ça marche ?**\n\n1. Cliquez sur **Scanner la base** pour lancer une analyse complète\n2. Pour chaque check trouvé en anomalie, vous avez :\n   - **Simuler** : aperçu des modifications (dry-run, aucune écriture)\n   - **Réparer** : applique les corrections en base\n3. Un rescan auto vérifie que tout est rentré dans l'ordre\n\n🤖 **Scan quotidien automatique** : un job s'exécute chaque jour à 02h30 et envoie un email d'alerte si des incohérences sont détectées (cooldown 24h, destinataires configurables dans Santé système → Alertes Email).\n\n🔔 **Badge topbar** : un badge avec un compteur orange apparaît dans la barre d'en-tête (admin uniquement) dès qu'une incohérence est détectée.",
+      "order": 1,
+      "parent_id": "ch-coherence-data",
+      "target_roles": [
+        "ADMIN"
+      ],
+      "target_modules": [],
+      "level": "advanced",
+      "images": [],
+      "video_url": null,
+      "keywords": [
+        "cohérence",
+        "intégrité",
+        "scan",
+        "réparation",
+        "audit"
+      ],
+      "created_at": "2026-04-30T17:36:33.114188+00:00",
+      "updated_at": "2026-04-30T17:36:33.114188+00:00"
+    },
+    {
+      "id": "sec-coherence-02",
+      "title": "Les 4 checks disponibles",
+      "content": "**1. `user_actif_statut_sync` — Champ legacy `actif` désynchronisé**\n\nDétecte les utilisateurs dont le champ technique `actif` (boolean) ne correspond pas à leur `statut` UI (ACTIF/INACTIF). Cause typique du bug **« le widget Charge OT restante ne compte qu'un seul technicien »**.\n\n**2. `service_responsables_duplicates` — Doublons responsables de service**\n\nDétecte les entrées en double dans la collection `service_responsables` pour un même couple (service, user_id). Peut fausser les règles de routage et les exclusions du widget Charge OT.\n\n**3. `time_entries_integrity` — Cohérence des pointages**\n\nDétecte les pointages d'OT/améliorations qui ont :\n- un `timestamp` stocké en string au lieu de datetime → **invisibles aux rapports**\n- un `user_id` non-canonique (UUID legacy au lieu de l'ObjectId)\n- un `user_id` orphelin (utilisateur supprimé)\n\nRéparation automatique : conversion timestamp en datetime, resync user_id sur l'ObjectId canonique, marquage `user_name='[Utilisateur supprimé]'` pour les orphelins (le `user_id` est conservé pour l'historique).\n\n**4. `orphan_user_assignments` — Pointages assignés à un utilisateur supprimé** *(action manuelle)*\n\nListe les OT, améliorations et maintenances préventives qui contiennent au moins un pointage assigné à un utilisateur supprimé. Pas de réparation automatique : tableau cliquable avec liens deep-link vers le document, et un bouton **« Réassigner »** qui ouvre un modal permettant de transférer en masse les pointages vers un utilisateur actif sans avoir à ouvrir le document complet.",
+      "order": 2,
+      "parent_id": "ch-coherence-data",
+      "target_roles": [
+        "ADMIN"
+      ],
+      "target_modules": [],
+      "level": "advanced",
+      "images": [],
+      "video_url": null,
+      "keywords": [
+        "check",
+        "user",
+        "actif",
+        "statut",
+        "doublon",
+        "pointage",
+        "orphelin"
+      ],
+      "created_at": "2026-04-30T17:36:33.114188+00:00",
+      "updated_at": "2026-04-30T17:36:33.114188+00:00"
+    },
+    {
+      "id": "sec-coherence-03",
+      "title": "Réassigner un pointage orphelin (modal)",
+      "content": "Lorsqu'un utilisateur est supprimé alors qu'il avait des pointages enregistrés, ces heures ne disparaissent pas — elles restent rattachées à l'OT mais sont marquées `[Utilisateur supprimé]`. Pour les transférer vers un autre utilisateur :\n\n1. Ouvrez **Paramètres spéciaux → Cohérence des données** et cliquez **Scanner la base**\n2. Dans la card **Pointages assignés à un utilisateur supprimé**, repérez le document concerné (numéro d'OT ou d'amélioration)\n3. Cliquez sur **🔗 Réassigner**\n4. Le modal affiche la liste des pointages orphelins (date, heures, utilisateur actuel)\n5. Choisissez le nouvel utilisateur dans le select (utilisateurs actifs uniquement)\n6. Cliquez **Réassigner N pointages**\n\n✅ Tous les pointages sont basculés en une seule action, le `user_name` est mis à jour automatiquement, et un re-scan vérifie que l'OT a bien disparu de la liste.\n\n💡 **Astuce** : si vous voulez voir le contexte complet de l'OT/amélioration avant de réassigner, utilisez plutôt le lien **Ouvrir →** qui ouvre le document directement dans son module dédié.",
+      "order": 3,
+      "parent_id": "ch-coherence-data",
+      "target_roles": [
+        "ADMIN"
+      ],
+      "target_modules": [],
+      "level": "advanced",
+      "images": [],
+      "video_url": null,
+      "keywords": [
+        "réassigner",
+        "orphelin",
+        "utilisateur supprimé",
+        "pointage"
+      ],
+      "created_at": "2026-04-30T17:36:33.114188+00:00",
+      "updated_at": "2026-04-30T17:36:33.114188+00:00"
     }
   ]
 }

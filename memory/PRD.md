@@ -61,6 +61,13 @@ Stack : React + FastAPI + MongoDB + MQTT + ESP32 edge-computing.
   Réassignation en masse (loop sur `PUT /<col>/{id}/time-entries/{entry_id}`),
   toast progressif (succès/partiel/échec), re-scan auto après succès.
   Composant `OrphanReassignDialog.jsx`.
+- 2026-04-30 : **Documentation v1.12.0**. README.md bumpé à 1.12.0 avec sections
+  enrichies (M.E.S. ESP32, Cohérence, DST). CHANGELOG.md complet pour Avril 2026.
+  `gmao-iris-install.sh` v1.12.0 — création auto des index MongoDB en install fraîche
+  + post-update.sh re-vérifie les index à chaque `git pull`. Manuel utilisateur :
+  +1 chapitre `ch-coherence-data` (3 sections) + sections M.E.S. ESP32 et
+  Rapports Vue d'ensemble. Script idempotent
+  `scripts/update_manual_default_content.py` pour mises à jour futures.
 
 ## Backlog priorisé
 ### P1

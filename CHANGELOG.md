@@ -1,5 +1,64 @@
 # GMAO Iris - Notes de Version
 
+## Version 1.12.0 - M.E.S. ESP32, Coherence des Donnees & Pointages (Avril 2026)
+
+### M.E.S. — Migration vers une architecture ESP32 edge-computing
+- **Decentralisation du calcul de cadence** : chaque machine (ESP32) calcule localement et publie sur MQTT. Le backend ne stocke plus de pulses bruts, supprimant les bloats MongoDB qui causaient des erreurs `QueryExceededMemoryLimitNoDiskUseAllowed`
+- **Deux modes de comptage** au choix dans la config M.E.S. : `Imp` (impulsions traditionnelles) et `cp/min` (cadence directe envoyee par l'ESP32)
+- **Etats explicites** : ecoute du topic `mqtt_topic_state` (ACTIVE / IDLE) au lieu de deduire l'etat par detection de pulses
+- **Hierarchie Parent / Sous-equipement** : le dropdown equipement est decompose en deux selecteurs pour les lignes de production complexes
+- **Total cumule** : suivi du compteur total publie par l'ESP32 via `mqtt_topic_total`
+- **Agregations multi-niveaux** automatiques :
+  - `mes_cadence_history` (1 doc/machine/minute)
+  - `mes_daily_summary` (1 doc/machine/jour)
+  - `mes_shift_summary` (1 doc/machine/poste 3x8)
+- **Rapports 3x8 shifts** declenches par le topic MQTT `mqtt_topic_shift_end`
+- **Indexes MongoDB optimises** (script `ensure_mes_indexes.py`)
+- **Delai de retention configurable** depuis l'UI (Parametres -> Donnees)
+
+### M.E.S. — Refonte complete de la page Rapports
+- **Onglet Vue d'ensemble** : KPIs site (TRS global, production totale, machines actives), Top/Flop des machines par TRS, heatmap horaire, metriques par poste
+- **Onglet Detail par machine** : cadence par minute, distribution horaire, comparaison entre periodes
+- **Filtres avances** : periode (jour, semaine, mois, custom), machines, postes
+- Endpoint `GET /api/mes/reports/overview`
+
+### Gestion automatique du fuseau horaire (DST)
+- **Plus besoin d'ajuster manuellement** l'offset 2 fois par an au passage heure d'ete / hiver
+- Module `timezone_helper.py` base sur Python `zoneinfo`
+- Configurable depuis Parametres -> Fuseau horaire
+
+### Panneau "Coherence des donnees" (Parametres speciaux)
+- **Scan + reparation** des incoherences connues en base avec mode dry-run (Simuler) avant Reparer
+- 4 checks disponibles :
+  - `user_actif_statut_sync` : champ legacy `actif` desync de `statut`
+  - `service_responsables_duplicates` : doublons (service, user_id)
+  - `time_entries_integrity` : timestamps en string, user_id non-canoniques, orphelins
+  - `orphan_user_assignments` (informational) : pointages assignes a un utilisateur supprime, avec **modal "Reassigner"** integre pour transferer en masse vers un utilisateur actif
+- Endpoints REST : `GET /api/admin/data-integrity/scan`, `POST /api/admin/data-integrity/repair`, `GET /api/admin/data-integrity/last-scan`
+- **Architecture extensible** : ajouter un check = 1 entree dans le dict `CHECKS` de `routes/data_integrity.py`
+
+### Surveillance proactive de la coherence
+- **Scan quotidien automatique** a 02h30 via APScheduler. Si des incoherences sont detectees, un email d'alerte est envoye aux destinataires configures (cooldown 24h)
+- **Badge topbar "Coherence des donnees"** (admin uniquement) : icone Database avec compteur orange si issues, point vert si OK, refresh auto 5min
+- **Card dediee dans Sante systeme** : statut du dernier scan + bouton "Scanner maintenant"
+- **Nouveau type d'alerte email `data_integrity`** configurable dans la section Alertes Email
+
+### Corrections de bugs
+- **Widget "Charge OT restante" du Dashboard** : ne comptait qu'un seul technicien sur certaines bases. Cause : filtre cumulatif sur `actif` (legacy stale) ET `statut`. Fix : filtre sur `statut` uniquement (source de verite UI)
+- **Rapport "Pointage horaire du personnel"** : les modifications de date sur les time_entries d'OT/amelioration ne remontaient plus dans le rapport apres edit. Cause racine : timestamp stocke en string au lieu de datetime, invisible au filtre `$gte/$lte` MongoDB. Fix appliquee + check `time_entries_integrity` pour reparer les vieilles entries
+- **Erreur 500 `QueryExceededMemoryLimitNoDiskUseAllowed`** sur le M.E.S : eliminee par la migration vers les agregations ESP32
+- **Page Rapports M.E.S. blanche** : declaration d'etat manquante corrigee dans `MESReportsPage.jsx`
+
+### Scripts de migration et diagnostic
+- `scripts/diagnose_charge_ot_widget.py` : diagnostic complet du widget Charge OT
+- `scripts/cleanup_user_actif_field.py` : resync `actif` <- `statut` (avec dry-run)
+- `scripts/dedupe_service_responsables.py` : dedoublonnage (avec dry-run)
+- `scripts/migrate_to_esp32_archi.py` : migration de l'architecture M.E.S.
+- `scripts/ensure_mes_indexes.py` : creation des indexes MongoDB du module M.E.S.
+- `scripts/normalize_user_ids.py` : normalisation UUID -> ObjectId
+
+---
+
 ## Version 1.10.0 - Demandes d'Intervention, Drag & Drop, IA Achats (Mars 2026)
 
 ### Glisser-Deposer (Drag & Drop) pour les Pieces Jointes

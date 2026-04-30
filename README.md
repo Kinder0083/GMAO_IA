@@ -2,9 +2,9 @@
 
 Application de Fonctionnement des Services Assistee par Ordinateur (FSAO) complete et auto-hebergee.
 
-**Version :** 1.11.0
+**Version :** 1.12.0
 **Concepteur :** Greg
-**Derniere mise a jour :** Mars 2026
+**Derniere mise a jour :** Avril 2026
 
 ---
 
@@ -128,10 +128,26 @@ FSAO Iris integre des fonctionnalites d'IA generative (Gemini Pro) pour automati
 - Integration cameras (snapshots, alertes via Frigate/MQTT)
 - Autorisations particulieres (formulaires et suivi)
 
-### M.E.S. (Manufacturing Execution System)
-- Suivi de production en temps reel
-- Calcul automatique de cadence (par minute, via scheduler)
-- Rapports M.E.S. planifies
+### M.E.S. (Manufacturing Execution System) — architecture ESP32 edge-computing
+- **Suivi de production en temps reel** sur 25+ machines en 24/7 sans saturation MongoDB
+- **Architecture edge-computing** : chaque machine (ESP32) calcule sa cadence localement et publie sur MQTT (state, total cumule, fin de poste). Le backend ne stocke plus de pulses bruts, uniquement des agregations
+- **Deux modes de comptage** :
+  - **Imp** : impulsions traditionnelles (compatibilite ascendante avec capteurs simples)
+  - **cp/min** : cadence directe en coups par minute envoyee par l'ESP32 (recommande)
+- **Etats explicites** : ecoute du topic d'etat `ACTIVE` / `IDLE` (au lieu de deduction par detection de pulses)
+- **Equipement Parent / Sous-equipement** : configuration hierarchique pour les lignes de production a plusieurs sous-systemes
+- **Agregations multi-niveaux automatiques** :
+  - `mes_cadence_history` : 1 doc par machine et par minute
+  - `mes_daily_summary` : 1 doc par machine et par jour
+  - `mes_shift_summary` : 1 doc par machine et par poste 3x8
+- **Rapports 3x8 shifts** : compte-rendu automatique declenche par le topic MQTT `shift_end` (matin/apres-midi/nuit)
+- **Delai de retention configurable** depuis l'UI (Parametres -> Donnees) pour purger automatiquement les agregations anciennes
+- **Page Rapports M.E.S. completement revue** :
+  - Onglet **Vue d'ensemble** : KPIs site (TRS global, production totale, machines actives), Top/Flop des machines, heatmap horaire, metriques par poste
+  - Onglet **Detail par machine** : cadence par minute, distribution horaire, comparaison entre periodes
+  - Filtres avances : periode (jour, semaine, mois, custom), machines, postes
+- **Indexes MongoDB optimises** pour eviter les erreurs `QueryExceededMemoryLimitNoDiskUseAllowed` sur grosse volumetrie
+- Compatibilite ascendante avec les capteurs traditionnels via le mode Imp
 
 ### Progressive Web App (PWA)
 - **Installation sur l'ecran d'accueil** : FSAO Iris peut etre installe comme une application native
@@ -238,7 +254,19 @@ FSAO Iris integre des fonctionnalites d'IA generative (Gemini Pro) pour automati
 - **KPI Demandes d'Intervention sur le Dashboard** : indicateurs en temps reel affichant le nombre de DI en attente et le temps de reponse moyen, mis a jour automatiquement
 - Acces SSH distant depuis l'interface (admin) — Terminal interactif via WebSocket + Paramiko (connexion SSH native, compatible Debian 12/yescrypt)
 - Configuration Tailscale depuis l'interface web
-- Gestion des fuseaux horaires
+- **Gestion automatique du fuseau horaire (DST)** : detection et application automatique du passage heure d'ete / heure d'hiver via le module Python `zoneinfo`. Les utilisateurs n'ont plus a ajuster manuellement l'offset 2 fois par an. La timezone du site est configurable depuis Parametres -> Fuseau horaire.
+
+### Coherence des donnees & Sante systeme
+- **Panneau "Coherence des donnees"** dans Parametres speciaux (admin uniquement) : scanne et repare les incoherences connues en base
+  - **`user_actif_statut_sync`** : utilisateurs dont le champ legacy `actif` (boolean) est desynchronise du `statut` UI (ACTIF/INACTIF). Cassait le widget "Charge OT restante" et plusieurs filtres backend
+  - **`service_responsables_duplicates`** : doublons dans la collection `service_responsables` pour un meme couple (service, user_id)
+  - **`time_entries_integrity`** : pointages d'OT/ameliorations avec timestamp stocke en string (invisibles aux rapports), `user_id` non-canonique, ou orphelin. Repare automatiquement (conversion timestamp en datetime, resync user_id, marquage `[Utilisateur supprime]`)
+  - **`orphan_user_assignments`** (informational) : liste les OT/ameliorations/maintenances preventives ayant des pointages assignes a un utilisateur supprime. Tableau cliquable avec liens deep-link vers le document, et **modal "Reassigner"** integre permettant de transferer en masse les pointages vers un utilisateur actif (sans avoir a ouvrir le document)
+- **Mode dry-run par defaut** : toutes les reparations disposent d'un bouton "Simuler" avant le bouton "Reparer" pour eviter les modifications accidentelles
+- **Scan quotidien automatique** a 02h30 (APScheduler) : si des incoherences sont detectees, un email d'alerte est envoye aux destinataires configures dans Sante systeme (cooldown 24h)
+- **Badge topbar "Coherence des donnees"** (admin uniquement) : icone Database avec compteur orange si actionable_issues > 0, point vert si la base est saine. Click -> Sante systeme. Refresh auto toutes les 5 minutes
+- **Card dediee dans Sante systeme** : affiche le statut du dernier scan (timestamp + repartition par check) avec bouton "Scanner maintenant"
+- **Type d'alerte email `data_integrity`** configurable dans la section Alertes Email (active/desactive, destinataires)
 
 ### Visite guidee personnalisee par profil
 - A la premiere connexion, une visite guidee interactive presente les modules de l'application
