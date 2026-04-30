@@ -760,10 +760,12 @@ async def _compute_time_widgets(database, now):
     # resp_ids = set des user_id responsables, normalisés en string
     resp_ids = {str(r.get("user_id")) for r in maint_responsables if r.get("user_id")}
 
+    # NOTE : on filtre UNIQUEMENT sur `statut` (source de vérité gérée par l'UI).
+    # Le champ legacy `actif` n'est plus fiable (souvent à False alors que statut=ACTIF
+    # côté UI). Voir diagnose_charge_ot_widget.py pour le détail.
     all_maint_users = await database.users.find(
         {
             "service": maint_regex,
-            "actif": {"$ne": False},
             "statut": {"$not": {"$regex": "^inactif$", "$options": "i"}},
             **NOT_DELETED
         },
