@@ -295,6 +295,90 @@ def _summarize_time_entries_issues(issues):
 
 
 # ──────────────────────────────────────────────────────────────────────────
+#  CHECK 4 : pointages orphelins assignés à un utilisateur supprimé
+#           (informational — pas de correction auto, navigation manuelle)
+# ──────────────────────────────────────────────────────────────────────────
+ORPHAN_COLLECTIONS = [
+    # (collection, label, route_path, id_field_for_url)
+    ("work_orders", "Ordre de travail", "/work-orders", "id"),
+    ("improvements", "Amélioration", "/improvements", "id"),
+    ("preventive_maintenances", "Maintenance préventive", "/preventive-maintenance", "id"),
+]
+
+
+async def _check_orphan_user_assignments():
+    """Liste les documents (OT/améliorations/PM) qui contiennent au moins une
+    time_entry assignée à un utilisateur supprimé (user_id orphelin OU
+    user_name='[Utilisateur supprimé]'). Pas de correction auto : on retourne
+    juste les numéros/IDs pour permettre à l'utilisateur de cliquer et de
+    réassigner manuellement.
+    """
+    canonical_map, _, _ = await _build_user_canonical_map()
+    issues = []
+    for col_name, type_label, route_path, id_field in ORPHAN_COLLECTIONS:
+        col = db[col_name]
+        cursor = col.find(
+            {"time_entries": {"$exists": True, "$ne": []}},
+            {"_id": 1, "id": 1, "numero": 1, "titre": 1, "time_entries": 1, "categorie": 1, "statut": 1}
+        )
+        async for doc in cursor:
+            orphan_entries = []
+            for e in doc.get("time_entries", []):
+                uid = str(e.get("user_id") or "")
+                user_name = e.get("user_name", "")
+                is_orphan_uid = bool(uid) and uid not in canonical_map
+                is_marked_deleted = user_name == DELETED_USER_LABEL
+                if is_orphan_uid or is_marked_deleted:
+                    ts = e.get("timestamp")
+                    if isinstance(ts, datetime):
+                        ts_str = ts.isoformat()
+                    elif isinstance(ts, str):
+                        ts_str = ts
+                    else:
+                        ts_str = None
+                    orphan_entries.append({
+                        "entry_id": e.get("id"),
+                        "user_id": uid,
+                        "user_name": user_name,
+                        "hours": e.get("hours", 0),
+                        "timestamp": ts_str,
+                    })
+            if orphan_entries:
+                doc_uuid = doc.get(id_field) or str(doc["_id"])
+                issues.append({
+                    "collection": col_name,
+                    "type_label": type_label,
+                    "doc_id": str(doc["_id"]),
+                    "doc_uuid": doc_uuid,
+                    "numero": doc.get("numero"),
+                    "titre": doc.get("titre", "?"),
+                    "statut": doc.get("statut"),
+                    "open_url": f"{route_path}?open={doc_uuid}",
+                    "orphan_count": len(orphan_entries),
+                    "entries": orphan_entries,
+                })
+    # Trier par collection puis par numero
+    issues.sort(key=lambda x: (x["collection"], x.get("numero") or x["titre"]))
+    return issues
+
+
+async def _fix_orphan_user_assignments(dry_run: bool):
+    """Pas de réparation automatique — la décision est manuelle."""
+    issues = await _check_orphan_user_assignments()
+    return {
+        "modified_count": 0,
+        "planned_count": 0,
+        "details": issues,
+        "informational": True,
+        "message": (
+            "Ce check ne se répare pas automatiquement. Cliquez sur les liens "
+            "ci-dessous pour ouvrir chaque document et réassigner manuellement "
+            "le pointage à un utilisateur actif."
+        ),
+    }
+
+
+# ──────────────────────────────────────────────────────────────────────────
 #  Registry
 # ──────────────────────────────────────────────────────────────────────────
 CHECKS = {
@@ -333,6 +417,20 @@ CHECKS = {
         "scanner": _check_time_entries_integrity,
         "fixer": _fix_time_entries_integrity,
     },
+    "orphan_user_assignments": {
+        "label": "Pointages assignés à un utilisateur supprimé",
+        "description": (
+            "Liste les ordres de travail, améliorations et maintenances "
+            "préventives qui contiennent au moins un pointage assigné à un "
+            "utilisateur supprimé. Cliquez sur un numéro pour ouvrir le "
+            "document et réassigner manuellement le pointage à un utilisateur "
+            "actif. Aucune réparation automatique."
+        ),
+        "severity": "info",
+        "scanner": _check_orphan_user_assignments,
+        "fixer": _fix_orphan_user_assignments,
+        "informational": True,
+    },
 }
 
 
@@ -343,6 +441,7 @@ async def _run_scan():
     """Logique du scan partagée entre l'endpoint et le cron."""
     checks_out = []
     total = 0
+    actionable_total = 0  # exclut les checks informational du badge topbar
     for check_id, meta in CHECKS.items():
         issues = await meta["scanner"]()
         if check_id == "service_responsables_duplicates":
@@ -350,6 +449,9 @@ async def _run_scan():
         else:
             count = len(issues)
         total += count
+        is_informational = meta.get("informational", False)
+        if not is_informational:
+            actionable_total += count
         checks_out.append({
             "id": check_id,
             "label": meta["label"],
@@ -357,11 +459,13 @@ async def _run_scan():
             "severity": meta["severity"],
             "issues_count": count,
             "details": issues[:200] if check_id == "time_entries_integrity" else issues,
-            "fixable": True,
+            "fixable": not is_informational,
+            "informational": is_informational,
         })
     return {
         "scanned_at": datetime.now(timezone.utc).isoformat(),
         "total_issues": total,
+        "actionable_issues": actionable_total,
         "checks": checks_out,
     }
 
@@ -371,6 +475,7 @@ async def _persist_last_scan(result: dict):
     summary = {
         "scanned_at": result["scanned_at"],
         "total_issues": result["total_issues"],
+        "actionable_issues": result.get("actionable_issues", result["total_issues"]),
         "per_check": {c["id"]: c["issues_count"] for c in result["checks"]},
     }
     await db.settings.update_one(

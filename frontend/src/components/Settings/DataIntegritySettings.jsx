@@ -150,12 +150,13 @@ const DataIntegritySettings = () => {
               const isExpanded = expanded[check.id];
               const isRepairingDry = repairingId === `${check.id}:dry`;
               const isRepairingApply = repairingId === `${check.id}:apply`;
+              const isInformational = check.informational || check.fixable === false;
 
               return (
                 <div
                   key={check.id}
                   className={`border rounded-lg ${
-                    hasIssues ? 'border-amber-300 bg-amber-50' : 'border-gray-200 bg-white'
+                    hasIssues ? (isInformational ? 'border-sky-300 bg-sky-50' : 'border-amber-300 bg-amber-50') : 'border-gray-200 bg-white'
                   }`}
                   data-testid={`data-integrity-check-${check.id}`}
                 >
@@ -164,22 +165,31 @@ const DataIntegritySettings = () => {
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
                           {hasIssues ? (
-                            <AlertTriangle className="h-4 w-4 text-amber-600" />
+                            isInformational ? (
+                              <AlertTriangle className="h-4 w-4 text-sky-600" />
+                            ) : (
+                              <AlertTriangle className="h-4 w-4 text-amber-600" />
+                            )
                           ) : (
                             <CheckCircle2 className="h-4 w-4 text-green-600" />
                           )}
                           <span className="font-medium text-gray-900">{check.label}</span>
                           <Badge
-                            variant={hasIssues ? 'destructive' : 'secondary'}
+                            variant={hasIssues ? (isInformational ? 'secondary' : 'destructive') : 'secondary'}
                             data-testid={`data-integrity-count-${check.id}`}
                           >
                             {check.issues_count}
                           </Badge>
+                          {isInformational && hasIssues && (
+                            <span className="text-[10px] uppercase tracking-wide text-sky-700 bg-sky-100 px-1.5 py-0.5 rounded font-medium">
+                              Action manuelle
+                            </span>
+                          )}
                         </div>
                         <p className="text-sm text-gray-600">{check.description}</p>
                       </div>
 
-                      {hasIssues && (
+                      {hasIssues && !isInformational && (
                         <div className="flex items-center gap-2">
                           <Button
                             size="sm"
@@ -210,7 +220,7 @@ const DataIntegritySettings = () => {
                       )}
                     </div>
 
-                    {hasIssues && (
+                    {hasIssues && !isInformational && (
                       <button
                         type="button"
                         onClick={() => toggleExpand(check.id)}
@@ -226,8 +236,8 @@ const DataIntegritySettings = () => {
                       </button>
                     )}
 
-                    {isExpanded && hasIssues && (
-                      <div className="mt-3 border-t border-amber-200 pt-3">
+                    {(isExpanded || (isInformational && hasIssues)) && hasIssues && (
+                      <div className={`mt-3 border-t pt-3 ${isInformational ? 'border-sky-200' : 'border-amber-200'}`}>
                         <CheckDetails checkId={check.id} details={check.details} />
                       </div>
                     )}
@@ -304,6 +314,92 @@ const CheckDetails = ({ checkId, details }) => {
             ))}
           </tbody>
         </table>
+      </div>
+    );
+  }
+
+  if (checkId === 'time_entries_integrity') {
+    return (
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="text-left text-gray-700 border-b border-amber-200">
+              <th className="py-1 pr-2">Type</th>
+              <th className="py-1 pr-2">Document</th>
+              <th className="py-1 pr-2">Utilisateur</th>
+              <th className="py-1 pr-2">Problème</th>
+              <th className="py-1">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {details.map((d, idx) => (
+              <tr key={`${d.entry_id}-${idx}`} className="border-b border-amber-100 last:border-0">
+                <td className="py-1 pr-2">{d.collection === 'work_orders' ? 'OT' : 'Amélioration'}</td>
+                <td className="py-1 pr-2 truncate max-w-[200px]" title={d.doc_title}>{d.doc_title}</td>
+                <td className="py-1 pr-2">{d.user_name}</td>
+                <td className="py-1 pr-2 text-amber-700">{d.issue_type}</td>
+                <td className="py-1 text-green-700 font-medium">→ {String(d.target).slice(0, 40)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+
+  if (checkId === 'orphan_user_assignments') {
+    // Groupé par collection
+    const grouped = details.reduce((acc, d) => {
+      const k = d.type_label;
+      if (!acc[k]) acc[k] = [];
+      acc[k].push(d);
+      return acc;
+    }, {});
+    return (
+      <div className="space-y-3">
+        <p className="text-xs text-gray-600 italic">
+          Cliquez sur un numéro pour ouvrir le document et réassigner manuellement le pointage à un utilisateur actif.
+        </p>
+        {Object.entries(grouped).map(([typeLabel, items]) => (
+          <div key={typeLabel}>
+            <p className="text-xs font-semibold text-gray-800 mb-1">{typeLabel} ({items.length})</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-left text-gray-700 border-b border-amber-200">
+                    <th className="py-1 pr-2">N°</th>
+                    <th className="py-1 pr-2">Titre</th>
+                    <th className="py-1 pr-2">Statut</th>
+                    <th className="py-1 pr-2">Pointages orphelins</th>
+                    <th className="py-1">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((d) => (
+                    <tr key={d.doc_id} className="border-b border-amber-100 last:border-0 hover:bg-amber-100/40">
+                      <td className="py-1 pr-2 font-mono text-amber-800">{d.numero || '—'}</td>
+                      <td className="py-1 pr-2 truncate max-w-[260px]" title={d.titre}>{d.titre}</td>
+                      <td className="py-1 pr-2 text-gray-500">{d.statut || '—'}</td>
+                      <td className="py-1 pr-2 font-medium">
+                        {d.orphan_count} pointage{d.orphan_count > 1 ? 's' : ''}{' '}
+                        <span className="text-gray-500">({d.entries.reduce((s, e) => s + (e.hours || 0), 0).toFixed(1)}h)</span>
+                      </td>
+                      <td className="py-1">
+                        <a
+                          href={d.open_url}
+                          className="inline-flex items-center gap-1 text-sky-600 hover:underline font-medium"
+                          data-testid={`orphan-open-${d.collection}-${d.doc_id}`}
+                        >
+                          Ouvrir →
+                        </a>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ))}
       </div>
     );
   }

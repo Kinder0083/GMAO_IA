@@ -28,6 +28,7 @@ import NotificationsDropdown from '../Common/NotificationsDropdown';
 import LOTOHeaderIcon from '../Common/LOTOHeaderIcon';
 import CameraAlertIcon from '../Common/CameraAlertIcon';
 import BackupStatusIcon from '../Common/BackupStatusIcon';
+import DataIntegrityHeaderIcon from '../Common/DataIntegrityHeaderIcon';
 import ChangelogPanel from '../Common/ChangelogPanel';
 import OfflineIndicator from '../Common/OfflineIndicator';
 import MESAlertIcon from './MESAlertIcon';
@@ -83,13 +84,21 @@ const Header = ({
 
   // Déterminer l'ordre des icônes depuis les préférences
   const savedOrder = preferences?.header_icon_order;
-  const iconOrder = (savedOrder && Array.isArray(savedOrder) && savedOrder.length > 0)
+  const baseOrder = (savedOrder && Array.isArray(savedOrder) && savedOrder.length > 0)
     ? savedOrder
     : DEFAULT_HEADER_ORDER;
-  
-  // Filtrer par visibilité utilisateur (masquées par défaut si aucun paramètre)
+  // Ajouter à la fin tous les IDs du registry qui ne sont pas encore dans l'ordre
+  // (ex. nouveaux icons ajoutés après une mise à jour de l'app)
+  const missingIds = HEADER_ICONS_REGISTRY
+    .filter(r => !baseOrder.includes(r.id))
+    .map(r => r.id);
+  const iconOrder = [...baseOrder, ...missingIds];
+
+  // Filtrer par visibilité utilisateur (visible par défaut si l'ID n'a jamais été configuré)
   const isIconVisible = (iconId) => {
     if (headerVisibility === null) return false; // chargement en cours
+    // Si l'ID n'est pas du tout dans la map = nouvel icon jamais vu → visible par défaut
+    if (!(iconId in headerVisibility)) return true;
     return !!headerVisibility[iconId];
   };
 
@@ -137,6 +146,8 @@ const Header = ({
         return <span key={iconId} className="hidden md:flex"><OfflineIndicator /></span>;
       case 'backup':
         return <span key={iconId} className="hidden md:contents"><BackupStatusIcon /></span>;
+      case 'data_integrity':
+        return isAdmin ? <span key={iconId} className="hidden md:contents"><DataIntegrityHeaderIcon /></span> : null;
       case 'camera':
         return <span key={iconId} className="hidden md:contents"><CameraAlertIcon /></span>;
       case 'mes':

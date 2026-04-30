@@ -10,7 +10,7 @@ import {
   BookOpen, Bot, HelpCircle, Clock, Wifi,
   HardDrive, Camera, Zap, Mail, CalendarClock,
   Download, Eye, Package, AlertTriangle, Lock,
-  BellRing, Sparkles, Bell, User
+  BellRing, Sparkles, Bell, User, Database
 } from 'lucide-react';
 
 // Registre de toutes les icônes du header avec métadonnées
@@ -21,6 +21,7 @@ export const HEADER_ICONS_REGISTRY = [
   { id: 'help',               label: 'Aide',                   icon: HelpCircle,    zone: 'left',  module: null },
   { id: 'clock',              label: 'Horloge',                icon: Clock,         zone: 'left',  module: null },
   { id: 'offline_indicator',  label: 'Statut en ligne',        icon: Wifi,          zone: 'left',  module: null },
+  { id: 'data_integrity',     label: 'Cohérence des données',  icon: Database,      zone: 'right', module: '__admin__' },
   { id: 'backup',             label: 'Sauvegarde',             icon: HardDrive,     zone: 'right', module: '__admin__' },
   { id: 'camera',             label: 'Cameras',                icon: Camera,        zone: 'right', module: 'cameras' },
   { id: 'mes',                label: 'Alertes M.E.S.',         icon: Zap,           zone: 'right', module: 'mes' },
