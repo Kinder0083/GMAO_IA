@@ -27,6 +27,12 @@ Stack : React + FastAPI + MongoDB + MQTT + ESP32 edge-computing.
 - 2026-04-30 : **Fix widget "Charge OT restante"** — `_compute_time_widgets` ne filtre
   plus sur le champ legacy `actif` (souvent stale), uniquement sur `statut`. Ajout
   scripts `cleanup_user_actif_field.py` et `dedupe_service_responsables.py`.
+- 2026-04-30 : **Panneau "Cohérence des données"** dans Paramètres spéciaux
+  (admin only). Scan + simulation + réparation des incohérences connues
+  (actif↔statut, doublons service_responsables). Routes
+  `GET /api/admin/data-integrity/scan` et `POST /api/admin/data-integrity/repair`.
+  Extensible : ajouter un nouveau check = 1 entrée dans le dict `CHECKS`
+  de `routes/data_integrity.py`.
 
 ## Backlog priorisé
 ### P1

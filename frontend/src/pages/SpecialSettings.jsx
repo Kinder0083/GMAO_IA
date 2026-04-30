@@ -15,6 +15,7 @@ import FormAIModelSettings from '../components/Settings/FormAIModelSettings';
 import TrashSettings from '../components/Settings/TrashSettings';
 import AccidentAISettings from '../components/Settings/AccidentAISettings';
 import ImageCompressionSettings from '../components/Settings/ImageCompressionSettings';
+import DataIntegritySettings from '../components/Settings/DataIntegritySettings';
 
 /**
  * Page de paramètres spéciaux / système
@@ -85,6 +86,9 @@ const SpecialSettings = () => {
 
           {/* Compression des images */}
           <ImageCompressionSettings />
+
+          {/* Cohérence des données — scan & réparation */}
+          <DataIntegritySettings />
         </div>
       </div>
     </div>
