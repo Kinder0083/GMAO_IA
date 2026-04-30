@@ -1794,6 +1794,16 @@ async def startup_scheduler():
             name='Verification sante systeme de notification',
             replace_existing=True
         )
+
+        # Scan quotidien de cohérence des données à 02h30
+        from data_integrity_cron import run_data_integrity_check_and_alert
+        scheduler.add_job(
+            run_data_integrity_check_and_alert,
+            CronTrigger(hour=2, minute=30),  # Tous les jours à 02h30
+            id='data_integrity_daily_scan',
+            name='Scan cohérence des données (quotidien)',
+            replace_existing=True
+        )
         
         scheduler.start()
         logger.info("✅ Scheduler démarré:")
@@ -1808,6 +1818,7 @@ async def startup_scheduler():
         logger.info("   - Alertes contrats: tous les jours à 08h00")
         logger.info("   - Nettoyage push tokens invalides: toutes les 20 min")
         logger.info("   - Verification sante notifications: toutes les 30 min")
+        logger.info("   - Scan coherence des donnees: tous les jours a 02h30")
 
         # Charger les planifications de backup automatique
         try:

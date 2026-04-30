@@ -48,6 +48,11 @@ ALERT_TYPES = {
         "subject": "[INFO] FSAO Iris - Mode maintenance modifie",
         "severity": "info",
     },
+    "data_integrity": {
+        "label": "Incoherences de donnees detectees",
+        "subject": "[ALERTE] FSAO Iris - Incoherences detectees en base",
+        "severity": "warning",
+    },
 }
 
 LEVEL_NAMES = {1: "SOFT", 2: "ROLLBACK", 3: "MEDIUM", 4: "HARD"}
@@ -229,6 +234,17 @@ def send_health_alert(alert_type, recipients, extra_data=None, cooldown_hours=24
           <p style="margin: 0; color: {'#991B1B' if active else '#166534'}; font-weight: 600;">Mode maintenance {status_text}</p>
           <p style="margin: 4px 0 0; font-size: 13px; color: #475569;">Par : {by_user}</p>
         </div>
+        """
+
+    elif alert_type == "data_integrity":
+        total = extra.get("total_issues", 0)
+        custom_html = extra.get("details_html", "")
+        details_html = f"""
+        <div style="background: #FFFBEB; border-left: 4px solid #D97706; padding: 12px 16px; border-radius: 4px; margin-bottom: 16px;">
+          <p style="margin: 0; color: #92400E; font-weight: 600;">Incoherences detectees en base</p>
+          <p style="margin: 4px 0 0; color: #A16207; font-size: 13px;">{total} element(s) a verifier</p>
+        </div>
+        {custom_html}
         """
     else:
         details_html = f"<p>{json.dumps(extra, indent=2)}</p>"

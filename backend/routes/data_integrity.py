@@ -7,10 +7,16 @@ dans la base et de les réparer (avec mode dry-run par défaut).
 Checks actuels :
   - user_actif_statut_sync  : champ legacy `actif` désynchronisé de `statut`
   - service_responsables_duplicates : doublons dans service_responsables
+  - time_entries_integrity  : time_entries (dans work_orders/improvements)
+      - timestamp stocké en string au lieu de datetime (empêche le filtre
+        $gte/$lte des rapports de les trouver)
+      - user_id orphelin (utilisateur supprimé)
+      - user_id dans un format non-canonique (différent de str(user["_id"]))
 """
 from fastapi import APIRouter, Depends, HTTPException
 from datetime import datetime, timezone
 from collections import defaultdict
+from bson import ObjectId
 import re
 import logging
 
@@ -22,6 +28,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Administration"], prefix="/admin/data-integrity")
 
 INACTIF_RE = re.compile(r"^inactif$", re.IGNORECASE)
+DELETED_USER_LABEL = "[Utilisateur supprimé]"
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -57,7 +64,6 @@ async def _fix_user_actif_statut_sync(dry_run: bool):
         return {"modified_count": 0, "planned_count": len(issues), "details": issues}
     modified = 0
     for it in issues:
-        from bson import ObjectId
         try:
             oid = ObjectId(it["_id"])
         except Exception:
@@ -103,7 +109,6 @@ async def _fix_service_responsables_duplicates(dry_run: bool):
     total_to_remove = sum(len(d["remove_ids"]) for d in dups)
     if dry_run:
         return {"modified_count": 0, "planned_count": total_to_remove, "details": dups}
-    from bson import ObjectId
     deleted = 0
     for d in dups:
         for rid in d["remove_ids"]:
@@ -114,6 +119,179 @@ async def _fix_service_responsables_duplicates(dry_run: bool):
             res = await db.service_responsables.delete_one({"_id": oid})
             deleted += res.deleted_count
     return {"modified_count": deleted, "planned_count": total_to_remove, "details": dups}
+
+
+# ──────────────────────────────────────────────────────────────────────────
+#  CHECK 3 : intégrité des time_entries (work_orders + improvements)
+# ──────────────────────────────────────────────────────────────────────────
+def _parse_ts_str(s):
+    """Tente de parser une string ISO en datetime naive. Retourne None si échec."""
+    if not isinstance(s, str):
+        return None
+    try:
+        return datetime.fromisoformat(s.replace('Z', '+00:00').replace('+00:00', ''))
+    except Exception:
+        try:
+            return datetime.fromisoformat(s[:19])
+        except Exception:
+            return None
+
+
+async def _build_user_canonical_map():
+    """Construit un map {id_alt -> canonical_id} où canonical_id = str(user["_id"]).
+
+    Les id_alt possibles pour un user :
+      - str(user["_id"])      (canonique)
+      - user.get("id")        (UUID legacy)
+      - user.get("email")     (parfois utilisé comme id)
+    Retourne aussi l'ensemble des canonical_ids et un map {canonical_id -> user_name}.
+    """
+    canonical_map = {}           # tous les id alternatifs → canonical
+    canonical_ids = set()
+    user_names = {}              # canonical_id → user_name
+    async for u in db.users.find({}, {"_id": 1, "id": 1, "email": 1, "nom": 1, "prenom": 1}):
+        cid = str(u["_id"])
+        canonical_ids.add(cid)
+        full_name = f"{u.get('prenom','')} {u.get('nom','')}".strip() or u.get("email", "?")
+        user_names[cid] = full_name
+        canonical_map[cid] = cid
+        alt_id = u.get("id")
+        if alt_id and alt_id != cid:
+            canonical_map[str(alt_id)] = cid
+        email = u.get("email")
+        if email:
+            canonical_map[email] = cid
+    return canonical_map, canonical_ids, user_names
+
+
+async def _scan_collection_time_entries(collection_name: str, canonical_map: dict, user_names: dict):
+    """Scanne une collection pour détecter les time_entries problématiques.
+
+    Retourne une liste d'issues :
+      { collection, doc_id (str _id), doc_title, entry_id, issue_type, ... }
+    """
+    issues = []
+    col = db[collection_name]
+    cursor = col.find({"time_entries": {"$exists": True, "$ne": []}},
+                      {"_id": 1, "titre": 1, "numero": 1, "time_entries": 1})
+    async for doc in cursor:
+        doc_id = str(doc["_id"])
+        doc_title = doc.get("titre") or doc.get("numero") or "?"
+        for entry in doc.get("time_entries", []):
+            entry_id = entry.get("id")
+            if not entry_id:
+                continue
+            # 1) timestamp en string
+            ts = entry.get("timestamp")
+            if isinstance(ts, str):
+                parsed = _parse_ts_str(ts)
+                issues.append({
+                    "collection": collection_name,
+                    "doc_id": doc_id,
+                    "doc_title": doc_title,
+                    "entry_id": entry_id,
+                    "issue_type": "timestamp_string",
+                    "current": ts,
+                    "target": parsed.isoformat() if parsed else None,
+                    "parseable": parsed is not None,
+                    "user_name": entry.get("user_name", "?"),
+                })
+            # 2) user_id non-canonique
+            uid = entry.get("user_id")
+            if uid:
+                uid_str = str(uid)
+                if uid_str in canonical_map:
+                    canonical = canonical_map[uid_str]
+                    if canonical != uid_str:
+                        issues.append({
+                            "collection": collection_name,
+                            "doc_id": doc_id,
+                            "doc_title": doc_title,
+                            "entry_id": entry_id,
+                            "issue_type": "user_id_non_canonical",
+                            "current": uid_str,
+                            "target": canonical,
+                            "user_name": entry.get("user_name", "?"),
+                        })
+                else:
+                    # 3) user orphelin
+                    if entry.get("user_name") != DELETED_USER_LABEL:
+                        issues.append({
+                            "collection": collection_name,
+                            "doc_id": doc_id,
+                            "doc_title": doc_title,
+                            "entry_id": entry_id,
+                            "issue_type": "user_orphan",
+                            "current": uid_str,
+                            "target": DELETED_USER_LABEL,
+                            "user_name": entry.get("user_name", "?"),
+                        })
+    return issues
+
+
+async def _check_time_entries_integrity():
+    canonical_map, _, user_names = await _build_user_canonical_map()
+    issues = []
+    issues.extend(await _scan_collection_time_entries("work_orders", canonical_map, user_names))
+    issues.extend(await _scan_collection_time_entries("improvements", canonical_map, user_names))
+    return issues
+
+
+async def _fix_time_entries_integrity(dry_run: bool):
+    issues = await _check_time_entries_integrity()
+    if dry_run:
+        return {"modified_count": 0, "planned_count": len(issues), "details": issues[:50],
+                "summary": _summarize_time_entries_issues(issues)}
+
+    modified = 0
+    skipped = 0
+    for it in issues:
+        col = db[it["collection"]]
+        try:
+            oid = ObjectId(it["doc_id"])
+        except Exception:
+            skipped += 1
+            continue
+
+        if it["issue_type"] == "timestamp_string":
+            if not it.get("parseable"):
+                skipped += 1
+                continue
+            new_ts = _parse_ts_str(it["current"])
+            res = await col.update_one(
+                {"_id": oid, "time_entries.id": it["entry_id"]},
+                {"$set": {"time_entries.$.timestamp": new_ts}}
+            )
+            modified += res.modified_count
+        elif it["issue_type"] == "user_id_non_canonical":
+            res = await col.update_one(
+                {"_id": oid, "time_entries.id": it["entry_id"]},
+                {"$set": {"time_entries.$.user_id": it["target"]}}
+            )
+            modified += res.modified_count
+        elif it["issue_type"] == "user_orphan":
+            # On NE touche PAS user_id (conservation historique),
+            # mais on marque user_name comme "[Utilisateur supprimé]".
+            res = await col.update_one(
+                {"_id": oid, "time_entries.id": it["entry_id"]},
+                {"$set": {"time_entries.$.user_name": DELETED_USER_LABEL}}
+            )
+            modified += res.modified_count
+
+    return {
+        "modified_count": modified,
+        "planned_count": len(issues),
+        "skipped": skipped,
+        "details": issues[:50],
+        "summary": _summarize_time_entries_issues(issues),
+    }
+
+
+def _summarize_time_entries_issues(issues):
+    summary = defaultdict(int)
+    for it in issues:
+        summary[it["issue_type"]] += 1
+    return dict(summary)
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -142,19 +320,31 @@ CHECKS = {
         "scanner": _check_service_responsables_duplicates,
         "fixer": _fix_service_responsables_duplicates,
     },
+    "time_entries_integrity": {
+        "label": "Cohérence des pointages (time_entries)",
+        "description": (
+            "Pointages sur OT / améliorations ayant des problèmes : timestamp "
+            "stocké en string (invisible aux rapports), user_id orphelin (user "
+            "supprimé) ou non-canonique. Réparation : conversion timestamp en "
+            "datetime, resync user_id canonique, marquage user_name "
+            "'[Utilisateur supprimé]' pour les orphelins."
+        ),
+        "severity": "warning",
+        "scanner": _check_time_entries_integrity,
+        "fixer": _fix_time_entries_integrity,
+    },
 }
 
 
 # ──────────────────────────────────────────────────────────────────────────
 #  Endpoints
 # ──────────────────────────────────────────────────────────────────────────
-@router.get("/scan", summary="Scanner les incohérences de données")
-async def scan_data_integrity(current_admin=Depends(get_current_admin_user)):
+async def _run_scan():
+    """Logique du scan partagée entre l'endpoint et le cron."""
     checks_out = []
     total = 0
     for check_id, meta in CHECKS.items():
         issues = await meta["scanner"]()
-        # pour les duplicates, compter les suppressions nécessaires (pas les groupes)
         if check_id == "service_responsables_duplicates":
             count = sum(len(d["remove_ids"]) for d in issues)
         else:
@@ -166,7 +356,7 @@ async def scan_data_integrity(current_admin=Depends(get_current_admin_user)):
             "description": meta["description"],
             "severity": meta["severity"],
             "issues_count": count,
-            "details": issues,
+            "details": issues[:200] if check_id == "time_entries_integrity" else issues,
             "fixable": True,
         })
     return {
@@ -174,6 +364,38 @@ async def scan_data_integrity(current_admin=Depends(get_current_admin_user)):
         "total_issues": total,
         "checks": checks_out,
     }
+
+
+async def _persist_last_scan(result: dict):
+    """Stocke le résumé du dernier scan (sans les détails complets) dans settings."""
+    summary = {
+        "scanned_at": result["scanned_at"],
+        "total_issues": result["total_issues"],
+        "per_check": {c["id"]: c["issues_count"] for c in result["checks"]},
+    }
+    await db.settings.update_one(
+        {"key": "data_integrity_last_scan"},
+        {"$set": {"key": "data_integrity_last_scan", "value": summary}},
+        upsert=True,
+    )
+
+
+@router.get("/scan", summary="Scanner les incohérences de données")
+async def scan_data_integrity(current_admin=Depends(get_current_admin_user)):
+    result = await _run_scan()
+    await _persist_last_scan(result)
+    return result
+
+
+@router.get("/last-scan", summary="Dernier scan (résumé)")
+async def get_last_scan(current_admin=Depends(get_current_admin_user)):
+    """Retourne le résumé du dernier scan sans relancer le scan complet.
+    Utilisé par la page Santé système pour un aperçu rapide."""
+    doc = await db.settings.find_one({"key": "data_integrity_last_scan"}, {"_id": 0, "value": 1})
+    if not doc or not doc.get("value"):
+        return {"has_data": False, "scanned_at": None, "total_issues": 0, "per_check": {}}
+    v = doc["value"]
+    return {"has_data": True, **v}
 
 
 @router.post("/repair", summary="Réparer une ou toutes les incohérences")

@@ -99,6 +99,10 @@ export default function SystemHealth() {
   const [archLoading, setArchLoading] = useState(false);
   const [archModuleFilter, setArchModuleFilter] = useState('all');
 
+  // Data integrity state
+  const [dataIntegrity, setDataIntegrity] = useState(null);
+  const [dataIntegrityChecking, setDataIntegrityChecking] = useState(false);
+
   const ALERT_TYPES_CONFIG = [
     { key: 'app_down', label: 'Application en panne', desc: 'Backend ne répond plus', icon: XCircle, color: '#ef4444', hasThreshold: true, thresholdLabel: 'Après X échec(s)', thresholdUnit: 'échec(s)', min: 1, max: 10 },
     { key: 'recovery_success', label: 'Récupération réussie', desc: 'Système auto-réparé', icon: CheckCircle2, color: '#22c55e' },
@@ -106,6 +110,7 @@ export default function SystemHealth() {
     { key: 'disk_warning', label: 'Disque plein', desc: 'Espace disque critique', icon: HardDrive, color: '#f59e0b', hasThreshold: true, thresholdLabel: 'Seuil', thresholdUnit: '%', min: 50, max: 98 },
     { key: 'memory_warning', label: 'Mémoire critique', desc: 'RAM presque pleine', icon: Cpu, color: '#f97316', hasThreshold: true, thresholdLabel: 'Seuil', thresholdUnit: '%', min: 50, max: 98 },
     { key: 'maintenance_changed', label: 'Maintenance changée', desc: 'Activation/désactivation', icon: Shield, color: '#7c3aed' },
+    { key: 'data_integrity', label: 'Cohérence des données', desc: 'Scan quotidien — incohérences détectées en base', icon: Database, color: '#0ea5e9' },
   ];
 
   const fetchStatus = useCallback(async () => {
@@ -148,6 +153,45 @@ export default function SystemHealth() {
       setArchLoading(false);
     }
   }, []);
+
+  const fetchDataIntegrity = useCallback(async () => {
+    try {
+      const res = await api.get('/admin/data-integrity/last-scan');
+      setDataIntegrity(res.data);
+    } catch (e) {
+      // Non-admins peuvent recevoir 403 — on ignore silencieusement
+      if (e?.response?.status !== 403) {
+        console.error('Erreur fetch data integrity:', e);
+      }
+    }
+  }, []);
+
+  const runDataIntegrityScan = useCallback(async () => {
+    setDataIntegrityChecking(true);
+    try {
+      const res = await api.get('/admin/data-integrity/scan');
+      setDataIntegrity({
+        has_data: true,
+        scanned_at: res.data.scanned_at,
+        total_issues: res.data.total_issues,
+        per_check: res.data.checks.reduce((acc, c) => ({ ...acc, [c.id]: c.issues_count }), {}),
+      });
+      toast({
+        title: 'Scan terminé',
+        description: res.data.total_issues === 0
+          ? 'Base saine — aucune incohérence détectée.'
+          : `${res.data.total_issues} incohérence(s) détectée(s).`,
+      });
+    } catch (e) {
+      toast({
+        title: 'Erreur',
+        description: e?.response?.data?.detail || 'Impossible de scanner.',
+        variant: 'destructive',
+      });
+    } finally {
+      setDataIntegrityChecking(false);
+    }
+  }, [toast]);
 
   const fetchNotifHistory = useCallback(async () => {
     try {
@@ -256,8 +300,9 @@ export default function SystemHealth() {
     fetchNotifHistory();
     fetchPushUsersStatus();
     fetchArchitecture();
+    fetchDataIntegrity();
     runHealthCheck();
-  }, [fetchStatus, fetchAlertsConfig, fetchNotifHealth, fetchNotifHistory, fetchPushUsersStatus, fetchArchitecture]);
+  }, [fetchStatus, fetchAlertsConfig, fetchNotifHealth, fetchNotifHistory, fetchPushUsersStatus, fetchArchitecture, fetchDataIntegrity]);
 
   // Auto-refresh every 30s
   useEffect(() => {
@@ -616,6 +661,70 @@ export default function SystemHealth() {
 
       {/* ──── Stockage Hors Ligne Section ──── */}
       <OfflineStorageSection />
+
+      {/* ──── Cohérence des Données Section ──── */}
+      <Card data-testid="health-data-integrity-card">
+        <CardHeader className="py-3 px-4 border-b">
+          <CardTitle className="text-sm flex items-center justify-between">
+            <span className="flex items-center gap-2">
+              <Database size={16} className="text-sky-600" />
+              Cohérence des données
+              {dataIntegrity?.has_data ? (
+                dataIntegrity.total_issues === 0 ? (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-50 text-green-700 font-medium">SAIN</span>
+                ) : (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 font-medium">
+                    {dataIntegrity.total_issues} ISSUE{dataIntegrity.total_issues > 1 ? 'S' : ''}
+                  </span>
+                )
+              ) : (
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 font-medium">JAMAIS SCANNÉ</span>
+              )}
+            </span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-4 space-y-3">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="text-sm text-gray-600">
+              {dataIntegrity?.has_data ? (
+                <>
+                  Dernier scan : <TimeAgo dateStr={dataIntegrity.scanned_at} />
+                  {dataIntegrity.total_issues > 0 && dataIntegrity.per_check && (
+                    <div className="mt-2 space-y-0.5 text-xs text-gray-500">
+                      {Object.entries(dataIntegrity.per_check)
+                        .filter(([, n]) => n > 0)
+                        .map(([k, n]) => (
+                          <div key={k}>• {k}: {n}</div>
+                        ))}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <span className="text-gray-500">Aucun scan effectué pour le moment.</span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm" variant="outline" className="gap-1.5"
+                onClick={runDataIntegrityScan}
+                disabled={dataIntegrityChecking}
+                data-testid="health-data-integrity-scan-btn"
+              >
+                <RefreshCw size={13} className={dataIntegrityChecking ? 'animate-spin' : ''} />
+                {dataIntegrityChecking ? 'Scan…' : 'Scanner maintenant'}
+              </Button>
+              <a href="/special-settings" className="text-xs text-sky-600 hover:underline" data-testid="health-data-integrity-link">
+                Ouvrir le panneau
+              </a>
+            </div>
+          </div>
+          <p className="text-[11px] text-gray-400 pt-2 border-t">
+            Un scan quotidien automatique est exécuté à 02h30. Si des incohérences sont
+            détectées et que l&apos;alerte « Cohérence des données » est activée ci-dessous,
+            un email est envoyé aux destinataires configurés (1 par 24h).
+          </p>
+        </CardContent>
+      </Card>
 
       {/* ──── Alertes Email Section ──── */}
       <Card data-testid="health-alerts-card">
