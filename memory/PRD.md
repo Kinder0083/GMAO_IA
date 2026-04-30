@@ -33,6 +33,18 @@ Stack : React + FastAPI + MongoDB + MQTT + ESP32 edge-computing.
   `GET /api/admin/data-integrity/scan` et `POST /api/admin/data-integrity/repair`.
   Extensible : ajouter un nouveau check = 1 entrée dans le dict `CHECKS`
   de `routes/data_integrity.py`.
+- 2026-04-30 : **Scan cohérence automatique quotidien** à 02h30 (APScheduler)
+  + email d'alerte si issues détectées via `health_alert_service` (type
+  `data_integrity`, cooldown 24h). Card "Cohérence des données" sur
+  `/system-health` avec scan on-demand. Nouveau type d'alerte configurable
+  dans la section Alertes Email. Endpoint `GET /admin/data-integrity/last-scan`.
+- 2026-04-30 : **Fix bug "Pointage horaire du personnel"** (rapports). Les
+  modifications de date sur les time_entries d'OT/amélioration n'étaient
+  plus remontées au rapport après modification legacy (timestamp stocké en
+  string). Ajout du check `time_entries_integrity` qui détecte et répare :
+  timestamp en string → datetime, user_id non-canonique → canonique,
+  user_id orphelin → marquage `user_name='[Utilisateur supprimé]'`
+  (conservation de l'historique). Intégré au panneau Cohérence des données.
 
 ## Backlog priorisé
 ### P1
