@@ -45,6 +45,16 @@ Stack : React + FastAPI + MongoDB + MQTT + ESP32 edge-computing.
   timestamp en string → datetime, user_id non-canonique → canonique,
   user_id orphelin → marquage `user_name='[Utilisateur supprimé]'`
   (conservation de l'historique). Intégré au panneau Cohérence des données.
+- 2026-04-30 : **Badge topbar Cohérence des données** (admin only).
+  Composant `DataIntegrityHeaderIcon` qui affiche compteur orange si
+  actionable_issues > 0, click → /system-health. Refresh auto 5min.
+  Intégré au registry HEADER_ICONS_REGISTRY avec module='__admin__'.
+- 2026-04-30 : **Check informational `orphan_user_assignments`**. Liste les
+  OT, améliorations et maintenances préventives ayant des pointages assignés
+  à un utilisateur supprimé. Pas de réparation auto : tableau groupé par
+  type avec lien `Ouvrir →` qui navigue vers `/work-orders?open=<uuid>` ou
+  `/improvements?open=<uuid>` pour réassignation manuelle. Le badge topbar
+  exclut les checks informational du compteur (uniquement actionable_issues).
 
 ## Backlog priorisé
 ### P1
