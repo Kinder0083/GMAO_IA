@@ -119,6 +119,16 @@ Stack : React + FastAPI + MongoDB + MQTT + ESP32 edge-computing.
   de `ImprovementRequestFormDialog.jsx` calquée sur
   `InterventionRequestFormDialog.jsx`. Ajout de `deleteAttachment` dans
   `improvementRequestsAPI`.
+- 2026-05-01 : **Recopie automatique des pièces jointes lors de la conversion
+  DI → Amélioration**. Quand une demande d'amélioration est convertie en
+  amélioration via `POST /api/improvement-requests/{id}/convert-to-improvement`,
+  toutes les PJ attachées à la demande sont désormais physiquement copiées dans
+  `/app/backend/uploads/improvements/` avec un nouvel UUID (isolation totale :
+  suppression d'une PJ côté amélioration ne touche pas la demande, et vice
+  versa). La copie est non-bloquante (try/except logger) : un échec de copie
+  fichier n'empêche pas la conversion. Champ tracé `copied_from_request` ajouté
+  sur chaque PJ recopiée pour audit. Le technicien voit immédiatement les
+  photos contextuelles dans l'amélioration sans avoir à revenir sur la DI.
 
 ## Backlog priorisé
 ### P1

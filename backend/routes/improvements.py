@@ -744,6 +744,47 @@ async def convert_to_improvement(
             "comments": []
         }
         
+        # Recopie des pieces jointes depuis la demande d'amelioration vers l'amelioration
+        # Les fichiers sont copies dans /app/backend/uploads/improvements/ avec un nouvel UUID
+        # pour garantir l'isolation entre la DI et l'amelioration (suppression independante)
+        copied_attachments = []
+        try:
+            import shutil as _shutil
+            req_attachments = req.get("attachments", []) or []
+            if req_attachments:
+                target_dir = Path("/app/backend/uploads/improvements")
+                target_dir.mkdir(parents=True, exist_ok=True)
+                for src_att in req_attachments:
+                    src_path = src_att.get("path")
+                    src_filename = src_att.get("filename", "")
+                    # Fallback: reconstruire le path a partir du filename si manquant
+                    if not src_path and src_filename:
+                        src_path = str(Path("/app/backend/uploads/improvement_requests") / src_filename)
+                    if not src_path or not os.path.exists(src_path):
+                        logger.warning(f"PJ source introuvable pour copie: {src_path}")
+                        continue
+                    new_att_id = str(uuid.uuid4())
+                    file_ext = Path(src_filename).suffix or Path(src_path).suffix
+                    new_filename = f"{new_att_id}{file_ext}"
+                    new_path = target_dir / new_filename
+                    _shutil.copy2(src_path, new_path)
+                    copied_attachments.append({
+                        "id": new_att_id,
+                        "filename": new_filename,
+                        "original_filename": src_att.get("original_filename", src_filename),
+                        "path": str(new_path),
+                        "mime_type": src_att.get("mime_type", "application/octet-stream"),
+                        "size": src_att.get("size", 0),
+                        "uploaded_at": datetime.now(timezone.utc).isoformat(),
+                        "uploaded_by": current_user.get("id"),
+                        "copied_from_request": req.get("id")
+                    })
+                improvement_data["attachments"] = copied_attachments
+                logger.info(f"Conversion DI->Amelioration: {len(copied_attachments)} PJ recopiees")
+        except Exception as copy_err:
+            # On ne bloque pas la conversion si la copie echoue
+            logger.warning(f"Erreur copie PJ lors de la conversion: {copy_err}")
+        
         if assignee_id:
             assignee = await db.users.find_one({"id": assignee_id})
             if assignee:
