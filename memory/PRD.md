@@ -129,6 +129,37 @@ Stack : React + FastAPI + MongoDB + MQTT + ESP32 edge-computing.
   fichier n'empêche pas la conversion. Champ tracé `copied_from_request` ajouté
   sur chaque PJ recopiée pour audit. Le technicien voit immédiatement les
   photos contextuelles dans l'amélioration sans avoir à revenir sur la DI.
+- 2026-05-01 : **Étapes de réalisation** sur OT et améliorations. Nouveau
+  composant réutilisable `EtapesRealisationField.jsx` ajouté juste avant la
+  section *Joindre des fichiers* dans les formulaires de création/édition
+  (`WorkOrderFormDialog`, `ImprovementFormDialog`). Chaque étape : numéro
+  auto, textarea auto-redimensionnable, boutons ↑/↓/🗑, drag & drop HTML5
+  pour réordonner, bouton "+ Ajouter une étape" en bas. Suppression
+  re-numérote les suivantes. **Verrouillage** : une étape cochée par un
+  technicien ne peut plus être modifiée, déplacée ni supprimée par l'admin
+  — uniquement ajout d'étapes en fin de liste autorisé. **Réouverture
+  automatique du statut** : si l'admin ajoute une nouvelle étape sur un
+  OT/amélioration au statut `TERMINE`, celui-ci repasse en `OUVERT` avec
+  `dateTermine=null`. **Mot-clé "checklist"** : si l'utilisateur saisit
+  "checklist" dans une étape et quitte le champ (blur), un nouveau dialogue
+  `ChecklistPickerDialog` propose les templates disponibles (avec mise en
+  avant des checklists liées à l'équipement). Sélection → l'étape est
+  préfixée par "Checklist : <nom> — <texte>" + badge violet + champs
+  `checklist_template_id` / `checklist_template_name` stockés. **Vue
+  détail** : nouveau composant `EtapesRealisationViewer.jsx` affiche les
+  étapes avec checkboxes interactives + barre de progression (X/Y, %).
+  Bouton "Exécuter" sur chaque étape liée à une checklist ouvre
+  `ChecklistExecutionDialog` en `mode="etape"` (ne termine pas l'OT, juste
+  l'étape). À la fin de l'exécution, l'étape est **automatiquement cochée**
+  côté backend (PUT `/api/checklists/executions/{id}` avec
+  `status=completed` détecte l'étape liée via `checklist_template_id`).
+  Backend : nouveau module `routes/etapes_helper.py` (fonctions
+  `normalize_etapes`, `merge_etapes_with_lock`, `mark_etape_completed`,
+  `mark_etape_uncompleted`), routes `POST /work-orders/{id}/etapes/{eid}/toggle`
+  et `POST /improvements/{id}/etapes/{eid}/toggle` (toggle protégé : seul
+  l'auteur ou un admin peut décocher), modèles `WorkOrder`, `Improvement`,
+  `ChecklistExecutionCreate`/`Base` enrichis avec `etapes_realisation` et
+  `improvement_id`. Tests pytest 8/8 PASS.
 
 ## Backlog priorisé
 ### P1

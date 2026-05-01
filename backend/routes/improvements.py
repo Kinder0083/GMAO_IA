@@ -1648,6 +1648,10 @@ async def toggle_improvement_etape(
         raise HTTPException(status_code=404, detail="Etape non trouvee")
 
     if etape.get("completed"):
+        is_admin = current_user.get("role") == "ADMIN"
+        is_author = etape.get("completed_by_id") == current_user.get("id")
+        if not (is_admin or is_author):
+            raise HTTPException(status_code=403, detail="Seul l'auteur de la validation ou un administrateur peut décocher cette étape")
         mark_etape_uncompleted(etape)
         action = "decochee"
     else:
