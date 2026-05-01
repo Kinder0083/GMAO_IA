@@ -68,6 +68,13 @@ Stack : React + FastAPI + MongoDB + MQTT + ESP32 edge-computing.
   +1 chapitre `ch-coherence-data` (3 sections) + sections M.E.S. ESP32 et
   Rapports Vue d'ensemble. Script idempotent
   `scripts/update_manual_default_content.py` pour mises à jour futures.
+- 2026-05-01 : **Nouveau check `work_orders_duplicate_numero`**. Détecte les
+  OT différents partageant le même numéro humain (#XXXX) — cause signalée en
+  prod : désync du compteur atomique MongoDB après reset/import. Réparation
+  automatique : OT le plus ancien (par `dateCreation`) garde son numéro, les
+  autres sont renumérotés via le compteur ; le compteur global est
+  resynchronisé sur le max des numéros existants pour éviter toute collision
+  future. Tableau UI avec liens "Ouvrir" vers chaque doublon.
 
 ## Backlog priorisé
 ### P1

@@ -379,6 +379,171 @@ async def _fix_orphan_user_assignments(dry_run: bool):
 
 
 # ──────────────────────────────────────────────────────────────────────────
+#  CHECK 5 : doublons de numéro d'OT (numero dupliqué)
+# ──────────────────────────────────────────────────────────────────────────
+async def _check_work_orders_duplicate_numero():
+    """Détecte les OT ayant le même `numero` (champ humain affiché en UI).
+
+    Exemple vu en prod : 5 OT différents portaient tous #5879. Cause : le
+    compteur atomique `db.counters.work_order_numero` a été desync (reset,
+    import batch, migration).
+    """
+    # Aggregation : group by numero, count > 1, exclure "N/A" et vides
+    pipeline = [
+        {"$match": {
+            "numero": {"$nin": [None, "", "N/A"]},
+            "deleted_at": {"$in": [None, False]},
+        }},
+        {"$group": {
+            "_id": "$numero",
+            "count": {"$sum": 1},
+            "docs": {"$push": {
+                "_id": "$_id",
+                "id": "$id",
+                "titre": "$titre",
+                "statut": "$statut",
+                "dateCreation": "$dateCreation",
+            }},
+        }},
+        {"$match": {"count": {"$gt": 1}}},
+        {"$sort": {"count": -1}},
+    ]
+    groups = await db.work_orders.aggregate(pipeline).to_list(None)
+
+    issues = []
+    for g in groups:
+        # Trier par dateCreation (asc) pour garder le plus ancien
+        docs = g["docs"]
+        def _ts(d):
+            dc = d.get("dateCreation")
+            if isinstance(dc, datetime):
+                return dc
+            if isinstance(dc, str):
+                try:
+                    return datetime.fromisoformat(dc.replace('Z', '+00:00').replace('+00:00', ''))
+                except Exception:
+                    return datetime.min
+            return datetime.min
+        docs_sorted = sorted(docs, key=_ts)
+        keep = docs_sorted[0]
+        to_renumber = docs_sorted[1:]
+        issues.append({
+            "numero": g["_id"],
+            "count": g["count"],
+            "keep": {
+                "_id": str(keep["_id"]),
+                "id": keep.get("id"),
+                "titre": keep.get("titre"),
+                "statut": keep.get("statut"),
+            },
+            "to_renumber": [
+                {
+                    "_id": str(d["_id"]),
+                    "id": d.get("id"),
+                    "titre": d.get("titre"),
+                    "statut": d.get("statut"),
+                    "open_url": f"/work-orders?open={d.get('id') or d['_id']}",
+                }
+                for d in to_renumber
+            ],
+        })
+    return issues
+
+
+async def _fix_work_orders_duplicate_numero(dry_run: bool):
+    """Réparation :
+      1. Pour chaque groupe de doublons, garder le plus ancien (dateCreation)
+      2. Renuméroter les autres en allouant de nouveaux numéros via le compteur
+      3. S'assurer que le compteur est >= max numéro existant pour éviter
+         toute nouvelle collision future.
+    """
+    issues = await _check_work_orders_duplicate_numero()
+    total_to_renumber = sum(len(g["to_renumber"]) for g in issues)
+
+    if dry_run:
+        return {
+            "modified_count": 0,
+            "planned_count": total_to_renumber,
+            "details": issues,
+            "message": (
+                f"{total_to_renumber} OT seront renumérotés. Chaque doublon "
+                "récupère un nouveau numéro unique via le compteur atomique. "
+                "Les OT originaux (les plus anciens) gardent leur numéro actuel."
+            ),
+        }
+
+    # Étape A : resynchroniser le compteur sur le MAX actuel (numéros purement numériques)
+    # Ceci protège les nouveaux OT créés après la réparation.
+    max_numero_doc = await db.work_orders.find_one(
+        {"numero": {"$regex": r"^\d+$"}},
+        sort=[("numero", -1)],
+        projection={"numero": 1}
+    )
+    max_numeric = 0
+    if max_numero_doc and max_numero_doc.get("numero"):
+        try:
+            max_numeric = int(max_numero_doc["numero"])
+        except (TypeError, ValueError):
+            max_numeric = 0
+
+    # Récupérer la valeur actuelle du compteur
+    counter = await db.counters.find_one({"_id": "work_order_numero"}, {"seq": 1})
+    current_seq = (counter or {}).get("seq", 0)
+    if current_seq < max_numeric:
+        await db.counters.update_one(
+            {"_id": "work_order_numero"},
+            {"$set": {"seq": max_numeric}},
+            upsert=True,
+        )
+        logger.info(
+            f"[DataIntegrity] Compteur work_order_numero resync : "
+            f"{current_seq} -> {max_numeric}"
+        )
+
+    # Étape B : renuméroter les doublons
+    modified = 0
+    renumbering_log = []  # pour le retour détaillé
+    for group in issues:
+        for dup in group["to_renumber"]:
+            # Allouer un nouveau numéro atomiquement
+            res_counter = await db.counters.find_one_and_update(
+                {"_id": "work_order_numero"},
+                {"$inc": {"seq": 1}},
+                upsert=True,
+                return_document=True,
+            )
+            new_numero = str(res_counter["seq"])
+            try:
+                oid = ObjectId(dup["_id"])
+            except Exception:
+                continue
+            res = await db.work_orders.update_one(
+                {"_id": oid},
+                {"$set": {"numero": new_numero}}
+            )
+            if res.modified_count:
+                modified += 1
+                renumbering_log.append({
+                    "_id": dup["_id"],
+                    "id": dup.get("id"),
+                    "titre": dup.get("titre"),
+                    "old_numero": group["numero"],
+                    "new_numero": new_numero,
+                })
+
+    return {
+        "modified_count": modified,
+        "planned_count": total_to_renumber,
+        "renumbering_log": renumbering_log[:50],  # cap pour ne pas saturer la réponse
+        "counter_resynced_to": max_numeric if current_seq < max_numeric else None,
+        "message": (
+            f"{modified} OT renumérotés avec succès. Le compteur global est "
+            f"maintenant synchronisé pour éviter toute future collision."
+        ),
+    }
+
+
+# ──────────────────────────────────────────────────────────────────────────
 #  Registry
 # ──────────────────────────────────────────────────────────────────────────
 CHECKS = {
@@ -431,6 +596,21 @@ CHECKS = {
         "fixer": _fix_orphan_user_assignments,
         "informational": True,
     },
+    "work_orders_duplicate_numero": {
+        "label": "Doublons de numéro d'OT",
+        "description": (
+            "Ordres de travail différents partageant le même numéro (affiché "
+            "#XXXX dans l'UI). Cause typique : désynchronisation du compteur "
+            "atomique après un reset, un import batch ou une migration. "
+            "Réparation automatique : l'OT le plus ancien garde son numéro, "
+            "les autres sont renumérotés avec de nouveaux numéros uniques. "
+            "Le compteur global est également resynchronisé pour éviter toute "
+            "collision future."
+        ),
+        "severity": "warning",
+        "scanner": _check_work_orders_duplicate_numero,
+        "fixer": _fix_work_orders_duplicate_numero,
+    },
 }
 
 
@@ -446,6 +626,8 @@ async def _run_scan():
         issues = await meta["scanner"]()
         if check_id == "service_responsables_duplicates":
             count = sum(len(d["remove_ids"]) for d in issues)
+        elif check_id == "work_orders_duplicate_numero":
+            count = sum(len(g["to_renumber"]) for g in issues)
         else:
             count = len(issues)
         total += count

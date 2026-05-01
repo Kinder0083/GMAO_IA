@@ -34,6 +34,7 @@
   - `service_responsables_duplicates` : doublons (service, user_id)
   - `time_entries_integrity` : timestamps en string, user_id non-canoniques, orphelins
   - `orphan_user_assignments` (informational) : pointages assignes a un utilisateur supprime, avec **modal "Reassigner"** integre pour transferer en masse vers un utilisateur actif
+  - `work_orders_duplicate_numero` : plusieurs ordres de travail portant le meme numero (#XXXX). Reparation automatique : l'OT le plus ancien garde son numero, les autres sont renumerotes avec de nouveaux numeros uniques ; le compteur atomique est resynchronise pour eviter toute collision future
 - Endpoints REST : `GET /api/admin/data-integrity/scan`, `POST /api/admin/data-integrity/repair`, `GET /api/admin/data-integrity/last-scan`
 - **Architecture extensible** : ajouter un check = 1 entree dans le dict `CHECKS` de `routes/data_integrity.py`
 

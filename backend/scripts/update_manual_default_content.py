@@ -131,7 +131,15 @@ add_or_update_section(
         "un pointage assigné à un utilisateur supprimé. Pas de réparation automatique : "
         "tableau cliquable avec liens deep-link vers le document, et un bouton "
         "**« Réassigner »** qui ouvre un modal permettant de transférer en masse les "
-        "pointages vers un utilisateur actif sans avoir à ouvrir le document complet."
+        "pointages vers un utilisateur actif sans avoir à ouvrir le document complet.\n\n"
+        "**5. `work_orders_duplicate_numero` — Doublons de numéro d'OT**\n\n"
+        "Détecte plusieurs ordres de travail différents partageant le même numéro "
+        "(#XXXX affiché dans l'UI). Cause typique : désynchronisation du compteur "
+        "atomique MongoDB après un reset, un import batch ou une migration.\n\n"
+        "Réparation automatique : l'OT le plus ancien de chaque groupe garde son numéro, "
+        "les autres sont renumérotés avec de nouveaux numéros uniques alloués par le "
+        "compteur. Le compteur global est aussi resynchronisé sur le max des numéros "
+        "existants pour éviter toute collision future lors de la création de nouveaux OT."
     ),
     order=2,
     parent_id="ch-coherence-data",

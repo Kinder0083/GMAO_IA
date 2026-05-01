@@ -769,7 +769,7 @@
         "settings"
       ],
       "created_at": "2026-04-30T17:36:33.114188+00:00",
-      "updated_at": "2026-04-30T17:36:33.114188+00:00"
+      "updated_at": "2026-05-01T06:05:15.315821+00:00"
     }
   ],
   "sections": [
@@ -3522,7 +3522,7 @@
         "mqtt"
       ],
       "created_at": "2026-04-30T17:32:44.011994+00:00",
-      "updated_at": "2026-04-30T17:36:33.114188+00:00"
+      "updated_at": "2026-05-01T06:05:15.315821+00:00"
     },
     {
       "id": "sec-027-overview",
@@ -3546,7 +3546,7 @@
         "heatmap"
       ],
       "created_at": "2026-04-30T17:32:44.011994+00:00",
-      "updated_at": "2026-04-30T17:36:33.114188+00:00"
+      "updated_at": "2026-05-01T06:05:15.315821+00:00"
     },
     {
       "id": "sec-coherence-01",
@@ -3569,12 +3569,12 @@
         "audit"
       ],
       "created_at": "2026-04-30T17:36:33.114188+00:00",
-      "updated_at": "2026-04-30T17:36:33.114188+00:00"
+      "updated_at": "2026-05-01T06:05:15.315821+00:00"
     },
     {
       "id": "sec-coherence-02",
       "title": "Les 4 checks disponibles",
-      "content": "**1. `user_actif_statut_sync` — Champ legacy `actif` désynchronisé**\n\nDétecte les utilisateurs dont le champ technique `actif` (boolean) ne correspond pas à leur `statut` UI (ACTIF/INACTIF). Cause typique du bug **« le widget Charge OT restante ne compte qu'un seul technicien »**.\n\n**2. `service_responsables_duplicates` — Doublons responsables de service**\n\nDétecte les entrées en double dans la collection `service_responsables` pour un même couple (service, user_id). Peut fausser les règles de routage et les exclusions du widget Charge OT.\n\n**3. `time_entries_integrity` — Cohérence des pointages**\n\nDétecte les pointages d'OT/améliorations qui ont :\n- un `timestamp` stocké en string au lieu de datetime → **invisibles aux rapports**\n- un `user_id` non-canonique (UUID legacy au lieu de l'ObjectId)\n- un `user_id` orphelin (utilisateur supprimé)\n\nRéparation automatique : conversion timestamp en datetime, resync user_id sur l'ObjectId canonique, marquage `user_name='[Utilisateur supprimé]'` pour les orphelins (le `user_id` est conservé pour l'historique).\n\n**4. `orphan_user_assignments` — Pointages assignés à un utilisateur supprimé** *(action manuelle)*\n\nListe les OT, améliorations et maintenances préventives qui contiennent au moins un pointage assigné à un utilisateur supprimé. Pas de réparation automatique : tableau cliquable avec liens deep-link vers le document, et un bouton **« Réassigner »** qui ouvre un modal permettant de transférer en masse les pointages vers un utilisateur actif sans avoir à ouvrir le document complet.",
+      "content": "**1. `user_actif_statut_sync` — Champ legacy `actif` désynchronisé**\n\nDétecte les utilisateurs dont le champ technique `actif` (boolean) ne correspond pas à leur `statut` UI (ACTIF/INACTIF). Cause typique du bug **« le widget Charge OT restante ne compte qu'un seul technicien »**.\n\n**2. `service_responsables_duplicates` — Doublons responsables de service**\n\nDétecte les entrées en double dans la collection `service_responsables` pour un même couple (service, user_id). Peut fausser les règles de routage et les exclusions du widget Charge OT.\n\n**3. `time_entries_integrity` — Cohérence des pointages**\n\nDétecte les pointages d'OT/améliorations qui ont :\n- un `timestamp` stocké en string au lieu de datetime → **invisibles aux rapports**\n- un `user_id` non-canonique (UUID legacy au lieu de l'ObjectId)\n- un `user_id` orphelin (utilisateur supprimé)\n\nRéparation automatique : conversion timestamp en datetime, resync user_id sur l'ObjectId canonique, marquage `user_name='[Utilisateur supprimé]'` pour les orphelins (le `user_id` est conservé pour l'historique).\n\n**4. `orphan_user_assignments` — Pointages assignés à un utilisateur supprimé** *(action manuelle)*\n\nListe les OT, améliorations et maintenances préventives qui contiennent au moins un pointage assigné à un utilisateur supprimé. Pas de réparation automatique : tableau cliquable avec liens deep-link vers le document, et un bouton **« Réassigner »** qui ouvre un modal permettant de transférer en masse les pointages vers un utilisateur actif sans avoir à ouvrir le document complet.\n\n**5. `work_orders_duplicate_numero` — Doublons de numéro d'OT**\n\nDétecte plusieurs ordres de travail différents partageant le même numéro (#XXXX affiché dans l'UI). Cause typique : désynchronisation du compteur atomique MongoDB après un reset, un import batch ou une migration.\n\nRéparation automatique : l'OT le plus ancien de chaque groupe garde son numéro, les autres sont renumérotés avec de nouveaux numéros uniques alloués par le compteur. Le compteur global est aussi resynchronisé sur le max des numéros existants pour éviter toute collision future lors de la création de nouveaux OT.",
       "order": 2,
       "parent_id": "ch-coherence-data",
       "target_roles": [
@@ -3594,7 +3594,7 @@
         "orphelin"
       ],
       "created_at": "2026-04-30T17:36:33.114188+00:00",
-      "updated_at": "2026-04-30T17:36:33.114188+00:00"
+      "updated_at": "2026-05-01T06:05:15.315821+00:00"
     },
     {
       "id": "sec-coherence-03",
@@ -3616,7 +3616,7 @@
         "pointage"
       ],
       "created_at": "2026-04-30T17:36:33.114188+00:00",
-      "updated_at": "2026-04-30T17:36:33.114188+00:00"
+      "updated_at": "2026-05-01T06:05:15.315821+00:00"
     }
   ]
 }

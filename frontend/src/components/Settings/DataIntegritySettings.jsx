@@ -364,6 +364,62 @@ const CheckDetails = ({ checkId, details, onReassignClick }) => {
     );
   }
 
+  if (checkId === 'work_orders_duplicate_numero') {
+    return (
+      <div className="space-y-3">
+        <p className="text-xs text-gray-600 italic">
+          L&apos;OT le plus ancien de chaque groupe garde son numéro. Les autres recevront
+          un nouveau numéro unique au moment de la réparation.
+        </p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-left text-gray-700 border-b border-amber-200">
+                <th className="py-1 pr-2">Numéro en doublon</th>
+                <th className="py-1 pr-2">Nb total</th>
+                <th className="py-1 pr-2">À conserver (plus ancien)</th>
+                <th className="py-1">À renuméroter</th>
+              </tr>
+            </thead>
+            <tbody>
+              {details.map((g) => (
+                <tr key={g.numero} className="border-b border-amber-100 last:border-0 align-top">
+                  <td className="py-1 pr-2 font-mono text-amber-800 font-semibold">#{g.numero}</td>
+                  <td className="py-1 pr-2">{g.count}</td>
+                  <td className="py-1 pr-2">
+                    <div className="font-medium text-gray-900 truncate max-w-[260px]" title={g.keep.titre}>
+                      {g.keep.titre}
+                    </div>
+                    <div className="text-[10px] text-gray-500">{g.keep.statut}</div>
+                  </td>
+                  <td className="py-1">
+                    <ul className="space-y-1">
+                      {g.to_renumber.map((d) => (
+                        <li key={d._id} className="flex items-start gap-2">
+                          <a
+                            href={d.open_url}
+                            className="text-sky-600 hover:underline shrink-0"
+                            data-testid={`dup-open-${d._id}`}
+                          >
+                            Ouvrir
+                          </a>
+                          <span className="truncate max-w-[240px] text-gray-700" title={d.titre}>
+                            {d.titre}
+                            <span className="text-[10px] text-gray-400 ml-1">({d.statut})</span>
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  }
+
   if (checkId === 'orphan_user_assignments') {
     // Groupé par collection
     const grouped = details.reduce((acc, d) => {
