@@ -283,9 +283,8 @@ async def request_restock(
     # Créer automatiquement une Demande d'Achat visible dans la page "Demandes d'Achat"
     try:
         from models import PurchaseRequest, PurchaseRequestType, PurchaseRequestUrgency, PurchaseRequestStatus, PurchaseRequestHistoryEntry
-        year = datetime.now(timezone.utc).year
-        count = await db.purchase_requests.count_documents({"numero": {"$regex": f"^DA-{year}-"}})
-        numero = f"DA-{year}-{str(count + 1).zfill(5)}"
+        from routes.shared import get_next_purchase_request_numero
+        numero = await get_next_purchase_request_numero()
 
         urgency = PurchaseRequestUrgency.URGENT if item.get("quantite", 0) <= 0 else PurchaseRequestUrgency.NORMAL
         description = f"Signalement de besoin via QR code par {user_name}"

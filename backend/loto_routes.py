@@ -149,12 +149,11 @@ class VerifyIsolationPoint(BaseModel):
 # ===== Helpers =====
 
 async def _get_next_numero():
-    last = await db.loto_consignations.find_one(
-        sort=[("numero_seq", -1)],
-        projection={"numero_seq": 1}
-    )
-    seq = (last.get("numero_seq", 0) if last else 0) + 1
-    return f"LOTO-{seq:04d}", seq
+    """Génère le prochain numéro LOTO via le compteur atomique partagé.
+    Anti-collision via routes.shared.get_next_loto_numero (retry-on-conflict).
+    """
+    from routes.shared import get_next_loto_numero
+    return await get_next_loto_numero()
 
 def _serialize(doc):
     if doc and "_id" in doc:

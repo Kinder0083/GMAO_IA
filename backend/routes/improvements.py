@@ -21,7 +21,7 @@ from models import (
     ImprovementRequestUpdate, ImprovementRequestStatusUpdate
 )
 from dependencies import get_current_user, get_current_admin_user, require_permission
-from routes.shared import db, audit_service, serialize_doc, find_user_flexible, NOT_DELETED, get_location_by_id, get_user_by_id, get_equipment_by_id
+from routes.shared import db, audit_service, serialize_doc, find_user_flexible, NOT_DELETED, get_location_by_id, get_user_by_id, get_equipment_by_id, get_next_improvement_numero
 
 EntityType_Audit = EntityType
 logger = logging.getLogger(__name__)
@@ -695,8 +695,7 @@ async def convert_to_improvement(
             raise HTTPException(status_code=400, detail="Cette demande a déjà été convertie")
         
         improvement_id = str(uuid.uuid4())
-        count = await db.improvements.count_documents({})
-        numero = str(7000 + count + 1)
+        numero = await get_next_improvement_numero()
         
         date_limite_imp = None
         if date_limite:
@@ -1129,8 +1128,7 @@ async def get_improvement(imp_id: str, current_user: dict = Depends(require_perm
 @router.post("/improvements", response_model=Improvement, tags=["Ameliorations"])
 async def create_improvement(imp_create: ImprovementCreate, current_user: dict = Depends(require_permission("improvements", "edit"))):
     """Créer une nouvelle amélioration"""
-    count = await db.improvements.count_documents({})
-    numero = str(7000 + count + 1)
+    numero = await get_next_improvement_numero()
     
     improvement_id = str(uuid.uuid4())
     improvement_data = imp_create.model_dump()

@@ -80,6 +80,16 @@ Stack : React + FastAPI + MongoDB + MQTT + ESP32 edge-computing.
   déjà utilisé (cas après reset/import non détecté), la fonction incrémente
   jusqu'à trouver un libre (max 100 tentatives avec saut de 1000 en fallback).
   Garantit l'unicité même sans utiliser le check de cohérence.
+- 2026-05-01 : **Sécurité retry-on-conflict étendue** aux 3 autres générateurs
+  de numéros : `get_next_improvement_numero()` (améliorations), 
+  `get_next_purchase_request_numero(year)` (DA-YYYY-XXXXX, compteur annuel), et
+  `get_next_loto_numero()` (LOTO-XXXX). Helper générique 
+  `_get_next_atomic_numero()` factorise le pattern. Migration automatique :
+  initialisation au max existant à la première utilisation. Refactor des
+  consommateurs : `routes/improvements.py`, `purchase_request_routes.py`,
+  `qr_inventory_routes.py`, `routes/inventory.py`, `loto_routes.py`. Tous les
+  numéros (OT, améliorations, DA, LOTO) sont maintenant protégés contre les
+  collisions, même en cas de reset/import/migration.
 
 ## Backlog priorisé
 ### P1

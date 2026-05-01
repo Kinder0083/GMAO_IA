@@ -19,6 +19,7 @@ from models import (
 from dependencies import get_current_user, get_database
 from purchase_request_service import PurchaseRequestService
 from realtime_manager import realtime_manager
+from routes.shared import get_next_purchase_request_numero
 
 logger = logging.getLogger(__name__)
 
@@ -48,10 +49,8 @@ async def create_purchase_request(
             if n1_user:
                 responsable_n1_nom = f"{n1_user.get('prenom', '')} {n1_user.get('nom', '')}"
         
-        # Générer le numéro de demande
-        year = datetime.now().year
-        count = await db.purchase_requests.count_documents({"numero": {"$regex": f"^DA-{year}-"}})
-        numero = f"DA-{year}-{(count + 1):05d}"
+        # Générer le numéro de demande (avec retry-on-conflict via shared.py)
+        numero = await get_next_purchase_request_numero()
         
         # Créer la demande
         purchase_request = PurchaseRequest(

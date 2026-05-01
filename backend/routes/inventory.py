@@ -104,13 +104,10 @@ async def create_auto_purchase_request(inventory_item: dict, current_user: dict)
     """Créer automatiquement une demande d'achat pour un article en rupture de stock"""
     try:
         from models import PurchaseRequest, PurchaseRequestType, PurchaseRequestUrgency, PurchaseRequestStatus, PurchaseRequestHistoryEntry
-        
-        # Générer un numéro unique pour la demande
-        year = datetime.utcnow().year
-        count = await db.purchase_requests.count_documents({
-            "numero": {"$regex": f"^DA-{year}-"}
-        })
-        numero = f"DA-{year}-{str(count + 1).zfill(5)}"
+        from routes.shared import get_next_purchase_request_numero
+
+        # Générer un numéro unique pour la demande (avec retry-on-conflict)
+        numero = await get_next_purchase_request_numero()
         
         # Créer la demande d'achat avec le modèle Pydantic (génère automatiquement l'UUID)
         purchase_request = PurchaseRequest(
