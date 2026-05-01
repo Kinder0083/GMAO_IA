@@ -265,7 +265,7 @@ async def update_improvement_request(
     if not req:
         raise HTTPException(status_code=404, detail="Demande non trouvée")
     
-    update_data = {k: v for k, v in request_update.model_dump().items() if v is not None}
+    update_data = request_update.model_dump(exclude_unset=True)
     
     if "equipement_id" in update_data:
         if update_data["equipement_id"]:
@@ -274,6 +274,14 @@ async def update_improvement_request(
                 update_data["equipement"] = {"id": equipment["id"], "nom": equipment["nom"]}
         else:
             update_data["equipement"] = None
+    
+    if "sous_equipement_id" in update_data:
+        if update_data["sous_equipement_id"]:
+            sous_eq = await db.equipments.find_one({"id": update_data["sous_equipement_id"]})
+            if sous_eq:
+                update_data["sous_equipement"] = {"id": sous_eq["id"], "nom": sous_eq["nom"]}
+        else:
+            update_data["sous_equipement"] = None
     
     if "emplacement_id" in update_data:
         if update_data["emplacement_id"]:

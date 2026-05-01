@@ -100,6 +100,25 @@ Stack : React + FastAPI + MongoDB + MQTT + ESP32 edge-computing.
   niveaux conservée, support `parent_id=""` pour désigner la racine. Composants :
   `GlobalContextMenu.jsx` (logique sous-menu), `Locations.jsx` (attributs
   `data-zone-*` sur les cards), `routes/locations.py` (validations).
+- 2026-05-01 : **Parité formulaire « Nouvelle demande d'amélioration »** avec
+  les demandes d'intervention. Le champ Équipement ne propose désormais que les
+  équipements parents (via `equipmentsAPI.getParents`). Quand un parent avec
+  enfants est sélectionné, un nouveau champ **Sous-équipement** apparaît
+  conditionnellement avec la liste de ses enfants (chargée via
+  `/api/equipments/{id}/children`). L'emplacement est auto-rempli depuis
+  l'équipement parent (label *(rempli automatiquement)*). Section **Joindre
+  des fichiers** ajoutée : drag & drop, bouton **Parcourir**, bouton
+  **Appareil photo** (capture caméra mobile), miniatures de prévisualisation
+  pour les images, suppression individuelle, modal de visualisation plein
+  écran. Limite 25MB par fichier, compression image automatique côté backend.
+  Backend : ajout constante `MAX_FILE_SIZE` dans `routes/improvements.py`,
+  nouvelle route `DELETE /api/improvement-requests/{id}/attachments/{attachment_id}`,
+  route `GET` dual-mode (par filename ou attachment_id UUID), correction du
+  PUT (`model_dump(exclude_unset=True)`) pour permettre la déassignation
+  explicite de `sous_equipement_id` à `null`. Frontend : refonte complète
+  de `ImprovementRequestFormDialog.jsx` calquée sur
+  `InterventionRequestFormDialog.jsx`. Ajout de `deleteAttachment` dans
+  `improvementRequestsAPI`.
 
 ## Backlog priorisé
 ### P1

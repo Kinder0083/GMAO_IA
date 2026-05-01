@@ -63,11 +63,10 @@ const ImprovementRequestFormDialog = ({ open, onOpenChange, request, onSuccess }
           emplacement_id: request.emplacement?.id || '',
           date_limite_desiree: request.date_limite_desiree?.split('T')[0] || ''
         });
-        // Charger les pieces jointes existantes
+        // Charger les pieces jointes existantes (previews en parallele)
         if (request.attachments && request.attachments.length > 0) {
           const loadExistingAttachments = async () => {
-            const loaded = [];
-            for (const att of request.attachments) {
+            const loaded = await Promise.all(request.attachments.map(async (att) => {
               const item = {
                 name: att.original_filename || att.filename,
                 size: att.size || 0,
@@ -86,8 +85,8 @@ const ImprovementRequestFormDialog = ({ open, onOpenChange, request, onSuccess }
                   console.warn('Preview load failed for', att.filename, err);
                 }
               }
-              loaded.push(item);
-            }
+              return item;
+            }));
             setAttachments(loaded);
           };
           loadExistingAttachments();
@@ -111,7 +110,7 @@ const ImprovementRequestFormDialog = ({ open, onOpenChange, request, onSuccess }
     } else {
       // Cleanup object URLs
       attachments.forEach(att => {
-        if (att.preview && !att.isExisting) URL.revokeObjectURL(att.preview);
+        if (att.preview) URL.revokeObjectURL(att.preview);
       });
       setAttachments([]);
       setPreviewImage(null);
@@ -241,9 +240,11 @@ const ImprovementRequestFormDialog = ({ open, onOpenChange, request, onSuccess }
         await improvementRequestsAPI.deleteAttachment(request.id, att.id);
       } catch (error) {
         console.error('Erreur suppression PJ:', error);
+        toast({ title: 'Erreur', description: `Impossible de supprimer ${att.name}`, variant: 'destructive' });
+        return;
       }
     }
-    if (att.preview && !att.isExisting) URL.revokeObjectURL(att.preview);
+    if (att.preview) URL.revokeObjectURL(att.preview);
     setAttachments(prev => prev.filter((_, i) => i !== index));
   };
 
