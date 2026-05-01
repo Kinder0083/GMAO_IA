@@ -160,6 +160,35 @@ Stack : React + FastAPI + MongoDB + MQTT + ESP32 edge-computing.
   l'auteur ou un admin peut décocher), modèles `WorkOrder`, `Improvement`,
   `ChecklistExecutionCreate`/`Base` enrichis avec `etapes_realisation` et
   `improvement_id`. Tests pytest 8/8 PASS.
+- 2026-05-01 : **Filtrage des utilisateurs inactifs sur le Planning**.
+  `usePlanning.js` utilise désormais `usersAPI.getActive()` au lieu de
+  `getAll()` — exclut tout utilisateur au statut `inactif` de la liste du
+  Planning du Personnel.
+- 2026-05-01 : **Activité Maintenance** — nouveau menu Planning à 2 onglets.
+  L'onglet **Rythme** conserve le Planning du Personnel actuel.
+  Le nouvel onglet **Activité Maintenance** est un planificateur de charge
+  pour les techniciens du service Maintenance. Vues toggle Semaine (Lun-Dim)
+  / Jour avec navigation prev/today/next. Bandeau récap équipe en haut
+  (Techniciens / Capacité / Planifié / Surcharges). Grille avec 1 ligne par
+  technicien et barre de charge journalière colorée
+  (vert ≤7h, jaune 7-8h, rouge clignotant >8h). Pool latéral de tâches non
+  affectées (OT/Améliorations/MP non terminés) avec recherche, filtres et
+  drag & drop vers les cellules. Bouton **+ Ajouter** sur chaque cellule
+  ouvre un `AssignmentDialog` qui supporte 5 types : WORK_ORDER, IMPROVEMENT,
+  PREVENTIVE_MAINTENANCE (avec sélection de référence depuis le pool),
+  FREE_TASK (titre + desc + durée + catégorie REUNION/FORMATION/ASTREINTE/AUTRE +
+  couleur auto), CONGE. La création d'un CONGE crée automatiquement la
+  disponibilité `disponible=False` correspondante (sync bidirectionnelle
+  avec l'onglet Rythme). Drag & drop pour déplacer une affectation entre
+  cellules (changement user_id et date). Bouton **Auto-fit** propose une
+  répartition automatique des éléments du pool sur la période en respectant
+  la capacité 8h/jour et les indispos. Backend : nouveau module
+  `routes/maintenance_assignments.py` avec CRUD, `unassigned-pool` et
+  `auto-suggest` (apply=true pour créer). Modèles
+  `MaintenanceAssignment*` ajoutés à `models.py`. Permissions :
+  ADMIN, responsable service Maintenance, ou utilisateurs avec
+  `planning.admin`/`planning.edit` peuvent créer/modifier/supprimer.
+  Tests pytest **11/11 PASS**, frontend testing agent OK end-to-end.
 
 ## Backlog priorisé
 ### P1
