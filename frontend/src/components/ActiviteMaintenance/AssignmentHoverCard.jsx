@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '../ui/hover-card';
 import { Badge } from '../ui/badge';
 import {
@@ -7,11 +8,11 @@ import {
 } from 'lucide-react';
 
 const TYPE_META = {
-  WORK_ORDER: { color: '#0ea5e9', icon: Wrench, label: 'Ordre de travail', linkText: "Voir l'ordre de travail", resourcePath: '/work-orders' },
-  IMPROVEMENT: { color: '#10b981', icon: Lightbulb, label: 'Amélioration', linkText: "Voir l'amélioration", resourcePath: '/improvements' },
-  PREVENTIVE_MAINTENANCE: { color: '#f59e0b', icon: Sparkles, label: 'M.Préventive', linkText: 'Voir la maintenance préventive', resourcePath: '/preventive-maintenance' },
-  FREE_TASK: { color: '#6b7280', icon: ActivityIcon, label: 'Tâche libre', linkText: '', resourcePath: null },
-  CONGE: { color: '#9ca3af', icon: Coffee, label: 'Congé / Indispo', linkText: '', resourcePath: null },
+  WORK_ORDER: { color: '#0ea5e9', icon: Wrench, label: 'Ordre de travail', linkText: "Voir l'ordre de travail", resourcePath: '/work-orders', paramKey: 'id' },
+  IMPROVEMENT: { color: '#10b981', icon: Lightbulb, label: 'Amélioration', linkText: "Voir l'amélioration", resourcePath: '/improvements', paramKey: 'open' },
+  PREVENTIVE_MAINTENANCE: { color: '#f59e0b', icon: Sparkles, label: 'M.Préventive', linkText: 'Voir la maintenance préventive', resourcePath: '/preventive-maintenance', paramKey: 'open' },
+  FREE_TASK: { color: '#6b7280', icon: ActivityIcon, label: 'Tâche libre', linkText: '', resourcePath: null, paramKey: null },
+  CONGE: { color: '#9ca3af', icon: Coffee, label: 'Congé / Indispo', linkText: '', resourcePath: null, paramKey: null },
 };
 
 const CATEGORY_LABELS = {
@@ -27,9 +28,18 @@ const CATEGORY_LABELS = {
  * durée, description, créateur, lien vers la ressource source).
  */
 const AssignmentHoverCard = ({ assignment, children }) => {
+  const navigate = useNavigate();
   const meta = TYPE_META[assignment.type] || TYPE_META.FREE_TASK;
   const Icon = meta.icon;
-  const hasReference = !!assignment.reference_id && !!meta.resourcePath;
+  const hasReference = !!assignment.reference_id && !!meta.resourcePath && !!meta.paramKey;
+
+  const handleOpenResource = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (hasReference) {
+      navigate(`${meta.resourcePath}?${meta.paramKey}=${encodeURIComponent(assignment.reference_id)}`);
+    }
+  };
 
   return (
     <HoverCard openDelay={200} closeDelay={100}>
@@ -104,18 +114,16 @@ const AssignmentHoverCard = ({ assignment, children }) => {
 
           {/* Lien vers la ressource source */}
           {hasReference && (
-            <a
-              href={`${meta.resourcePath}?focus=${assignment.reference_id}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
+            <button
+              type="button"
+              onClick={handleOpenResource}
               data-testid={`hover-link-${assignment.id}`}
-              className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 hover:underline pt-1 border-t w-full justify-center font-medium"
+              className="inline-flex items-center gap-1 text-xs hover:underline pt-1 border-t w-full justify-center font-medium"
               style={{ color: meta.color }}
             >
               <ExternalLink size={12} />
               {meta.linkText || `Voir le ${meta.label.toLowerCase()}`}
-            </a>
+            </button>
           )}
         </div>
       </HoverCardContent>

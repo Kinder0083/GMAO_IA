@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useLocationStateFilter } from '../hooks/useLocationStateFilter';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -27,6 +27,7 @@ import { usePreventiveMaintenance } from '../hooks/usePreventiveMaintenance';
 
 const PreventiveMaintenance = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { toast } = useToast();
   const { confirm, ConfirmDialog } = useConfirmDialog();
   const user = JSON.parse(localStorage.getItem('user') || '{}');
@@ -87,6 +88,22 @@ const PreventiveMaintenance = () => {
   useEffect(() => {
     loadChecklists();
   }, []);
+
+  // Ouverture automatique d'une MP via l'URL ?open=<id>
+  useEffect(() => {
+    const openId = searchParams.get('open');
+    if (!openId) return;
+    if (loading) return;
+    const target = (maintenance || []).find(m => m.id === openId || m._id === openId);
+    if (target) {
+      setSelectedMaintenance(target);
+      setFormDialogOpen(true);
+    }
+    // Retirer le param quelle que soit l'issue pour eviter les reouvertures
+    searchParams.delete('open');
+    setSearchParams(searchParams, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, loading, maintenance]);
 
   // Appliquer le filtre "en retard" depuis la navigation (header)
   useLocationStateFilter({

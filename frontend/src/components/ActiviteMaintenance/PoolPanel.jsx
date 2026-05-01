@@ -108,42 +108,46 @@ const PoolPanel = ({ pool = [], plannedRefs = {}, onDragStart, canAssign = false
             const Icon = meta.icon;
             const planned = plannedRefs[item.id];
             const isPlanned = Boolean(planned);
-            const draggable = canAssign && !isPlanned;
+            // On garde le drag autorise meme si deja planifie (pour pouvoir affecter
+            // a un autre technicien ou un autre jour). Le grisage est uniquement visuel.
+            const draggable = canAssign;
             const users = planned?.users ? Array.from(planned.users) : [];
             const dates = planned?.dates ? Array.from(planned.dates).sort() : [];
             const titleHint = isPlanned
-              ? `Déjà planifié(e) ${planned.count}× sur la période\n${users.length ? '→ ' + users.join(', ') : ''}${dates.length ? '\nDates : ' + dates.join(', ') : ''}`
+              ? `Deja planifie(e) ${planned.count}x sur la periode${users.length ? '\n-> ' + users.join(', ') : ''}${dates.length ? '\nDates : ' + dates.join(', ') : ''}\n(Vous pouvez l'affecter a un autre technicien / jour)`
               : '';
             return (
               <div
                 key={`${item.type}-${item.id}`}
                 draggable={draggable}
                 onDragStart={() => draggable && onDragStart(item)}
-                onClick={() => !isPlanned && onItemClick && canAssign && onItemClick(item)}
+                onClick={() => onItemClick && canAssign && onItemClick(item)}
                 data-testid={`pool-item-${item.id}`}
                 data-planned={isPlanned ? 'true' : 'false'}
                 title={titleHint}
                 className={`relative p-2 rounded border transition ${
                   isPlanned
-                    ? 'bg-gray-50 border-gray-200 opacity-60 cursor-not-allowed'
+                    ? `bg-gray-200 border-gray-300 ${canAssign ? 'cursor-grab active:cursor-grabbing hover:shadow-sm' : 'cursor-default'}`
                     : `${meta.bg} ${meta.border} ${canAssign ? 'cursor-grab active:cursor-grabbing hover:shadow-sm' : 'cursor-default'}`
                 }`}
+                style={isPlanned ? { opacity: 0.55 } : undefined}
               >
                 {isPlanned && (
                   <span
-                    className="absolute top-1 right-1 inline-flex items-center gap-0.5 text-[9px] font-semibold bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full border border-emerald-300"
+                    className="absolute top-1 right-1 inline-flex items-center gap-0.5 text-[9px] font-bold bg-emerald-600 text-white px-1.5 py-0.5 rounded-full shadow-sm"
                     data-testid={`pool-item-planned-badge-${item.id}`}
+                    style={{ opacity: 1 }}
                   >
                     <CheckCircle2 size={9} />
-                    Planifié{planned.count > 1 ? ` ×${planned.count}` : ''}
+                    Planifie{planned.count > 1 ? ` x${planned.count}` : ''}
                   </span>
                 )}
                 <div className="flex items-start gap-1.5">
-                  <Icon size={12} className={(isPlanned ? 'text-gray-400' : meta.text) + ' mt-0.5 shrink-0'} />
+                  <Icon size={12} className={(isPlanned ? 'text-gray-500' : meta.text) + ' mt-0.5 shrink-0'} />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1 flex-wrap">
                       {item.numero && (
-                        <span className={`text-[9px] font-mono font-bold ${isPlanned ? 'text-gray-500' : meta.text}`}>
+                        <span className={`text-[9px] font-mono font-bold ${isPlanned ? 'text-gray-600' : meta.text}`}>
                           #{item.numero}
                         </span>
                       )}
@@ -152,11 +156,11 @@ const PoolPanel = ({ pool = [], plannedRefs = {}, onDragStart, canAssign = false
                           {item.priorite}
                         </span>
                       )}
-                      <span className={`text-[9px] ml-auto ${isPlanned ? 'text-gray-400' : 'text-gray-500'}`}>
+                      <span className={`text-[9px] ml-auto ${isPlanned ? 'text-gray-500' : 'text-gray-500'}`}>
                         {item.duration_hours}h
                       </span>
                     </div>
-                    <p className={`text-xs mt-0.5 line-clamp-2 leading-tight ${isPlanned ? 'text-gray-500 line-through decoration-gray-400/60' : 'text-gray-800'}`}>
+                    <p className={`text-xs mt-0.5 line-clamp-2 leading-tight ${isPlanned ? 'text-gray-600 line-through decoration-gray-500/70' : 'text-gray-800'}`}>
                       {item.title}
                     </p>
                     {item.dateLimite && !isPlanned && (
@@ -165,7 +169,7 @@ const PoolPanel = ({ pool = [], plannedRefs = {}, onDragStart, canAssign = false
                       </p>
                     )}
                     {isPlanned && users.length > 0 && (
-                      <p className="text-[9px] text-emerald-700 mt-0.5 truncate">
+                      <p className="text-[9px] text-emerald-700 font-semibold mt-0.5 truncate">
                         → {users.slice(0, 2).join(', ')}{users.length > 2 ? ` +${users.length - 2}` : ''}
                       </p>
                     )}
