@@ -381,26 +381,30 @@ const ActiviteMaintenance = ({ service = 'MAINTENANCE' }) => {
       </div>
 
       {/* Layout principal : Grid + Pool latéral */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-3">
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_280px] gap-3 min-w-0">
         {/* Grid */}
-        <Card>
-          <CardContent className="p-2 overflow-x-auto">
+        <Card className="min-w-0">
+          <CardContent className="p-2 overflow-x-auto min-w-0">
             {techs.length === 0 ? (
               <p className="text-gray-500 text-sm py-8 text-center">
                 Aucun technicien actif dans le service "{service}". Créez ou activez un utilisateur ayant ce service.
               </p>
             ) : (
-              <table className="w-full border-collapse" data-testid="planning-grid">
+              <table className="border-collapse" style={{ tableLayout: 'fixed', width: `${140 + days.length * 140}px` }} data-testid="planning-grid">
+                <colgroup>
+                  <col style={{ width: '140px' }} />
+                  {days.map((_, i) => (<col key={i} style={{ width: '140px' }} />))}
+                </colgroup>
                 <thead>
                   <tr>
-                    <th className="text-left p-2 text-xs uppercase text-gray-600 sticky left-0 bg-white z-10 min-w-[140px]">
+                    <th className="text-left p-2 text-xs uppercase text-gray-600 sticky left-0 bg-white z-10">
                       Technicien
                     </th>
                     {days.map((d, i) => {
                       const isToday = fmtDate(d) === fmtDate(new Date());
                       const isWeekend = d.getDay() === 0 || d.getDay() === 6;
                       return (
-                        <th key={i} className={`text-center p-2 text-xs ${isToday ? 'bg-blue-100 text-blue-800' : isWeekend ? 'bg-gray-50 text-gray-500' : 'text-gray-700'} min-w-[140px] font-semibold`}>
+                        <th key={i} className={`text-center p-2 text-xs ${isToday ? 'bg-blue-100 text-blue-800' : isWeekend ? 'bg-gray-50 text-gray-500' : 'text-gray-700'} font-semibold`}>
                           <div>{DAYS_LABELS[(d.getDay() + 6) % 7]}</div>
                           <div className="text-[10px] font-normal">{d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}</div>
                         </th>
@@ -411,9 +415,9 @@ const ActiviteMaintenance = ({ service = 'MAINTENANCE' }) => {
                 <tbody>
                   {techs.map(t => (
                     <tr key={t.id} className="border-t">
-                      <td className="p-2 sticky left-0 bg-white z-10 border-r">
-                        <div className="font-medium text-sm">{t.prenom} {t.nom}</div>
-                        <div className="text-[10px] text-gray-500">{t.email}</div>
+                      <td className="p-2 sticky left-0 bg-white z-10 border-r overflow-hidden">
+                        <div className="font-medium text-sm truncate" title={`${t.prenom} ${t.nom}`}>{t.prenom} {t.nom}</div>
+                        <div className="text-[10px] text-gray-500 truncate" title={t.email}>{t.email}</div>
                       </td>
                       {days.map((d) => {
                         const dStr = fmtDate(d);
@@ -430,29 +434,35 @@ const ActiviteMaintenance = ({ service = 'MAINTENANCE' }) => {
                             data-testid={`cell-${t.id}-${dStr}`}
                             onDragOver={onCellDragOver}
                             onDrop={(e) => onCellDrop(e, t.id, dStr)}
-                            className={`p-1 align-top border-l ${isWeekend ? 'bg-gray-50' : 'bg-white'} ${isToday ? 'bg-blue-50/50' : ''}`}
+                            className={`p-1 align-top border-l overflow-hidden ${isWeekend ? 'bg-gray-50' : 'bg-white'} ${isToday ? 'bg-blue-50/50' : ''}`}
                           >
-                            <div className="space-y-1 min-h-[60px]">
+                            <div className="space-y-1 min-h-[60px] min-w-0 overflow-hidden">
                               {cellAssigns.map(a => {
                                 const meta = TYPE_META[a.type] || TYPE_META.FREE_TASK;
                                 const Icon = meta?.icon || ActivityIcon;
+                                const fullTooltip = [
+                                  a.reference_numero ? `#${a.reference_numero}` : '',
+                                  a.title || '(Sans titre)',
+                                  `— ${a.duration_hours || 0}h`,
+                                  a.description ? `\n${a.description}` : ''
+                                ].filter(Boolean).join(' ');
                                 return (
                                   <div
                                     key={a.id || `${a.user_id}-${a.date}-${a.title}`}
                                     draggable={canAssign && a.type !== 'CONGE'}
                                     onDragStart={() => onCellDragStart(a)}
                                     data-testid={`assign-${a.id}`}
-                                    className="group rounded px-1.5 py-1 text-[11px] text-white cursor-pointer hover:opacity-90 transition relative"
+                                    className="group rounded px-1.5 py-1 text-[11px] text-white cursor-pointer hover:opacity-90 transition relative overflow-hidden min-w-0 max-w-full"
                                     style={{ backgroundColor: a.color || meta?.color || '#6b7280' }}
                                     onClick={() => openEdit(a)}
-                                    title={`${a.title || ''} — ${a.duration_hours || 0}h`}
+                                    title={fullTooltip}
                                   >
-                                    <div className="flex items-center gap-1 font-semibold leading-tight">
-                                      <Icon size={10} />
-                                      <span className="truncate flex-1">
+                                    <div className="flex items-center gap-1 font-semibold leading-tight min-w-0">
+                                      <Icon size={10} className="shrink-0" />
+                                      <span className="truncate flex-1 min-w-0 block">
                                         {a.reference_numero ? `#${a.reference_numero} ` : ''}{a.title || '(Sans titre)'}
                                       </span>
-                                      <span className="text-[10px] bg-black/20 rounded px-1">{a.duration_hours || 0}h</span>
+                                      <span className="text-[10px] bg-black/20 rounded px-1 shrink-0">{a.duration_hours || 0}h</span>
                                     </div>
                                     {a.description && (
                                       <p className="text-[9px] opacity-90 truncate">{a.description}</p>
