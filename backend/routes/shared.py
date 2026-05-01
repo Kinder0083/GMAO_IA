@@ -130,14 +130,38 @@ def _get_realtime_manager():
 
 async def get_next_work_order_numero():
     """Génère le prochain numéro d'OT via un compteur atomique MongoDB.
-    Utilise findOneAndUpdate avec $inc pour garantir l'unicité même en cas de requêtes simultanées."""
-    result = await db.counters.find_one_and_update(
+    Utilise findOneAndUpdate avec $inc pour garantir l'unicité même en cas de requêtes simultanées.
+
+    SÉCURITÉ ANTI-COLLISION : si le compteur est mal synchronisé (cas après reset,
+    import batch ou migration) et tombe sur un numéro déjà utilisé, on incrémente
+    jusqu'à trouver un libre. Le check `work_orders_duplicate_numero` du panneau
+    Cohérence des données reste recommandé pour nettoyer les doublons existants.
+    """
+    MAX_ATTEMPTS = 100
+    for _ in range(MAX_ATTEMPTS):
+        result = await db.counters.find_one_and_update(
+            {"_id": "work_order_numero"},
+            {"$inc": {"seq": 1}},
+            upsert=True,
+            return_document=True
+        )
+        candidate = str(result["seq"])
+        # Vérifier que ce numéro n'est PAS déjà utilisé par un OT vivant
+        existing = await db.work_orders.find_one(
+            {"numero": candidate, "deleted_at": {"$in": [None, False]}},
+            {"_id": 1}
+        )
+        if not existing:
+            return candidate
+        # Sinon on continue : le compteur passera au suivant à la prochaine itération
+    # Sécurité : si on n'a pas trouvé après MAX_ATTEMPTS, on saute large pour débloquer
+    big_jump = await db.counters.find_one_and_update(
         {"_id": "work_order_numero"},
-        {"$inc": {"seq": 1}},
+        {"$inc": {"seq": 1000}},
         upsert=True,
         return_document=True
     )
-    return str(result["seq"])
+    return str(big_jump["seq"])
 
 
 async def get_equipment_by_id(equipment_id: str):

@@ -75,6 +75,11 @@ Stack : React + FastAPI + MongoDB + MQTT + ESP32 edge-computing.
   autres sont renumérotés via le compteur ; le compteur global est
   resynchronisé sur le max des numéros existants pour éviter toute collision
   future. Tableau UI avec liens "Ouvrir" vers chaque doublon.
+- 2026-05-01 : **Sécurité retry-on-conflict** dans `get_next_work_order_numero()`
+  (`/app/backend/routes/shared.py`). Si le compteur atomique tombe sur un numéro
+  déjà utilisé (cas après reset/import non détecté), la fonction incrémente
+  jusqu'à trouver un libre (max 100 tentatives avec saut de 1000 en fallback).
+  Garantit l'unicité même sans utiliser le check de cohérence.
 
 ## Backlog priorisé
 ### P1
