@@ -13,6 +13,7 @@ import { usePermissions } from '../hooks/usePermissions';
 import AssignmentDialog from '../components/ActiviteMaintenance/AssignmentDialog';
 import PoolPanel from '../components/ActiviteMaintenance/PoolPanel';
 import ChargeGlobaleView from '../components/ActiviteMaintenance/ChargeGlobaleView';
+import AssignmentHoverCard from '../components/ActiviteMaintenance/AssignmentHoverCard';
 
 const DAYS_LABELS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
 
@@ -440,44 +441,38 @@ const ActiviteMaintenance = ({ service = 'MAINTENANCE' }) => {
                               {cellAssigns.map(a => {
                                 const meta = TYPE_META[a.type] || TYPE_META.FREE_TASK;
                                 const Icon = meta?.icon || ActivityIcon;
-                                const fullTooltip = [
-                                  a.reference_numero ? `#${a.reference_numero}` : '',
-                                  a.title || '(Sans titre)',
-                                  `— ${a.duration_hours || 0}h`,
-                                  a.description ? `\n${a.description}` : ''
-                                ].filter(Boolean).join(' ');
                                 return (
-                                  <div
-                                    key={a.id || `${a.user_id}-${a.date}-${a.title}`}
-                                    draggable={canAssign && a.type !== 'CONGE'}
-                                    onDragStart={() => onCellDragStart(a)}
-                                    data-testid={`assign-${a.id}`}
-                                    className="group rounded px-1.5 py-1 text-[11px] text-white cursor-pointer hover:opacity-90 transition relative overflow-hidden min-w-0 max-w-full"
-                                    style={{ backgroundColor: a.color || meta?.color || '#6b7280' }}
-                                    onClick={() => openEdit(a)}
-                                    title={fullTooltip}
-                                  >
-                                    <div className="flex items-center gap-1 font-semibold leading-tight min-w-0">
-                                      <Icon size={10} className="shrink-0" />
-                                      <span className="truncate flex-1 min-w-0 block">
-                                        {a.reference_numero ? `#${a.reference_numero} ` : ''}{a.title || '(Sans titre)'}
-                                      </span>
-                                      <span className="text-[10px] bg-black/20 rounded px-1 shrink-0">{a.duration_hours || 0}h</span>
+                                  <AssignmentHoverCard key={a.id || `${a.user_id}-${a.date}-${a.title}`} assignment={a}>
+                                    <div
+                                      draggable={canAssign && a.type !== 'CONGE'}
+                                      onDragStart={() => onCellDragStart(a)}
+                                      data-testid={`assign-${a.id}`}
+                                      className="group rounded px-1.5 py-1 text-[11px] text-white cursor-pointer hover:opacity-90 transition relative overflow-hidden min-w-0 max-w-full"
+                                      style={{ backgroundColor: a.color || meta?.color || '#6b7280' }}
+                                      onClick={() => openEdit(a)}
+                                    >
+                                      <div className="flex items-center gap-1 font-semibold leading-tight min-w-0">
+                                        <Icon size={10} className="shrink-0" />
+                                        <span className="truncate flex-1 min-w-0 block">
+                                          {a.reference_numero ? `#${a.reference_numero} ` : ''}{a.title || '(Sans titre)'}
+                                        </span>
+                                        <span className="text-[10px] bg-black/20 rounded px-1 shrink-0">{a.duration_hours || 0}h</span>
+                                      </div>
+                                      {a.description && (
+                                        <p className="text-[9px] opacity-90 truncate">{a.description}</p>
+                                      )}
+                                      {canAssign && (
+                                        <button
+                                          type="button"
+                                          onClick={(e) => { e.stopPropagation(); handleDelete(a); }}
+                                          className="absolute top-0 right-0 hidden group-hover:block bg-red-600 rounded-bl px-1"
+                                          title="Supprimer"
+                                        >
+                                          <Trash2 size={8} className="text-white" />
+                                        </button>
+                                      )}
                                     </div>
-                                    {a.description && (
-                                      <p className="text-[9px] opacity-90 truncate">{a.description}</p>
-                                    )}
-                                    {canAssign && (
-                                      <button
-                                        type="button"
-                                        onClick={(e) => { e.stopPropagation(); handleDelete(a); }}
-                                        className="absolute top-0 right-0 hidden group-hover:block bg-red-600 rounded-bl px-1"
-                                        title="Supprimer"
-                                      >
-                                        <Trash2 size={8} className="text-white" />
-                                      </button>
-                                    )}
-                                  </div>
+                                  </AssignmentHoverCard>
                                 );
                               })}
                               {/* Bouton + */}
