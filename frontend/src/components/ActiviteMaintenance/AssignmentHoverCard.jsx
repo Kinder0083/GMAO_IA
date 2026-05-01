@@ -8,8 +8,8 @@ import {
 } from 'lucide-react';
 
 const TYPE_META = {
-  WORK_ORDER: { color: '#0ea5e9', icon: Wrench, label: 'Ordre de travail', linkText: "Voir l'ordre de travail", resourcePath: '/work-orders', paramKey: 'id' },
-  IMPROVEMENT: { color: '#10b981', icon: Lightbulb, label: 'Amélioration', linkText: "Voir l'amélioration", resourcePath: '/improvements', paramKey: 'open' },
+  WORK_ORDER: { color: '#0ea5e9', icon: Wrench, label: 'Ordre de travail', linkText: "Voir l'ordre de travail", resourcePath: '/work-orders', paramKey: 'view' },
+  IMPROVEMENT: { color: '#10b981', icon: Lightbulb, label: 'Amélioration', linkText: "Voir l'amélioration", resourcePath: '/improvements', paramKey: 'view' },
   PREVENTIVE_MAINTENANCE: { color: '#f59e0b', icon: Sparkles, label: 'M.Préventive', linkText: 'Voir la maintenance préventive', resourcePath: '/preventive-maintenance', paramKey: 'open' },
   FREE_TASK: { color: '#6b7280', icon: ActivityIcon, label: 'Tâche libre', linkText: '', resourcePath: null, paramKey: null },
   CONGE: { color: '#9ca3af', icon: Coffee, label: 'Congé / Indispo', linkText: '', resourcePath: null, paramKey: null },

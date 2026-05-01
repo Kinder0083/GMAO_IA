@@ -60,9 +60,35 @@ const Improvements = () => {
     }
   });
 
-  // Gérer l'ouverture automatique d'un ordre via l'URL ?open=id
+  // Gérer l'ouverture automatique d'un ordre via l'URL ?open=id (modification) ou ?view=id (visualisation)
   useEffect(() => {
+    const viewImprovementId = searchParams.get('view');
     const openImprovementId = searchParams.get('open');
+
+    // Mode visualisation : ouvre le dialog "details" (equivalent icone oeil)
+    if (viewImprovementId) {
+      const loadAndViewImprovement = async () => {
+        try {
+          const response = await improvementsAPI.getById(viewImprovementId);
+          if (response && response.data) {
+            setSelectedImprovement(response.data);
+            setDialogOpen(true);
+          }
+        } catch (error) {
+          toast({
+            title: 'Erreur',
+            description: formatErrorMessage(error, "Impossible d'ouvrir l'amélioration"),
+            variant: 'destructive'
+          });
+        } finally {
+          searchParams.delete('view');
+          setSearchParams(searchParams);
+        }
+      };
+      loadAndViewImprovement();
+      return;
+    }
+
     if (openImprovementId) {
       console.log('Tentative d\'ouverture de l\'ordre:', openImprovementId);
       // Charger l'ordre directement par son ID

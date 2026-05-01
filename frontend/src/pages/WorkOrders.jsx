@@ -215,11 +215,36 @@ const WorkOrders = () => {
     setFormDialogOpen(true);
   };
 
-  // Gérer l'ouverture automatique d'un ordre via l'URL ?id=xxx ou ?open=xxx
+  // Gérer l'ouverture automatique d'un ordre via l'URL ?id=xxx ou ?open=xxx (edition) ou ?view=xxx (visualisation seule)
   useEffect(() => {
+    const viewWorkOrderId = searchParams.get('view');
     const openWorkOrderId = searchParams.get('id') || searchParams.get('open');
     const executeChecklist = searchParams.get('execute_checklist') === 'true';
-    
+
+    // Priorite au mode visualisation : ouvre le dialog "details" comme l'icone oeil
+    if (viewWorkOrderId) {
+      const loadAndViewWorkOrder = async () => {
+        try {
+          const response = await workOrdersAPI.getById(viewWorkOrderId);
+          if (response && response.data) {
+            setSelectedWorkOrder(response.data);
+            setDialogOpen(true);
+          }
+        } catch (error) {
+          toast({
+            title: 'Erreur',
+            description: formatErrorMessage(error, "Impossible d'ouvrir l'ordre de travail"),
+            variant: 'destructive'
+          });
+        } finally {
+          searchParams.delete('view');
+          setSearchParams(searchParams);
+        }
+      };
+      loadAndViewWorkOrder();
+      return;
+    }
+
     if (openWorkOrderId) {
       console.log('Tentative d\'ouverture de l\'ordre:', openWorkOrderId, 'execute_checklist:', executeChecklist);
       // Charger l'ordre directement par son ID
