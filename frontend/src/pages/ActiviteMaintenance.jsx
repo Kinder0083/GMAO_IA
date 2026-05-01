@@ -1,16 +1,18 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
-import { Badge } from '../components/ui/badge';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/tabs';
 import {
   Calendar, ChevronLeft, ChevronRight, Plus, Wrench, Lightbulb, Sparkles,
-  Coffee, Users, AlertTriangle, Clock, Activity as ActivityIcon, Trash2, Wand2
+  Coffee, Users, AlertTriangle, Clock, Activity as ActivityIcon, Trash2, Wand2,
+  BarChart3
 } from 'lucide-react';
 import { useToast } from '../hooks/use-toast';
 import { usersAPI, maintenanceAssignmentsAPI } from '../services/api';
 import { usePermissions } from '../hooks/usePermissions';
 import AssignmentDialog from '../components/ActiviteMaintenance/AssignmentDialog';
 import PoolPanel from '../components/ActiviteMaintenance/PoolPanel';
+import ChargeGlobaleView from '../components/ActiviteMaintenance/ChargeGlobaleView';
 
 const DAYS_LABELS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
 
@@ -45,10 +47,11 @@ const startOfWeek = (d) => {
   return date;
 };
 
-const ActiviteMaintenance = () => {
+const ActiviteMaintenance = ({ service = 'MAINTENANCE' }) => {
   const { toast } = useToast();
   const { canEdit, isAdminForModule, isAdmin } = usePermissions();
 
+  const [subTab, setSubTab] = useState(() => localStorage.getItem(`activite_subtab_${service}`) || 'planning');
   const [viewMode, setViewMode] = useState(() => localStorage.getItem('activite_view_mode') || 'week');
   const [refDate, setRefDate] = useState(new Date());
   const [techs, setTechs] = useState([]);
@@ -82,13 +85,13 @@ const ActiviteMaintenance = () => {
   const startStr = fmtDate(days[0]);
   const endStr = fmtDate(days[days.length - 1]);
 
-  // Chargement initial techniciens (service Maintenance, statut actif)
+  // Chargement initial techniciens (du service en cours, statut actif)
   useEffect(() => {
     (async () => {
       try {
         const res = await usersAPI.getActive();
         const data = (res.data || []).filter(u =>
-          (u.service || '').toUpperCase() === 'MAINTENANCE' &&
+          (u.service || '').toUpperCase() === service.toUpperCase() &&
           u.email !== 'buenogy@gmail.com'
         );
         setTechs(data);
@@ -96,15 +99,15 @@ const ActiviteMaintenance = () => {
         toast({ title: 'Erreur', description: 'Impossible de charger les techniciens', variant: 'destructive' });
       }
     })();
-  }, []);
+  }, [service]);
 
   // Chargement des affectations + pool
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
       const [assRes, poolRes] = await Promise.all([
-        maintenanceAssignmentsAPI.getAll({ start_date: startStr, end_date: endStr, service: 'MAINTENANCE' }),
-        maintenanceAssignmentsAPI.getPool('MAINTENANCE'),
+        maintenanceAssignmentsAPI.getAll({ start_date: startStr, end_date: endStr, service }),
+        maintenanceAssignmentsAPI.getPool(service),
       ]);
       setAssignments(assRes.data || []);
       setPool(poolRes.data || []);
@@ -113,7 +116,7 @@ const ActiviteMaintenance = () => {
     } finally {
       setLoading(false);
     }
-  }, [startStr, endStr, toast]);
+  }, [startStr, endStr, toast, service]);
 
   useEffect(() => {
     loadData();
@@ -266,12 +269,29 @@ const ActiviteMaintenance = () => {
 
   return (
     <div className="space-y-3" data-testid="activite-maintenance-page">
+      <Tabs value={subTab} onValueChange={(v) => { setSubTab(v); localStorage.setItem(`activite_subtab_${service}`, v); }}>
+        <TabsList className="grid w-full max-w-md grid-cols-2">
+          <TabsTrigger value="planning" data-testid="subtab-planning" className="flex items-center gap-1 text-xs">
+            <Calendar size={14} />
+            Planning détaillé
+          </TabsTrigger>
+          <TabsTrigger value="charge" data-testid="subtab-charge" className="flex items-center gap-1 text-xs">
+            <BarChart3 size={14} />
+            Charge globale (30j)
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="charge" className="mt-2">
+          <ChargeGlobaleView service={service} />
+        </TabsContent>
+
+        <TabsContent value="planning" className="mt-2 space-y-3">
       {/* En-tete + nav */}
       <div className="flex flex-wrap justify-between items-center gap-2">
         <div>
-          <h2 className="text-xl font-bold text-gray-900">Activité Maintenance</h2>
+          <h2 className="text-xl font-bold text-gray-900">Activité {service.charAt(0) + service.slice(1).toLowerCase()}</h2>
           <p className="text-gray-600 text-xs">
-            Planification des interventions, améliorations, MP et tâches libres pour le service Maintenance
+            Planification des interventions, améliorations, MP et tâches libres pour le service {service}
           </p>
         </div>
         <div className="flex flex-wrap gap-2 items-center">
@@ -367,7 +387,7 @@ const ActiviteMaintenance = () => {
           <CardContent className="p-2 overflow-x-auto">
             {techs.length === 0 ? (
               <p className="text-gray-500 text-sm py-8 text-center">
-                Aucun technicien Maintenance actif. Créez ou activez un utilisateur ayant le service "MAINTENANCE".
+                Aucun technicien actif dans le service "{service}". Créez ou activez un utilisateur ayant ce service.
               </p>
             ) : (
               <table className="w-full border-collapse" data-testid="planning-grid">
@@ -512,6 +532,8 @@ const ActiviteMaintenance = () => {
           onSaved={handleSaved}
         />
       )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };

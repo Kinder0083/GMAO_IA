@@ -62,13 +62,15 @@ async def notify_service_assignment(wo_dict: dict, service_name: str, current_us
         for member in members:
             uid = member.get("id")
             if uid and uid != current_user_id:
+                etapes_count = len(wo_dict.get("etapes_realisation") or [])
                 asyncio.create_task(
                     notify_work_order_assigned(
                         db=db,
                         work_order_id=wo_dict.get("id", ""),
                         work_order_title=wo_dict.get("titre", ""),
                         work_order_numero=wo_dict.get("numero", ""),
-                        assigned_user_id=uid
+                        assigned_user_id=uid,
+                        etapes_count=etapes_count
                     )
                 )
                 asyncio.create_task(
@@ -301,7 +303,8 @@ async def create_work_order(wo_create: WorkOrderCreate, current_user: dict = Dep
             notify_work_order_assigned(
                 db=db, work_order_id=wo.get("id", ""),
                 work_order_title=wo_create.titre, work_order_numero=numero,
-                assigned_user_id=wo_create.assigne_a_id
+                assigned_user_id=wo_create.assigne_a_id,
+                etapes_count=len(wo_dict.get("etapes_realisation") or [])
             )
         )
         asyncio.create_task(

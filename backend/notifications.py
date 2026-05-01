@@ -257,7 +257,8 @@ async def notify_work_order_assigned(
     work_order_id: str,
     work_order_title: str,
     work_order_numero: str,
-    assigned_user_id: str
+    assigned_user_id: str,
+    etapes_count: int = 0
 ):
     """Send notification when a work order is assigned to a user."""
     try:
@@ -270,10 +271,12 @@ async def notify_work_order_assigned(
         logger.info(f"[PUSH NOTIFY] Found {len(tokens)} active tokens for user {assigned_user_id}")
 
         if tokens:
+            # Suffixer avec le nb d'etapes si > 0
+            etapes_suffix = f" · {etapes_count} étape(s)" if etapes_count and etapes_count > 0 else ""
             result = await send_expo_push_notification(
                 push_tokens=tokens,
                 title="Nouveau bon de travail assigne",
-                body=f"#{work_order_numero}: {work_order_title}",
+                body=f"#{work_order_numero}: {work_order_title}{etapes_suffix}",
                 data={
                     "type": "work_order_assigned",
                     "work_order_id": work_order_id,

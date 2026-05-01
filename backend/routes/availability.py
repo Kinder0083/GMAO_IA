@@ -11,6 +11,7 @@ import logging
 from models import ActionType, EntityType, UserAvailabilityCreate, UserAvailabilityUpdate, MessageResponse
 from dependencies import get_current_user, get_current_admin_user, require_permission, require_admin_for_module
 from routes.shared import db, audit_service, serialize_doc, _get_realtime_manager, get_user_by_id
+from routes.conge_sync import sync_availability_to_conge, cleanup_conge_for_availability
 
 EntityType_Audit = EntityType
 logger = logging.getLogger(__name__)
@@ -59,6 +60,9 @@ async def create_availability(
     
     await db.availabilities.insert_one(avail_dict)
     
+    # Synchro CONGE pour user MAINTENANCE
+    await sync_availability_to_conge(avail_dict, current_user)
+    
     avail = serialize_doc(avail_dict)
     if avail.get("user_id"):
         avail["user"] = await get_user_by_id(avail["user_id"])
@@ -103,6 +107,9 @@ async def update_availability(
             )
         
         avail = await db.availabilities.find_one({"_id": ObjectId(avail_id)})
+        # Synchro CONGE
+        if avail:
+            await sync_availability_to_conge(avail, current_user)
         avail = serialize_doc(avail)
         
         if avail.get("user_id"):
@@ -132,6 +139,10 @@ async def delete_availability(
 ):
     """Supprimer une disponibilité (admin ou droits édition planning)"""
     try:
+        # Cleanup CONGE auto-genere lié avant suppression
+        avail = await db.availabilities.find_one({"_id": ObjectId(avail_id)})
+        if avail:
+            await cleanup_conge_for_availability(avail)
         result = await db.availabilities.delete_one({"_id": ObjectId(avail_id)})
         if result.deleted_count == 0:
             raise HTTPException(status_code=404, detail="Disponibilité non trouvée")

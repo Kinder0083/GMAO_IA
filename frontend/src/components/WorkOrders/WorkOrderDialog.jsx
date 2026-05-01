@@ -165,6 +165,58 @@ const WorkOrderDialog = ({ open, onOpenChange, workOrder, onSuccess }) => {
     doc.line(margin, y, pageW - margin, y);
     y += 5;
 
+    // --- Etapes de realisation ---
+    if (etapes && etapes.length > 0) {
+      addNewPageIfNeeded(12);
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'bold');
+      doc.setTextColor(30);
+      const completedCount = etapes.filter(e => e.completed).length;
+      doc.text(`Etapes de realisation (${completedCount}/${etapes.length})`, margin, y);
+      y += 6;
+
+      doc.setFontSize(8);
+      etapes.forEach((etape) => {
+        addNewPageIfNeeded(10);
+        // Case + numero
+        const checkChar = etape.completed ? '[X]' : '[ ]';
+        doc.setFont(undefined, 'bold');
+        doc.setTextColor(etape.completed ? 16 : 80, etape.completed ? 145 : 80, etape.completed ? 80 : 80);
+        doc.text(`${checkChar} ${etape.numero}.`, margin + 2, y);
+        // Description
+        doc.setFont(undefined, 'normal');
+        doc.setTextColor(40);
+        const descLines = doc.splitTextToSize(etape.description || '', contentW - 18);
+        const descToPrint = descLines.slice(0, 4);
+        doc.text(descToPrint, margin + 14, y);
+        y += descToPrint.length * 3.5;
+        // Info de completion
+        if (etape.completed && etape.completed_by_name) {
+          doc.setFontSize(7);
+          doc.setTextColor(120);
+          doc.setFont(undefined, 'italic');
+          const completedAt = etape.completed_at ? new Date(etape.completed_at).toLocaleDateString('fr-FR') : '';
+          doc.text(`Validee par ${etape.completed_by_name}${completedAt ? ' le ' + completedAt : ''}`, margin + 14, y);
+          doc.setFont(undefined, 'normal');
+          doc.setFontSize(8);
+          y += 3;
+        }
+        // Checklist liee
+        if (etape.checklist_template_name) {
+          doc.setFontSize(7);
+          doc.setTextColor(120, 100, 180);
+          doc.text(`-> Checklist liee : ${etape.checklist_template_name}`, margin + 14, y);
+          doc.setFontSize(8);
+          y += 3;
+        }
+        y += 2;
+      });
+      y += 3;
+      doc.setDrawColor(220);
+      doc.line(margin, y, pageW - margin, y);
+      y += 5;
+    }
+
     // --- Rapport detaille (commentaires) ---
     if (comments.length > 0) {
       addNewPageIfNeeded(12);
