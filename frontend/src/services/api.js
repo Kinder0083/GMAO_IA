@@ -583,9 +583,10 @@ export const improvementRequestsAPI = {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
   },
-  downloadAttachment: (id, filename) => api.get(`/improvement-requests/${id}/attachments/${filename}`, {
-    responseType: 'blob'
+  downloadAttachment: (id, filenameOrAttachmentId) => api.get(`/improvement-requests/${id}/attachments/${filenameOrAttachmentId}`, {
+    responseType: 'arraybuffer'
   }),
+  deleteAttachment: (id, attachmentId) => api.delete(`/improvement-requests/${id}/attachments/${attachmentId}`),
   
   // Comments
   addComment: (id, text) => api.post(`/improvement-requests/${id}/comments`, { text }),

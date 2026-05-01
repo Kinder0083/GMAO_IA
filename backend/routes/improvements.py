@@ -26,6 +26,9 @@ from routes.shared import db, audit_service, serialize_doc, find_user_flexible, 
 EntityType_Audit = EntityType
 logger = logging.getLogger(__name__)
 
+# Taille max des pieces jointes (25MB) — meme limite que les OT et DI
+MAX_FILE_SIZE = 25 * 1024 * 1024
+
 router = APIRouter(tags=["Ameliorations"])
 
 
@@ -855,12 +858,58 @@ async def upload_improvement_request_attachment(
     if not req:
         raise HTTPException(status_code=404, detail="Demande non trouvée")
     
-    return await upload_attachment_generic(request_id, file, "improvement_requests", current_user)
+    result = await upload_attachment_generic(request_id, file, "improvement_requests", current_user)
+    # Ajouter l'URL de telechargement (pour parite avec les DI)
+    att = result.get("attachment", {})
+    att["url"] = f"/api/improvement-requests/{request_id}/attachments/{att.get('filename', '')}"
+    return att
 
 @router.get("/improvement-requests/{request_id}/attachments/{filename}", tags=["Demandes Amelioration"])
 async def download_improvement_request_attachment(request_id: str, filename: str, current_user: dict = Depends(require_permission("improvementRequests", "view"))):
-    """Télécharger un fichier d'une demande d'amélioration"""
+    """Télécharger un fichier d'une demande d'amélioration (par filename ou par attachment_id)"""
+    # Si c'est un UUID (attachment_id), retrouver le filename reel dans la DB
+    req = await db.improvement_requests.find_one({"id": request_id})
+    if req:
+        for att in req.get("attachments", []):
+            if att.get("id") == filename:
+                filename = att.get("filename", filename)
+                break
     return await download_attachment_generic(request_id, filename, "improvement_requests")
+
+@router.delete("/improvement-requests/{request_id}/attachments/{attachment_id}", tags=["Demandes Amelioration"])
+async def delete_improvement_request_attachment(
+    request_id: str,
+    attachment_id: str,
+    current_user: dict = Depends(require_permission("improvementRequests", "edit"))
+):
+    """Supprimer une piece jointe d'une demande d'amelioration"""
+    req = await db.improvement_requests.find_one({"id": request_id})
+    if not req:
+        raise HTTPException(status_code=404, detail="Demande non trouvee")
+    
+    attachment = None
+    for att in req.get("attachments", []):
+        if att.get("id") == attachment_id:
+            attachment = att
+            break
+    
+    if not attachment:
+        raise HTTPException(status_code=404, detail="Piece jointe non trouvee")
+    
+    # Suppression du fichier sur disque
+    try:
+        file_path = Path("/app/backend/uploads/improvement_requests") / attachment.get("filename", "")
+        if file_path.exists():
+            file_path.unlink()
+    except Exception as e:
+        logger.warning(f"Erreur suppression fichier disque: {e}")
+    
+    await db.improvement_requests.update_one(
+        {"id": request_id},
+        {"$pull": {"attachments": {"id": attachment_id}}}
+    )
+    
+    return {"message": "Piece jointe supprimee avec succes"}
 
 @router.post("/improvement-requests/{request_id}/comments", tags=["Demandes Amelioration"])
 async def add_improvement_request_comment(
