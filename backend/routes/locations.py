@@ -118,13 +118,51 @@ async def create_location(loc_create: LocationCreate, current_user: dict = Depen
 async def update_location(loc_id: str, loc_update: LocationUpdate, current_user: dict = Depends(require_permission("locations", "edit"))):
     """Modifier une zone"""
     try:
-        update_data = {k: v for k, v in loc_update.model_dump().items() if v is not None}
+        raw_data = loc_update.model_dump(exclude_unset=True)
+        update_data = {}
+        # Cas spécial : parent_id="" ou null signifie "déplacer vers racine"
+        if "parent_id" in raw_data:
+            pid = raw_data["parent_id"]
+            update_data["parent_id"] = None if not pid else pid
+        for k, v in raw_data.items():
+            if k == "parent_id":
+                continue
+            if v is not None:
+                update_data[k] = v
         
-        # Si on change le parent_id, vérifier la hiérarchie
+        # Si on change le parent_id, vérifier la hiérarchie ET les cycles
         if 'parent_id' in update_data and update_data['parent_id']:
-            parent_id = update_data['parent_id']
+            new_parent_id = update_data['parent_id']
+
+            # 1. Empêcher de devenir son propre parent
+            if new_parent_id == loc_id:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Une zone ne peut pas être son propre parent."
+                )
+
+            # 2. Empêcher les cycles : vérifier que le nouveau parent
+            #    n'est pas un descendant de la zone qu'on déplace.
+            descendants = set()
+            stack = [loc_id]
+            while stack:
+                current = stack.pop()
+                async for child in db.locations.find(
+                    {"parent_id": current}, {"_id": 1}
+                ):
+                    cid = str(child["_id"])
+                    if cid not in descendants:
+                        descendants.add(cid)
+                        stack.append(cid)
+            if new_parent_id in descendants:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Impossible : le nouveau parent est un descendant de la zone que vous déplacez (cela créerait un cycle)."
+                )
+
+            # 3. Vérifier la limite de profondeur (max 3 niveaux)
+            parent_id = new_parent_id
             level = 0
-            
             while parent_id and level < 3:
                 parent = await db.locations.find_one({"_id": ObjectId(parent_id)})
                 if parent:

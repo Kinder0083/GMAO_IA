@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Link2, ExternalLink } from 'lucide-react';
+import { Link2, ExternalLink, MoveRight, ChevronRight, Loader2, MapPin, ArrowUpToLine } from 'lucide-react';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Button } from '../ui/button';
 import { useToast } from '../../hooks/use-toast';
+import { locationsAPI } from '../../services/api';
 
 const MENU_ITEMS = [
   { id: 'dashboard', icon: 'LayoutDashboard', label: 'Tableau de bord', path: '/dashboard' },
@@ -54,6 +55,11 @@ const GlobalContextMenu = ({ onCreateShortcut }) => {
   const [menuPos, setMenuPos] = useState(null);
   const [showUrlForm, setShowUrlForm] = useState(false);
   const [urlConfig, setUrlConfig] = useState({ name: '', url: '' });
+  // Contexte zone : si l'utilisateur a Ctrl+click-droit sur une card de zone
+  const [zoneCtx, setZoneCtx] = useState(null); // { id, name, parentId, level }
+  const [showMoveMenu, setShowMoveMenu] = useState(false);
+  const [allZones, setAllZones] = useState(null); // null = pas chargé, [] = chargé vide
+  const [movingZoneId, setMovingZoneId] = useState(null);
   const location = useLocation();
   const { toast } = useToast();
 
@@ -62,14 +68,29 @@ const GlobalContextMenu = ({ onCreateShortcut }) => {
   const handleContextMenu = useCallback((e) => {
     if (e.ctrlKey) {
       e.preventDefault();
+      // Détecter si l'utilisateur a cliqué sur une zone (data-zone-id)
+      const zoneEl = e.target?.closest?.('[data-zone-id]');
+      if (zoneEl) {
+        setZoneCtx({
+          id: zoneEl.getAttribute('data-zone-id'),
+          name: zoneEl.getAttribute('data-zone-name') || '?',
+          parentId: zoneEl.getAttribute('data-zone-parent-id') || null,
+          level: parseInt(zoneEl.getAttribute('data-zone-level') || '0', 10),
+        });
+      } else {
+        setZoneCtx(null);
+      }
       setMenuPos({ x: e.clientX, y: e.clientY });
       setShowUrlForm(false);
+      setShowMoveMenu(false);
     }
   }, []);
 
   const handleClose = useCallback(() => {
     setMenuPos(null);
     setShowUrlForm(false);
+    setShowMoveMenu(false);
+    setZoneCtx(null);
     setUrlConfig({ name: '', url: '' });
   }, []);
 
@@ -133,6 +154,97 @@ const GlobalContextMenu = ({ onCreateShortcut }) => {
     handleClose();
   };
 
+  // ────────────────────────────────────────────────────────────────────
+  //  Sous-menu "Déplacer vers" pour les zones
+  // ────────────────────────────────────────────────────────────────────
+  const openMoveMenu = useCallback(async () => {
+    setShowMoveMenu(true);
+    if (allZones === null) {
+      try {
+        const res = await locationsAPI.getAll();
+        setAllZones(Array.isArray(res.data) ? res.data : []);
+      } catch (err) {
+        toast({
+          title: 'Erreur',
+          description: 'Impossible de charger les zones.',
+          variant: 'destructive',
+        });
+        setAllZones([]);
+      }
+    }
+  }, [allZones, toast]);
+
+  // Liste des descendants de la zone en cours (pour les exclure des cibles)
+  const descendantIds = useMemo(() => {
+    if (!zoneCtx || !allZones) return new Set();
+    const result = new Set([zoneCtx.id]);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const z of allZones) {
+        if (z.parent_id && result.has(z.parent_id) && !result.has(z.id)) {
+          result.add(z.id);
+          changed = true;
+        }
+      }
+    }
+    return result;
+  }, [zoneCtx, allZones]);
+
+  // Construire l'arborescence affichable (toutes zones SAUF descendants + zone elle-même)
+  const moveTargets = useMemo(() => {
+    if (!allZones || !zoneCtx) return [];
+    const valid = allZones.filter(z => !descendantIds.has(z.id));
+    // Construire la hiérarchie pour affichage indenté
+    const byParent = {};
+    valid.forEach(z => {
+      const p = z.parent_id || '__root__';
+      if (!byParent[p]) byParent[p] = [];
+      byParent[p].push(z);
+    });
+    const flatten = (parentKey, level) => {
+      const list = (byParent[parentKey] || []).sort((a, b) =>
+        (a.nom || '').localeCompare(b.nom || ''));
+      const result = [];
+      for (const z of list) {
+        result.push({ ...z, level });
+        if (level < 2) {
+          // ne descend que jusqu'à 2 (cf. limite backend max 3 niveaux)
+          result.push(...flatten(z.id, level + 1));
+        }
+      }
+      return result;
+    };
+    return flatten('__root__', 0);
+  }, [allZones, descendantIds, zoneCtx]);
+
+  const handleMoveZone = async (newParentId) => {
+    if (!zoneCtx) return;
+    if ((zoneCtx.parentId || '') === (newParentId || '')) {
+      toast({ title: 'Aucun changement', description: 'La zone est déjà à cet emplacement.' });
+      handleClose();
+      return;
+    }
+    setMovingZoneId(zoneCtx.id);
+    try {
+      // Envoi : "" pour racine = backend interprète comme None
+      await locationsAPI.update(zoneCtx.id, { parent_id: newParentId || '' });
+      toast({
+        title: 'Zone déplacée',
+        description: `« ${zoneCtx.name} » a été déplacée avec succès.`,
+      });
+      handleClose();
+    } catch (err) {
+      toast({
+        title: 'Échec du déplacement',
+        description: err?.response?.data?.detail || 'Impossible de déplacer la zone.',
+        variant: 'destructive',
+      });
+    } finally {
+      setMovingZoneId(null);
+    }
+  };
+
   if (!menuPos) return null;
 
   const menuStyle = {
@@ -143,10 +255,93 @@ const GlobalContextMenu = ({ onCreateShortcut }) => {
   };
 
   return (
-    <div data-global-context-menu style={menuStyle} className="w-64 bg-white rounded-lg shadow-2xl border border-gray-200 overflow-hidden animate-in fade-in zoom-in-95 duration-150" data-testid="global-context-menu">
+    <div data-global-context-menu style={menuStyle} className="w-64 bg-white rounded-lg shadow-2xl border border-gray-200 overflow-visible animate-in fade-in zoom-in-95 duration-150" data-testid="global-context-menu">
       <div className="p-1.5">
         {!showUrlForm ? (
           <>
+            {/* Section ZONE — visible uniquement si Ctrl+clic sur une zone */}
+            {zoneCtx && (
+              <>
+                <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-500 border-b border-gray-100 mb-1 flex items-center gap-1.5">
+                  <MapPin className="h-3 w-3" /> Zone : {zoneCtx.name}
+                </div>
+                <div
+                  className="relative"
+                  onMouseEnter={openMoveMenu}
+                  onMouseLeave={() => setShowMoveMenu(false)}
+                  data-testid="ctx-zone-move-trigger"
+                >
+                  <button
+                    className="w-full flex items-center justify-between gap-3 px-3 py-2.5 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-md transition-colors"
+                    onClick={openMoveMenu}
+                  >
+                    <span className="flex items-center gap-3">
+                      <MoveRight className="h-4 w-4" />
+                      Déplacer vers...
+                    </span>
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                  {showMoveMenu && (
+                    <div
+                      className="absolute left-full top-0 ml-1 w-72 max-h-[400px] overflow-y-auto bg-white rounded-lg shadow-2xl border border-gray-200 animate-in fade-in zoom-in-95 duration-100 z-50"
+                      data-testid="ctx-zone-move-submenu"
+                    >
+                      {allZones === null ? (
+                        <div className="p-4 flex items-center gap-2 text-sm text-gray-500">
+                          <Loader2 className="h-4 w-4 animate-spin" /> Chargement...
+                        </div>
+                      ) : (
+                        <div className="p-1">
+                          {/* Option : déplacer vers RACINE */}
+                          <button
+                            onClick={() => handleMoveZone(null)}
+                            disabled={!zoneCtx.parentId || movingZoneId === zoneCtx.id}
+                            className="w-full flex items-center gap-3 px-3 py-2 text-sm text-gray-700 hover:bg-emerald-50 hover:text-emerald-700 rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                            data-testid="ctx-zone-move-target-root"
+                          >
+                            <ArrowUpToLine className="h-4 w-4" />
+                            <span className="font-medium">↑ Zone racine (aucun parent)</span>
+                          </button>
+                          <div className="my-1 border-t border-gray-100" />
+                          {moveTargets.length === 0 && (
+                            <div className="px-3 py-3 text-xs italic text-gray-400">
+                              Aucune autre zone disponible.
+                            </div>
+                          )}
+                          {moveTargets.map((z) => {
+                            const isCurrentParent = (zoneCtx.parentId || '') === z.id;
+                            const wouldExceedDepth = z.level >= 2;
+                            const disabled = isCurrentParent || wouldExceedDepth || movingZoneId === zoneCtx.id;
+                            return (
+                              <button
+                                key={z.id}
+                                onClick={() => handleMoveZone(z.id)}
+                                disabled={disabled}
+                                title={
+                                  isCurrentParent ? 'Parent actuel'
+                                    : wouldExceedDepth ? 'Profondeur max atteinte'
+                                      : ''
+                                }
+                                className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-left"
+                                style={{ paddingLeft: `${12 + z.level * 16}px` }}
+                                data-testid={`ctx-zone-move-target-${z.id}`}
+                              >
+                                <MapPin className="h-3.5 w-3.5 flex-shrink-0 text-gray-400" />
+                                <span className="truncate flex-1">{z.nom}</span>
+                                {isCurrentParent && (
+                                  <span className="text-[10px] text-gray-400 italic">actuel</span>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <div className="my-1.5 border-t border-gray-100" />
+              </>
+            )}
             <button
               onClick={handleCreatePageShortcut}
               disabled={!currentMenuItem}

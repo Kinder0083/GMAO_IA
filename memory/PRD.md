@@ -90,6 +90,16 @@ Stack : React + FastAPI + MongoDB + MQTT + ESP32 edge-computing.
   `qr_inventory_routes.py`, `routes/inventory.py`, `loto_routes.py`. Tous les
   numéros (OT, améliorations, DA, LOTO) sont maintenant protégés contre les
   collisions, même en cas de reset/import/migration.
+- 2026-05-01 : **Déplacement de zones via menu contextuel**. Sur Ctrl+clic-droit
+  sur une carte de zone (page Zones), nouvelle option **« Déplacer vers... »** en
+  tête de menu. Sous-menu déroulant au hover affichant l'arborescence complète
+  des zones cibles (avec indentation par niveau, exclusion des descendants pour
+  éviter les cycles, option spéciale "Zone racine"). Click instantané = move
+  temps réel via API (broadcast WebSocket existant). Backend renforcé : détection
+  cycles (zone vers descendant), auto-référence interdite, profondeur max 3
+  niveaux conservée, support `parent_id=""` pour désigner la racine. Composants :
+  `GlobalContextMenu.jsx` (logique sous-menu), `Locations.jsx` (attributs
+  `data-zone-*` sur les cards), `routes/locations.py` (validations).
 
 ## Backlog priorisé
 ### P1

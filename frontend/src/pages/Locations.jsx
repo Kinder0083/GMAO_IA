@@ -99,6 +99,10 @@ const Locations = () => {
           data-ai-type="LOCATION"
           data-ai-id={zone.id}
           data-ai-name={zone.nom}
+          data-zone-id={zone.id}
+          data-zone-name={zone.nom}
+          data-zone-parent-id={zone.parent_id || ''}
+          data-zone-level={zone.level}
           data-ai-extra={JSON.stringify({ 
             level: zone.level, 
             type: zone.type,
