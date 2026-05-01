@@ -1456,6 +1456,8 @@ class ImprovementRequest(BaseModel):
     priorite: Priority
     equipement_id: Optional[str] = None
     equipement: Optional[Dict] = None
+    sous_equipement_id: Optional[str] = None
+    sous_equipement: Optional[Dict] = None
     emplacement_id: Optional[str] = None
     emplacement: Optional[Dict] = None
     date_limite_desiree: Optional[datetime] = None
@@ -1463,6 +1465,7 @@ class ImprovementRequest(BaseModel):
     created_by: str
     created_by_name: Optional[str] = None
     service: Optional[str] = None  # Service du demandeur pour le filtrage
+    attachments: List[Dict] = Field(default_factory=list)  # Pieces jointes (photos/docs)
     
     # Statut de validation
     status: Optional[str] = "SOUMISE"  # SOUMISE, VALIDEE, REJETEE, CONVERTIE
@@ -1484,6 +1487,7 @@ class ImprovementRequestCreate(BaseModel):
     description: str
     priorite: Priority = Priority.AUCUNE
     equipement_id: Optional[str] = None
+    sous_equipement_id: Optional[str] = None
     emplacement_id: Optional[str] = None
     date_limite_desiree: Optional[datetime] = None
 
@@ -1492,6 +1496,7 @@ class ImprovementRequestUpdate(BaseModel):
     description: Optional[str] = None
     priorite: Optional[Priority] = None
     equipement_id: Optional[str] = None
+    sous_equipement_id: Optional[str] = None
     emplacement_id: Optional[str] = None
     date_limite_desiree: Optional[datetime] = None
 

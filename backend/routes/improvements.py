@@ -63,12 +63,18 @@ async def create_improvement_request(
         request_data["improvement_date_limite"] = None
         request_data["converted_at"] = None
         request_data["converted_by"] = None
+        request_data["attachments"] = []
         request_data["_id"] = ObjectId()
         
         if request_data.get("equipement_id"):
             equipment = await db.equipments.find_one({"id": request_data["equipement_id"]})
             if equipment:
                 request_data["equipement"] = {"id": equipment["id"], "nom": equipment["nom"]}
+        
+        if request_data.get("sous_equipement_id"):
+            sous_eq = await db.equipments.find_one({"id": request_data["sous_equipement_id"]})
+            if sous_eq:
+                request_data["sous_equipement"] = {"id": sous_eq["id"], "nom": sous_eq["nom"]}
         
         if request_data.get("emplacement_id"):
             location = await db.locations.find_one({"id": request_data["emplacement_id"]})
@@ -1506,5 +1512,7 @@ async def delete_improvement_time_entry(
     )
     
     return {"message": "Amélioration supprimée"}
+
+
 
 
