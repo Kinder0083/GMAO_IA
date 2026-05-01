@@ -867,6 +867,7 @@ from routes.improvements import router as improvements_router
 from routes.auth import router as auth_router
 from routes.service_manager import router as service_manager_router
 from routes.availability import router as availability_router
+from routes.maintenance_assignments import router as maintenance_assignments_router
 from routes.locations import router as locations_router
 from routes.inventory import router as inventory_router
 from routes.preventive_maintenance import router as preventive_maintenance_router
@@ -892,6 +893,7 @@ api_router.include_router(improvements_router)
 api_router.include_router(auth_router)
 api_router.include_router(service_manager_router)
 api_router.include_router(availability_router)
+api_router.include_router(maintenance_assignments_router)
 api_router.include_router(locations_router)
 api_router.include_router(inventory_router)
 api_router.include_router(preventive_maintenance_router)

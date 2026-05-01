@@ -598,6 +598,7 @@ class EntityType(str, Enum):
     WHITEBOARD = "WHITEBOARD"
     MES_PRODUCT_REFERENCE = "MES_PRODUCT_REFERENCE"
     LOTO = "LOTO"
+    PLANNING = "PLANNING"
 
 # Audit Log Models
 class AuditLog(BaseModel):
@@ -3812,6 +3813,61 @@ class ResetSectionResponse(BaseModel):
     success: bool
     section: str
     deleted_count: int
+
+
+# ==================== ACTIVITE MAINTENANCE ====================
+
+class MaintenanceAssignmentType(str, Enum):
+    WORK_ORDER = "WORK_ORDER"
+    IMPROVEMENT = "IMPROVEMENT"
+    PREVENTIVE_MAINTENANCE = "PREVENTIVE_MAINTENANCE"
+    FREE_TASK = "FREE_TASK"
+    CONGE = "CONGE"
+
+
+class FreeTaskCategory(str, Enum):
+    REUNION = "REUNION"
+    FORMATION = "FORMATION"
+    ASTREINTE = "ASTREINTE"
+    AUTRE = "AUTRE"
+
+
+class MaintenanceAssignmentBase(BaseModel):
+    user_id: str
+    date: str  # ISO YYYY-MM-DD (jour calendaire en local timezone)
+    type: MaintenanceAssignmentType
+    title: str
+    description: Optional[str] = None
+    duration_hours: float = 1.0  # Duree estimee en heures (peut etre fractionnaire : 0.5, 1.5, 2.0...)
+    start_hour: Optional[float] = None  # Heure de debut (8.0 = 8h00, 13.5 = 13h30) — pour la vue Jour
+    color: Optional[str] = None  # Hex (override par defaut selon type/categorie)
+    reference_id: Optional[str] = None  # id de l'OT / Amelioration / MP source si applicable
+    reference_numero: Optional[str] = None  # numero humain (#1234, #IMP-12, ...)
+    category: Optional[FreeTaskCategory] = None  # uniquement pour FREE_TASK
+
+
+class MaintenanceAssignmentCreate(MaintenanceAssignmentBase):
+    pass
+
+
+class MaintenanceAssignmentUpdate(BaseModel):
+    user_id: Optional[str] = None
+    date: Optional[str] = None
+    title: Optional[str] = None
+    description: Optional[str] = None
+    duration_hours: Optional[float] = None
+    start_hour: Optional[float] = None
+    color: Optional[str] = None
+    category: Optional[FreeTaskCategory] = None
+
+
+class MaintenanceAssignment(MaintenanceAssignmentBase):
+    id: str
+    created_by: str
+    created_by_name: Optional[str] = None
+    created_at: str  # ISO datetime
+    linked_availability_id: Optional[str] = None  # ID de la dispo creee si type=CONGE
+
 
 class ResetAllResponse(BaseModel):
     """Réponse réinitialisation complète"""

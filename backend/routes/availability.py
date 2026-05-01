@@ -10,7 +10,7 @@ import logging
 
 from models import ActionType, EntityType, UserAvailabilityCreate, UserAvailabilityUpdate, MessageResponse
 from dependencies import get_current_user, get_current_admin_user, require_permission, require_admin_for_module
-from routes.shared import db, audit_service, serialize_doc, _get_realtime_manager
+from routes.shared import db, audit_service, serialize_doc, _get_realtime_manager, get_user_by_id
 
 EntityType_Audit = EntityType
 logger = logging.getLogger(__name__)

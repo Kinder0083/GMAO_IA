@@ -1372,4 +1372,22 @@ export const accidentAnalysisAPI = {
   archivePdf: (id, data) => api.post(`/accident-analysis/${id}/archive-pdf`, data).then(r => r.data),
 };
 
+// =============== Activite Maintenance ===============
+export const maintenanceAssignmentsAPI = {
+  getAll: (params = {}) => {
+    const qs = new URLSearchParams();
+    if (params.start_date) qs.set('start_date', params.start_date);
+    if (params.end_date) qs.set('end_date', params.end_date);
+    if (params.user_id) qs.set('user_id', params.user_id);
+    if (params.service !== undefined) qs.set('service', params.service);
+    return api.get(`/maintenance-assignments?${qs.toString()}`);
+  },
+  create: (data) => api.post('/maintenance-assignments', data),
+  update: (id, data) => api.put(`/maintenance-assignments/${id}`, data),
+  delete: (id) => api.delete(`/maintenance-assignments/${id}`),
+  getPool: (service = 'MAINTENANCE') => api.get(`/maintenance-assignments/unassigned-pool?service=${service}`),
+  autoSuggest: (start_date, end_date, apply = false) =>
+    api.post(`/maintenance-assignments/auto-suggest?start_date=${start_date}&end_date=${end_date}&apply=${apply}`),
+};
+
 export default api;

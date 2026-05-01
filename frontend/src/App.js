@@ -32,7 +32,7 @@ import ChecklistsManagement from "./pages/ChecklistsManagement";
 import Reports from "./pages/Reports";
 import People from "./pages/People";
 import RolesManagement from "./pages/RolesManagement";
-import Planning from "./pages/Planning";
+import PlanningHub from "./pages/PlanningHub";
 import PlanningMPrev from "./pages/PlanningMPrev";
 import ValidateDemandeArret from "./pages/ValidateDemandeArret";
 import ValidateReport from "./pages/ValidateReport";
@@ -273,7 +273,7 @@ function App() {
             <Route path="reports" element={<Reports />} />
             <Route path="people" element={<People />} />
             <Route path="people/roles" element={<RolesManagement />} />
-            <Route path="planning" element={<Planning />} />
+            <Route path="planning" element={<PlanningHub />} />
             <Route path="planning-mprev" element={<PlanningMPrev />} />
             <Route path="vendors" element={<Vendors />} />
             <Route path="contrats" element={<Contracts />} />
