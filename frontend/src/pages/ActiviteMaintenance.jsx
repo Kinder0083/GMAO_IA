@@ -223,20 +223,29 @@ const ActiviteMaintenance = ({ service = 'MAINTENANCE' }) => {
     setDragItem(null);
     if (source === 'pool') {
       try {
+        // Securisation : titre jamais null (sinon Pydantic 422)
+        const safeTitle = (item.title && String(item.title).trim())
+          || (item.numero ? `#${item.numero}` : '')
+          || 'Tâche';
+        const safeNumero = item.numero ? String(item.numero) : null;
+        const safeDuration = Number(item.duration_hours) > 0 ? Number(item.duration_hours) : 1.0;
         await maintenanceAssignmentsAPI.create({
           user_id: userId,
           date: dateStr,
           type: item.type,
-          title: item.title,
+          title: safeTitle,
           description: '',
-          duration_hours: item.duration_hours || 1.0,
+          duration_hours: safeDuration,
           reference_id: item.id,
-          reference_numero: item.numero,
+          reference_numero: safeNumero,
         });
-        toast({ title: 'Affecté', description: `${item.title} ajouté au planning` });
+        toast({ title: 'Affecté', description: `${safeTitle} ajouté au planning` });
         loadData();
       } catch (err) {
-        toast({ title: 'Erreur', description: err.response?.data?.detail || 'Echec de l\'affectation', variant: 'destructive' });
+        const msg = typeof err.response?.data?.detail === 'string'
+          ? err.response.data.detail
+          : 'Echec de l\'affectation';
+        toast({ title: 'Erreur', description: msg, variant: 'destructive' });
       }
     } else if (source === 'cell') {
       // Deplacement
@@ -245,7 +254,10 @@ const ActiviteMaintenance = ({ service = 'MAINTENANCE' }) => {
         await maintenanceAssignmentsAPI.update(item.id, { user_id: userId, date: dateStr });
         loadData();
       } catch (err) {
-        toast({ title: 'Erreur', description: 'Impossible de déplacer', variant: 'destructive' });
+        const msg = typeof err.response?.data?.detail === 'string'
+          ? err.response.data.detail
+          : 'Impossible de déplacer';
+        toast({ title: 'Erreur', description: msg, variant: 'destructive' });
       }
     }
   };
@@ -262,7 +274,10 @@ const ActiviteMaintenance = ({ service = 'MAINTENANCE' }) => {
       });
       loadData();
     } catch (err) {
-      toast({ title: 'Erreur', description: err.response?.data?.detail || 'Auto-fit échoué', variant: 'destructive' });
+      const msg = typeof err.response?.data?.detail === 'string'
+        ? err.response.data.detail
+        : 'Auto-fit échoué';
+      toast({ title: 'Erreur', description: msg, variant: 'destructive' });
     } finally {
       setAutoFitting(false);
     }

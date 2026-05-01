@@ -106,6 +106,34 @@ api.interceptors.response.use(
     return response;
   },
   async (error) => {
+    // Normalisation defensive du champ `detail` :
+    // FastAPI renvoie un Array<{loc,msg,type}> sur les 422, ce qui fait planter
+    // React (Error #31) si quelqu'un l'affiche directement dans un composant/toast.
+    // On le convertit toujours en string lisible AVANT toute propagation.
+    try {
+      const data = error?.response?.data;
+      if (data && data.detail !== undefined && data.detail !== null) {
+        const d = data.detail;
+        if (Array.isArray(d)) {
+          data.detail = d
+            .map((e) => {
+              if (typeof e === 'string') return e;
+              if (e && typeof e === 'object') {
+                const loc = Array.isArray(e.loc) ? e.loc.filter((x) => x !== 'body').join('.') : '';
+                const msg = e.msg || e.message || JSON.stringify(e);
+                return loc ? `${loc}: ${msg}` : msg;
+              }
+              return String(e);
+            })
+            .join(' • ');
+        } else if (typeof d === 'object') {
+          data.detail = d.msg || d.message || JSON.stringify(d);
+        }
+      }
+    } catch (_) {
+      // ne jamais bloquer le pipeline d'erreur
+    }
+
     // 401 -> deconnexion
     if (error.response?.status === 401) {
       localStorage.removeItem('token');

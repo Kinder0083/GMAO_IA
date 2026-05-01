@@ -136,7 +136,10 @@ const AssignmentDialog = ({ open, onOpenChange, context, editing, techs = [], po
       toast({ title: 'Succès', description: editing ? 'Affectation modifiée' : 'Affectation créée' });
       onSaved();
     } catch (err) {
-      toast({ title: 'Erreur', description: err.response?.data?.detail || 'Echec', variant: 'destructive' });
+      const msg = typeof err.response?.data?.detail === 'string'
+        ? err.response.data.detail
+        : 'Echec';
+      toast({ title: 'Erreur', description: msg, variant: 'destructive' });
     } finally {
       setLoading(false);
     }

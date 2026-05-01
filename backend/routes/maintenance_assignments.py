@@ -331,14 +331,18 @@ async def get_unassigned_pool(
         {"_id": 0, "id": 1, "numero": 1, "titre": 1, "priorite": 1, "dateLimite": 1, "tempsEstime": 1, "statut": 1, "assigne_a_id": 1, "assigne_service": 1}
     ).sort([("priorite", -1), ("dateLimite", 1)]).to_list(500)
     for wo in wos:
+        wo_id = wo.get("id")
+        if not wo_id:
+            continue
+        title = (wo.get("titre") or "").strip() or (f"#{wo.get('numero')}" if wo.get("numero") else "(Sans titre)")
         items.append({
             "type": "WORK_ORDER",
-            "id": wo.get("id"),
-            "numero": wo.get("numero"),
-            "title": wo.get("titre"),
+            "id": wo_id,
+            "numero": wo.get("numero") or "",
+            "title": title,
             "priorite": wo.get("priorite"),
             "dateLimite": wo.get("dateLimite").isoformat() if wo.get("dateLimite") and hasattr(wo.get("dateLimite"), "isoformat") else wo.get("dateLimite"),
-            "duration_hours": wo.get("tempsEstime") or 1.0,
+            "duration_hours": float(wo.get("tempsEstime") or 1.0),
             "statut": wo.get("statut"),
             "assigne_a_id": wo.get("assigne_a_id"),
             "assigne_service": wo.get("assigne_service"),
@@ -350,14 +354,18 @@ async def get_unassigned_pool(
         {"_id": 0, "id": 1, "numero": 1, "titre": 1, "priorite": 1, "dateLimite": 1, "tempsEstime": 1, "statut": 1, "assigne_a_id": 1}
     ).sort([("priorite", -1), ("dateLimite", 1)]).to_list(500)
     for imp in imps:
+        imp_id = imp.get("id")
+        if not imp_id:
+            continue
+        title = (imp.get("titre") or "").strip() or (f"#{imp.get('numero')}" if imp.get("numero") else "(Sans titre)")
         items.append({
             "type": "IMPROVEMENT",
-            "id": imp.get("id"),
-            "numero": imp.get("numero"),
-            "title": imp.get("titre"),
+            "id": imp_id,
+            "numero": imp.get("numero") or "",
+            "title": title,
             "priorite": imp.get("priorite"),
             "dateLimite": imp.get("dateLimite").isoformat() if imp.get("dateLimite") and hasattr(imp.get("dateLimite"), "isoformat") else imp.get("dateLimite"),
-            "duration_hours": imp.get("tempsEstime") or 1.0,
+            "duration_hours": float(imp.get("tempsEstime") or 1.0),
             "statut": imp.get("statut"),
             "assigne_a_id": imp.get("assigne_a_id"),
         })
@@ -369,14 +377,18 @@ async def get_unassigned_pool(
         {"_id": 0, "id": 1, "titre": 1, "priorite": 1, "prochaineMaintenance": 1, "dureeEstimee": 1, "assigne_a_id": 1}
     ).sort("prochaineMaintenance", 1).to_list(200)
     for pm in pms:
+        pm_id = pm.get("id")
+        if not pm_id:
+            continue
+        title = (pm.get("titre") or "").strip() or "(MP sans titre)"
         items.append({
             "type": "PREVENTIVE_MAINTENANCE",
-            "id": pm.get("id"),
+            "id": pm_id,
             "numero": "",
-            "title": pm.get("titre"),
+            "title": title,
             "priorite": pm.get("priorite") or "AUCUNE",
             "dateLimite": pm.get("prochaineMaintenance").isoformat() if pm.get("prochaineMaintenance") and hasattr(pm.get("prochaineMaintenance"), "isoformat") else pm.get("prochaineMaintenance"),
-            "duration_hours": pm.get("dureeEstimee") or 1.0,
+            "duration_hours": float(pm.get("dureeEstimee") or 1.0),
             "statut": "PLANIFIE",
             "assigne_a_id": pm.get("assigne_a_id"),
         })
