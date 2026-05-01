@@ -12,6 +12,7 @@ import useVersionCheck from "./hooks/useVersionCheck";
 import PWABanner from "./components/shared/PWABanner";
 import OfflineBanner from "./components/Common/OfflineBanner";
 import GlobalToastListener from "./components/Common/GlobalToastListener";
+import GlobalErrorBoundary from "./components/Common/GlobalErrorBoundary";
 import { initOfflineSync } from "./services/offlineSync";
 import { cleanOldCache } from "./services/offlineDb";
 
@@ -220,6 +221,7 @@ function App() {
   }, []);
 
   return (
+    <GlobalErrorBoundary>
     <PreferencesProvider>
       <div className="App">
         <OfflineBanner />
@@ -337,6 +339,7 @@ function App() {
       <GlobalToastListener />
     </div>
     </PreferencesProvider>
+    </GlobalErrorBoundary>
   );
 }
 

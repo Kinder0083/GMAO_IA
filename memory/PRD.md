@@ -20,10 +20,11 @@ Application GMAO/CMMS full-stack (React + FastAPI + MongoDB) pour gérer interve
 - Notifications, Audit, Rôles & Permissions
 
 ## Last update (1 May 2026 — fork)
-### P0 résolu
-- Crash "Écran blanc" lors du drag & drop OT/IMP/PM dans Activité Maintenance.
-  - Cause : backend renvoyait `title: null` parfois → 422 → React Error #31 sur rendu d'array `detail`.
-  - Fix : (1) intercepteur axios normalise `detail` en string, (2) `ActiviteMaintenance.handleDrop` sécurise le payload (titre fallback, durée numérique), (3) endpoint pool back-end fournit titre fallback + skip items sans id.
+
+### P0 résolus
+- **Crash écran blanc DnD Activité Maintenance** : 3 corrections (intercepteur axios stringifie `detail`, frontend sécurise payload, backend pool fournit titre fallback).
+- **Doublons d'affectation** : un même OT/Amélioration/PM ne peut plus être affecté plusieurs fois au même technicien le même jour (vérification frontend + backend 409 lors du POST et du PUT/déplacement).
+- **GlobalErrorBoundary** : fallback visible (bandeau rouge "Recharger / Retour à l'accueil") wrappe toute l'app pour éviter tout futur écran blanc dû à un crash de rendu.
 
 ## Backlog
 - P1 : Filtres rapides checkboxes "OT seulement / Amél. seulement / PM seulement / Cacher congés" sur Planning.

@@ -168,6 +168,25 @@ async def create_maintenance_assignment(
         if not reference_numero:
             reference_numero = ref.get("numero") or ""
 
+        # Anti-doublon : interdire d'affecter 2x la meme reference (OT/IMP/PM)
+        # au meme technicien le meme jour.
+        existing_dup = await db.maintenance_assignments.find_one({
+            "user_id": payload.user_id,
+            "date": payload.date,
+            "type": payload.type.value,
+            "reference_id": payload.reference_id,
+        })
+        if existing_dup:
+            type_label = {
+                "WORK_ORDER": "Cet OT",
+                "IMPROVEMENT": "Cette amelioration",
+                "PREVENTIVE_MAINTENANCE": "Cette maintenance preventive",
+            }.get(payload.type.value, "Cette tache")
+            raise HTTPException(
+                status_code=409,
+                detail=f"{type_label} est deja affectee a ce technicien pour le {payload.date}"
+            )
+
     assignment_id = str(uuid.uuid4())
     now_iso = datetime.now(timezone.utc).isoformat()
     doc = {
@@ -260,6 +279,31 @@ async def update_maintenance_assignment(
     update_data = payload.model_dump(exclude_unset=True)
     if "category" in update_data and update_data["category"] is not None:
         update_data["category"] = update_data["category"].value if hasattr(update_data["category"], "value") else update_data["category"]
+
+    # Anti-doublon : si on change user_id et/ou date sur une affectation OT/IMP/PM,
+    # verifier qu'il n'existe pas deja la meme reference pour ce technicien ce jour-la.
+    if existing.get("type") in ("WORK_ORDER", "IMPROVEMENT", "PREVENTIVE_MAINTENANCE") and existing.get("reference_id"):
+        new_user_id = update_data.get("user_id", existing.get("user_id"))
+        new_date = update_data.get("date", existing.get("date"))
+        if new_user_id != existing.get("user_id") or new_date != existing.get("date"):
+            dup = await db.maintenance_assignments.find_one({
+                "user_id": new_user_id,
+                "date": new_date,
+                "type": existing.get("type"),
+                "reference_id": existing.get("reference_id"),
+                "id": {"$ne": assignment_id},
+            })
+            if dup:
+                type_label = {
+                    "WORK_ORDER": "Cet OT",
+                    "IMPROVEMENT": "Cette amelioration",
+                    "PREVENTIVE_MAINTENANCE": "Cette maintenance preventive",
+                }.get(existing.get("type"), "Cette tache")
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"{type_label} est deja affectee a ce technicien pour le {new_date}"
+                )
+
     # Recalculer la couleur si type/category change
     if "color" not in update_data:
         new_category = update_data.get("category", existing.get("category"))

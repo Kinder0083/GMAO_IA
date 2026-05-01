@@ -223,6 +223,21 @@ const ActiviteMaintenance = ({ service = 'MAINTENANCE' }) => {
     setDragItem(null);
     if (source === 'pool') {
       try {
+        // Anti-doublon : empecher d'affecter 2x le meme OT/IMP/PM au meme technicien le meme jour
+        const existingDup = (cellMap[`${userId}|${dateStr}`] || []).find(
+          a => a.reference_id && a.reference_id === item.id && a.type === item.type
+        );
+        if (existingDup) {
+          const typeLabel = item.type === 'WORK_ORDER' ? 'Cet OT'
+            : item.type === 'IMPROVEMENT' ? 'Cette amélioration'
+            : 'Cette maintenance préventive';
+          toast({
+            title: 'Doublon empêché',
+            description: `${typeLabel} est déjà affecté(e) à ce technicien pour cette journée.`,
+            variant: 'destructive'
+          });
+          return;
+        }
         // Securisation : titre jamais null (sinon Pydantic 422)
         const safeTitle = (item.title && String(item.title).trim())
           || (item.numero ? `#${item.numero}` : '')
@@ -250,6 +265,24 @@ const ActiviteMaintenance = ({ service = 'MAINTENANCE' }) => {
     } else if (source === 'cell') {
       // Deplacement
       if (item.user_id === userId && item.date === dateStr) return;
+      // Anti-doublon : si OT/IMP/PM avec reference_id, verifier qu'il n'existe pas deja
+      // la meme reference pour ce technicien ce jour-la.
+      if (item.reference_id && ['WORK_ORDER', 'IMPROVEMENT', 'PREVENTIVE_MAINTENANCE'].includes(item.type)) {
+        const existingDup = (cellMap[`${userId}|${dateStr}`] || []).find(
+          a => a.id !== item.id && a.reference_id === item.reference_id && a.type === item.type
+        );
+        if (existingDup) {
+          const typeLabel = item.type === 'WORK_ORDER' ? 'Cet OT'
+            : item.type === 'IMPROVEMENT' ? 'Cette amélioration'
+            : 'Cette maintenance préventive';
+          toast({
+            title: 'Doublon empêché',
+            description: `${typeLabel} est déjà affecté(e) à ce technicien pour cette journée.`,
+            variant: 'destructive'
+          });
+          return;
+        }
+      }
       try {
         await maintenanceAssignmentsAPI.update(item.id, { user_id: userId, date: dateStr });
         loadData();
