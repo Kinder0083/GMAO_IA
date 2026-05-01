@@ -21,7 +21,9 @@ import AttachmentUploader from './AttachmentUploader';
 import StatusChangeDialog from './StatusChangeDialog';
 import AIDiagnosticPanel from './AIDiagnosticPanel';
 import AISummaryPanel from './AISummaryPanel';
-import { commentsAPI, workOrdersAPI, inventoryAPI, equipmentsAPI, usersAPI } from '../../services/api';
+import EtapesRealisationViewer from '../EtapesRealisation/EtapesRealisationViewer';
+import ChecklistExecutionDialog from '../PreventiveMaintenance/ChecklistExecutionDialog';
+import { commentsAPI, workOrdersAPI, inventoryAPI, equipmentsAPI, usersAPI, checklistsAPI } from '../../services/api';
 import { useToast } from '../../hooks/use-toast';
 import { usePermissions } from '../../hooks/usePermissions';
 import { formatTimeToHoursMinutes } from '../../utils/timeFormat';
@@ -56,6 +58,11 @@ const WorkOrderDialog = ({ open, onOpenChange, workOrder, onSuccess }) => {
   const [editingCommentId, setEditingCommentId] = useState(null);
   const [editingCommentText, setEditingCommentText] = useState('');
   const [generatingPDF, setGeneratingPDF] = useState(false);
+  // Etapes de realisation (state local pour live update)
+  const [etapes, setEtapes] = useState([]);
+  const [checklistDialogOpen, setChecklistDialogOpen] = useState(false);
+  const [checklistTemplate, setChecklistTemplate] = useState(null);
+  const [checklistEtapeIdRef, setChecklistEtapeIdRef] = useState(null);
 
   // ==================== PDF / IMPRESSION ====================
   const buildPdfDocument = useCallback(async (forPrint = false) => {
@@ -727,8 +734,34 @@ const WorkOrderDialog = ({ open, onOpenChange, workOrder, onSuccess }) => {
       loadComments();
       loadInventoryAndEquipments();
       setIsClosing(false);
+      setEtapes(workOrder.etapes_realisation || []);
     }
   }, [open, workOrder]);
+
+  const handleLaunchEtapeChecklist = async (etape) => {
+    if (!etape?.checklist_template_id || !workOrder?.id) return;
+    try {
+      const res = await checklistsAPI.getTemplate(etape.checklist_template_id);
+      setChecklistTemplate(res.data);
+      setChecklistEtapeIdRef(etape.id);
+      setChecklistDialogOpen(true);
+    } catch (err) {
+      toast({
+        title: 'Erreur',
+        description: 'Checklist introuvable',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const handleEtapeChecklistCompleted = () => {
+    setChecklistDialogOpen(false);
+    setChecklistTemplate(null);
+    // L'auto-cochage est fait cote backend (preventive_maintenance.py).
+    // On rafraichit l'OT pour recuperer les etapes mises a jour.
+    if (onSuccess) onSuccess();
+    setChecklistEtapeIdRef(null);
+  };
 
   const handleDialogClose = (isOpen) => {
     if (!isOpen && !isClosing) {
@@ -1462,6 +1495,21 @@ const WorkOrderDialog = ({ open, onOpenChange, workOrder, onSuccess }) => {
             </Button>
           </div>
 
+          {/* Étapes de réalisation */}
+          {etapes && etapes.length > 0 && (
+            <>
+              <Separator className="my-6" />
+              <EtapesRealisationViewer
+                etapes={etapes}
+                resourceType="work-orders"
+                resourceId={workOrder.id}
+                canToggle={canEdit('workOrders')}
+                onChange={setEtapes}
+                onLaunchChecklist={handleLaunchEtapeChecklist}
+              />
+            </>
+          )}
+
           {/* Pièces jointes */}
           <Separator className="my-6" />
           <div>
@@ -1491,6 +1539,26 @@ const WorkOrderDialog = ({ open, onOpenChange, workOrder, onSuccess }) => {
       onStatusChange={handleStatusChange}
       onSkip={handleSkipStatusChange}
     />
+
+    {/* Dialog d'execution de checklist liee a une etape */}
+    {checklistTemplate && (
+      <ChecklistExecutionDialog
+        open={checklistDialogOpen}
+        onOpenChange={(o) => {
+          setChecklistDialogOpen(o);
+          if (!o) {
+            setChecklistTemplate(null);
+            setChecklistEtapeIdRef(null);
+          }
+        }}
+        template={checklistTemplate}
+        equipmentId={workOrder.equipement?.id}
+        equipmentName={workOrder.equipement?.nom}
+        workOrderId={workOrder.id}
+        mode="etape"
+        onSuccess={handleEtapeChecklistCompleted}
+      />
+    )}
     </>
   );
 };

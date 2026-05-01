@@ -881,6 +881,7 @@ class WorkOrderBase(BaseModel):
     preventive_maintenance_id: Optional[str] = None  # ID de la PM source si créé depuis PM
     checklist_id: Optional[str] = None  # ID du template de checklist associé
     service: Optional[str] = None  # Service associé pour le filtrage par responsable
+    etapes_realisation: List[Dict[str, Any]] = Field(default_factory=list)  # Etapes intermediaires de realisation
 
 class WorkOrderCreate(WorkOrderBase):
     pass
@@ -902,6 +903,7 @@ class WorkOrderUpdate(BaseModel):
     service: Optional[str] = None
     att_materiel_info: Optional[str] = None
     att_decision_info: Optional[str] = None
+    etapes_realisation: Optional[List[Dict[str, Any]]] = None
 
 
 class AddTimeSpent(BaseModel):
@@ -1531,6 +1533,7 @@ class Improvement(BaseModel):
     attachments: Optional[List[Dict]] = []
     comments: Optional[List[Dict]] = []
     time_entries: Optional[List[Dict]] = []
+    etapes_realisation: List[Dict[str, Any]] = Field(default_factory=list)
 
 class ImprovementCreate(BaseModel):
     titre: str
@@ -1541,6 +1544,7 @@ class ImprovementCreate(BaseModel):
     assigne_a_id: Optional[str] = None
     dateLimite: Optional[datetime] = None
     tempsEstime: Optional[float] = None
+    etapes_realisation: List[Dict[str, Any]] = Field(default_factory=list)
 
 class ImprovementUpdate(BaseModel):
     titre: Optional[str] = None
@@ -1553,6 +1557,7 @@ class ImprovementUpdate(BaseModel):
     dateLimite: Optional[datetime] = None
     tempsEstime: Optional[float] = None
     tempsReel: Optional[float] = None
+    etapes_realisation: Optional[List[Dict[str, Any]]] = None
 
 
 # ==================== SETTINGS MODELS ====================
@@ -3240,6 +3245,7 @@ class ChecklistExecutionBase(BaseModel):
     checklist_name: str
     work_order_id: Optional[str] = None  # Ordre de travail associé
     preventive_maintenance_id: Optional[str] = None  # Maintenance préventive associée
+    improvement_id: Optional[str] = None  # Amélioration associée
     equipment_id: Optional[str] = None
     equipment_name: Optional[str] = None
     
@@ -3260,6 +3266,7 @@ class ChecklistExecutionCreate(BaseModel):
     checklist_template_id: str
     work_order_id: Optional[str] = None
     preventive_maintenance_id: Optional[str] = None
+    improvement_id: Optional[str] = None
     equipment_id: Optional[str] = None
 
 class ChecklistExecutionUpdate(BaseModel):

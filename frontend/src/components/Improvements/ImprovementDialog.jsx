@@ -19,7 +19,9 @@ import { Calendar, Clock, User, MapPin, Wrench, FileText, MessageSquare, Pencil,
 import AttachmentsList from './AttachmentsList';
 import AttachmentUploader from './AttachmentUploader';
 import StatusChangeDialog from './StatusChangeDialog';
-import { improvementsAPI, usersAPI } from '../../services/api';
+import EtapesRealisationViewer from '../EtapesRealisation/EtapesRealisationViewer';
+import ChecklistExecutionDialog from '../PreventiveMaintenance/ChecklistExecutionDialog';
+import { improvementsAPI, usersAPI, checklistsAPI } from '../../services/api';
 import { useToast } from '../../hooks/use-toast';
 import { usePermissions } from '../../hooks/usePermissions';
 import { formatTimeToHoursMinutes } from '../../utils/timeFormat';
@@ -37,6 +39,9 @@ const ImprovementDialog = ({ open, onOpenChange, workOrder, onSuccess }) => {
   const [isClosing, setIsClosing] = useState(false);
   const [timeInput, setTimeInput] = useState('');
   const [validating, setValidating] = useState(false);
+  const [etapes, setEtapes] = useState([]);
+  const [checklistDialogOpen, setChecklistDialogOpen] = useState(false);
+  const [checklistTemplate, setChecklistTemplate] = useState(null);
 
   // États édition des pointages
   const [editingTimeId, setEditingTimeId] = useState(null);
@@ -256,8 +261,30 @@ const ImprovementDialog = ({ open, onOpenChange, workOrder, onSuccess }) => {
     if (open && workOrder) {
       loadComments();
       setIsClosing(false);
+      setEtapes(workOrder.etapes_realisation || []);
     }
   }, [open, workOrder]);
+
+  const handleLaunchEtapeChecklist = async (etape) => {
+    if (!etape?.checklist_template_id || !workOrder?.id) return;
+    try {
+      const res = await checklistsAPI.getTemplate(etape.checklist_template_id);
+      setChecklistTemplate(res.data);
+      setChecklistDialogOpen(true);
+    } catch (err) {
+      toast({
+        title: 'Erreur',
+        description: 'Checklist introuvable',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const handleEtapeChecklistCompleted = () => {
+    setChecklistDialogOpen(false);
+    setChecklistTemplate(null);
+    if (onSuccess) onSuccess();
+  };
 
   const handleDialogClose = (isOpen) => {
     if (!isOpen && !isClosing) {
@@ -619,6 +646,21 @@ const ImprovementDialog = ({ open, onOpenChange, workOrder, onSuccess }) => {
             </Button>
           </div>
 
+          {/* Étapes de réalisation */}
+          {etapes && etapes.length > 0 && (
+            <>
+              <Separator className="my-6" />
+              <EtapesRealisationViewer
+                etapes={etapes}
+                resourceType="improvements"
+                resourceId={workOrder.id}
+                canToggle={canEdit('improvements')}
+                onChange={setEtapes}
+                onLaunchChecklist={handleLaunchEtapeChecklist}
+              />
+            </>
+          )}
+
           {/* Pièces jointes */}
           <Separator className="my-6" />
           <div>
@@ -648,6 +690,22 @@ const ImprovementDialog = ({ open, onOpenChange, workOrder, onSuccess }) => {
       onStatusChange={handleStatusChange}
       onSkip={handleSkipStatusChange}
     />
+
+    {checklistTemplate && (
+      <ChecklistExecutionDialog
+        open={checklistDialogOpen}
+        onOpenChange={(o) => {
+          setChecklistDialogOpen(o);
+          if (!o) setChecklistTemplate(null);
+        }}
+        template={checklistTemplate}
+        equipmentId={workOrder.equipement?.id}
+        equipmentName={workOrder.equipement?.nom}
+        improvementId={workOrder.id}
+        mode="etape"
+        onSuccess={handleEtapeChecklistCompleted}
+      />
+    )}
     </>
   );
 };

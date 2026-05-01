@@ -32,8 +32,10 @@ const ChecklistExecutionDialog = ({
   template, 
   workOrderId = null,
   preventiveMaintenanceId = null,
+  improvementId = null,
   equipmentId = null,
   equipmentName = null,
+  mode = 'full', // 'full' = termine l'OT (PM classique), 'etape' = juste l'etape (ne touche pas le statut OT)
   onSuccess 
 }) => {
   const { toast } = useToast();
@@ -175,6 +177,7 @@ const ChecklistExecutionDialog = ({
         checklist_template_id: template.id,
         work_order_id: workOrderId,
         preventive_maintenance_id: preventiveMaintenanceId,
+        improvement_id: improvementId,
         equipment_id: equipmentId
       };
 
@@ -192,8 +195,8 @@ const ChecklistExecutionDialog = ({
 
       await checklistsAPI.updateExecution(createdExecution.data.id, updateData);
 
-      // Étape 3: Mettre à jour l'OT original si workOrderId fourni
-      if (workOrderId) {
+      // Étape 3: Mettre à jour l'OT original si workOrderId fourni (mode 'full' uniquement)
+      if (workOrderId && mode === 'full') {
         await workOrdersAPI.update(workOrderId, {
           statut: 'TERMINE',
           categorie: 'TRAVAUX_PREVENTIFS',
@@ -202,8 +205,8 @@ const ChecklistExecutionDialog = ({
         });
       }
 
-      // Étape 4: Créer un OT "RP-" si des non-conformités
-      if (nonConformities.length > 0 && workOrderId) {
+      // Étape 4: Créer un OT "RP-" si des non-conformités (skip en mode 'etape')
+      if (nonConformities.length > 0 && workOrderId && mode === 'full') {
         // Récupérer les détails de l'OT original pour le nom
         let originalOTName = equipmentName || 'Maintenance';
         try {
@@ -257,7 +260,9 @@ const ChecklistExecutionDialog = ({
       } else {
         toast({
           title: 'Succès',
-          description: `Checklist validée et OT terminé. Temps passé : ${timeHours}h ${timeMinutes}min`
+          description: mode === 'etape'
+            ? `Checklist validée. L'étape liée a été cochée automatiquement. Temps passé : ${timeHours}h ${timeMinutes}min`
+            : `Checklist validée et OT terminé. Temps passé : ${timeHours}h ${timeMinutes}min`
         });
       }
 

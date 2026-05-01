@@ -22,6 +22,7 @@ from models import (
 )
 from dependencies import get_current_user, get_current_admin_user, require_permission
 from routes.shared import db, audit_service, serialize_doc, find_user_flexible, NOT_DELETED, get_location_by_id, get_user_by_id, get_equipment_by_id, get_next_improvement_numero
+from routes.etapes_helper import normalize_etapes, merge_etapes_with_lock, mark_etape_completed, mark_etape_uncompleted
 
 EntityType_Audit = EntityType
 logger = logging.getLogger(__name__)
@@ -1246,6 +1247,7 @@ async def create_improvement(imp_create: ImprovementCreate, current_user: dict =
     improvement_data["dateTermine"] = None
     improvement_data["attachments"] = []
     improvement_data["comments"] = []
+    improvement_data["etapes_realisation"] = normalize_etapes(improvement_data.get("etapes_realisation", []))
     
     if improvement_data.get("assigne_a_id"):
         assignee = await db.users.find_one({"id": improvement_data["assigne_a_id"]})
@@ -1339,6 +1341,17 @@ async def update_improvement(
                 update_data["emplacement"] = {"id": location["id"], "nom": location["nom"]}
         else:
             update_data["emplacement"] = None
+    
+    # === Etapes de realisation : verrouillage + reouverture statut ===
+    if 'etapes_realisation' in sent_data:
+        new_etapes_payload = sent_data.get('etapes_realisation') or []
+        existing_etapes = imp.get('etapes_realisation', []) or []
+        merged_etapes, has_added_steps = merge_etapes_with_lock(existing_etapes, new_etapes_payload)
+        update_data['etapes_realisation'] = merged_etapes
+        # Si ajout d'etapes ET amelioration etait TERMINE, on rebascule en OUVERT
+        if has_added_steps and imp.get('statut') == 'TERMINE':
+            update_data['statut'] = 'OUVERT'
+            update_data['dateTermine'] = None
     
     await db.improvements.update_one({"id": imp_id}, {"$set": update_data})
     updated_imp = await db.improvements.find_one({"id": imp_id})
@@ -1614,3 +1627,54 @@ async def delete_improvement_time_entry(
 
 
 
+
+
+# ==================== ETAPES DE REALISATION (Improvements) ====================
+
+@router.post("/improvements/{imp_id}/etapes/{etape_id}/toggle", tags=["Ameliorations"])
+async def toggle_improvement_etape(
+    imp_id: str,
+    etape_id: str,
+    current_user: dict = Depends(require_permission("improvements", "edit"))
+):
+    """Toggle le statut completed d'une etape de realisation d'une amelioration."""
+    imp = await db.improvements.find_one({"id": imp_id})
+    if not imp:
+        raise HTTPException(status_code=404, detail="Amelioration non trouvee")
+
+    etapes = imp.get("etapes_realisation", []) or []
+    etape = next((e for e in etapes if e.get("id") == etape_id), None)
+    if not etape:
+        raise HTTPException(status_code=404, detail="Etape non trouvee")
+
+    if etape.get("completed"):
+        mark_etape_uncompleted(etape)
+        action = "decochee"
+    else:
+        mark_etape_completed(etape, current_user)
+        action = "cochee"
+
+    await db.improvements.update_one(
+        {"id": imp_id},
+        {"$set": {"etapes_realisation": etapes}}
+    )
+
+    await audit_service.log_action(
+        user_id=current_user["id"],
+        user_name=f"{current_user.get('prenom', '')} {current_user.get('nom', '')}",
+        user_email=current_user.get("email", ""),
+        action=ActionType.UPDATE,
+        entity_type=EntityType.IMPROVEMENT,
+        entity_id=imp_id,
+        entity_name=imp.get("titre", ""),
+        details=f"Etape #{etape.get('numero', '?')} {action}: {etape.get('description', '')[:80]}"
+    )
+
+    await _get_realtime_manager().emit_event(
+        "improvements",
+        "updated",
+        {"id": imp_id, "etapes_realisation": etapes},
+        user_id=current_user["id"]
+    )
+
+    return {"success": True, "etape": etape}

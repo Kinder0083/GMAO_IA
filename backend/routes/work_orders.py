@@ -33,6 +33,7 @@ from routes.shared import (
     get_user_by_id, get_location_by_id, get_equipment_by_id,
     get_next_work_order_numero, NOT_DELETED
 )
+from routes.etapes_helper import normalize_etapes, merge_etapes_with_lock, mark_etape_completed, mark_etape_uncompleted
 
 logger = logging.getLogger(__name__)
 
@@ -261,6 +262,7 @@ async def create_work_order(wo_create: WorkOrderCreate, current_user: dict = Dep
     wo_dict["comments"] = []
     wo_dict["parts_used"] = []
     wo_dict["createdBy"] = current_user.get("id")
+    wo_dict["etapes_realisation"] = normalize_etapes(wo_dict.get("etapes_realisation", []))
     wo_dict["_id"] = ObjectId()
     wo_dict["id"] = str(wo_dict["_id"])
 
@@ -378,6 +380,18 @@ async def update_work_order(wo_id: str, wo_update: WorkOrderUpdate, current_user
             update_data['equipement'] = None
         if 'emplacement_id' in update_data and update_data['emplacement_id'] is None:
             update_data['emplacement'] = None
+
+        # === Etapes de realisation : verrouillage + reouverture statut ===
+        if 'etapes_realisation' in sent_data:
+            new_etapes_payload = sent_data.get('etapes_realisation') or []
+            existing_etapes = existing_wo.get('etapes_realisation', []) or []
+            merged_etapes, has_added_steps = merge_etapes_with_lock(existing_etapes, new_etapes_payload)
+            update_data['etapes_realisation'] = merged_etapes
+            # Si ajout d'etapes ET OT etait TERMINE, on rebascule en OUVERT
+            current_statut = existing_wo.get('statut')
+            if has_added_steps and current_statut == WorkOrderStatus.TERMINE.value:
+                update_data['statut'] = WorkOrderStatus.OUVERT.value
+                update_data['dateTermine'] = None
 
         if wo_update.statut == WorkOrderStatus.TERMINE and "dateTermine" not in update_data:
             update_data["dateTermine"] = datetime.utcnow()
@@ -1176,3 +1190,63 @@ async def delete_comment(
     except Exception as e:
         logger.error(f"Erreur suppression commentaire: {e}")
         raise HTTPException(status_code=500, detail="Erreur lors de la suppression")
+
+
+
+# ==================== ETAPES DE REALISATION ====================
+
+@router.post("/work-orders/{wo_id}/etapes/{etape_id}/toggle",
+    summary="Cocher/decocher une etape de realisation")
+async def toggle_work_order_etape(
+    wo_id: str,
+    etape_id: str,
+    current_user: dict = Depends(require_permission("workOrders", "edit"))
+):
+    """Toggle le statut completed d'une etape de realisation."""
+    wo = await db.work_orders.find_one({"id": wo_id})
+    if not wo:
+        try:
+            wo = await db.work_orders.find_one({"_id": ObjectId(wo_id)})
+        except Exception:
+            pass
+    if not wo:
+        raise HTTPException(status_code=404, detail="Ordre de travail non trouve")
+
+    etapes = wo.get("etapes_realisation", []) or []
+    etape = next((e for e in etapes if e.get("id") == etape_id), None)
+    if not etape:
+        raise HTTPException(status_code=404, detail="Etape non trouvee")
+
+    if etape.get("completed"):
+        mark_etape_uncompleted(etape)
+        action = "decochee"
+    else:
+        mark_etape_completed(etape, current_user)
+        action = "cochee"
+
+    await db.work_orders.update_one(
+        {"_id": wo["_id"]},
+        {"$set": {"etapes_realisation": etapes}}
+    )
+
+    await audit_service.log_action(
+        user_id=current_user["id"],
+        user_name=f"{current_user.get('prenom', '')} {current_user.get('nom', '')}",
+        user_email=current_user.get("email", ""),
+        action=ActionType.UPDATE,
+        entity_type=EntityType_Audit.WORK_ORDER,
+        entity_id=wo.get("id", str(wo.get("_id"))),
+        entity_name=wo.get("titre", ""),
+        details=f"Etape #{etape.get('numero', '?')} {action}: {etape.get('description', '')[:80]}"
+    )
+
+    from realtime_manager import realtime_manager
+    from realtime_events import EntityType as RT_E, EventType as RT_T
+    await realtime_manager.emit_event(
+        RT_E.WORK_ORDERS.value,
+        RT_T.UPDATED.value,
+        {"id": wo.get("id"), "etapes_realisation": etapes},
+        user_id=current_user.get("id")
+    )
+
+    return {"success": True, "etape": etape}

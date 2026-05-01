@@ -21,6 +21,7 @@ import AssigneeSelector from '../AssigneeSelector';
 import StatusChangeDialog from './StatusChangeDialog';
 import { validateDateNotPast } from '../../utils/dateValidation';
 import { formatErrorMessage } from '../../utils/errorFormatter';
+import EtapesRealisationField from '../EtapesRealisation/EtapesRealisationField';
 
 const WorkOrderFormDialog = ({ open, onOpenChange, workOrder, prefillData, onSuccess }) => {
   const { toast } = useToast();
@@ -42,6 +43,7 @@ const WorkOrderFormDialog = ({ open, onOpenChange, workOrder, prefillData, onSuc
     dateLimite: '',
     tempsEstime: ''
   });
+  const [etapes, setEtapes] = useState([]);
   const [templateId, setTemplateId] = useState(null); // Pour incrémenter le compteur
   const [attachments, setAttachments] = useState([]);
   const fileInputRef = useRef(null);
@@ -97,6 +99,7 @@ const WorkOrderFormDialog = ({ open, onOpenChange, workOrder, prefillData, onSuc
         setSavedWorkOrderId(workOrder.id);
         setSavedWorkOrderStatus(workOrder.statut);
         setTemplateId(null);
+        setEtapes(workOrder.etapes_realisation || []);
 
         // Load existing attachments with previews
         if (workOrder.attachments && workOrder.attachments.length > 0) {
@@ -166,6 +169,7 @@ const WorkOrderFormDialog = ({ open, onOpenChange, workOrder, prefillData, onSuc
         setSavedWorkOrderId(null);
         setSavedWorkOrderStatus(null);
         setTemplateId(prefillData.template_id || null);
+        setEtapes([]);
       } else {
         // Mode création vide - avec date du jour et temps estimé par défaut (0.5h = 30 min)
         const today = new Date().toISOString().split('T')[0];
@@ -186,6 +190,7 @@ const WorkOrderFormDialog = ({ open, onOpenChange, workOrder, prefillData, onSuc
         setSavedWorkOrderId(null);
         setSavedWorkOrderStatus(null);
         setTemplateId(null);
+        setEtapes([]);
       }
     } else {
       // Cleanup : révoquer les blob URLs et réinitialiser
@@ -384,7 +389,8 @@ const WorkOrderFormDialog = ({ open, onOpenChange, workOrder, prefillData, onSuc
         dateLimite: formData.dateLimite ? new Date(formData.dateLimite).toISOString() : null,
         equipement_id: actualEquipementId,
         assigne_a_id: formData.assigne_a_id || null,
-        emplacement_id: formData.emplacement_id || null
+        emplacement_id: formData.emplacement_id || null,
+        etapes_realisation: etapes
       };
       delete submitData.sous_equipement_id;
 
@@ -657,6 +663,13 @@ const WorkOrderFormDialog = ({ open, onOpenChange, workOrder, prefillData, onSuc
               />
             </div>
           </div>
+
+          {/* Section Étapes de réalisation */}
+          <EtapesRealisationField
+            value={etapes}
+            onChange={setEtapes}
+            equipmentId={formData.sous_equipement_id || formData.equipement_id || null}
+          />
 
           {/* Section Fichiers joints */}
           <div className="space-y-2 pt-4 border-t">

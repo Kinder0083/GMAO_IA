@@ -572,6 +572,7 @@ async def create_checklist_execution(execution_create: ChecklistExecutionCreate,
             "checklist_name": template.get("name", ""),
             "work_order_id": execution_create.work_order_id,
             "preventive_maintenance_id": execution_create.preventive_maintenance_id,
+            "improvement_id": execution_create.improvement_id,
             "equipment_id": execution_create.equipment_id,
             "equipment_name": equipment_name,
             "responses": [],
@@ -647,6 +648,62 @@ async def update_checklist_execution(execution_id: str, execution_update: Checkl
                 pass
         if not execution:
             raise HTTPException(status_code=404, detail="Exécution de checklist non trouvée")
+        
+        # Auto-completion de l'etape de realisation liee si la checklist passe a "completed"
+        if update_data.get("status") == "completed":
+            try:
+                wo_id = execution.get("work_order_id")
+                tpl_id = execution.get("checklist_template_id")
+                exec_id = execution.get("id") or str(execution.get("_id", ""))
+                if wo_id and tpl_id:
+                    # Chercher l'etape liee dans l'OT
+                    wo = await db.work_orders.find_one({"id": wo_id})
+                    if not wo:
+                        try:
+                            wo = await db.work_orders.find_one({"_id": ObjectId(wo_id)})
+                        except Exception:
+                            wo = None
+                    if wo:
+                        etapes = wo.get("etapes_realisation", []) or []
+                        modified = False
+                        for e in etapes:
+                            if e.get("checklist_template_id") == tpl_id and not e.get("completed"):
+                                e["completed"] = True
+                                e["completed_at"] = datetime.now(timezone.utc).isoformat()
+                                e["completed_by_id"] = current_user.get("id")
+                                e["completed_by_name"] = f"{current_user.get('prenom', '')} {current_user.get('nom', '')}".strip() or current_user.get("email", "")
+                                e["checklist_execution_id"] = exec_id
+                                modified = True
+                                break  # Une seule etape liee a la fois
+                        if modified:
+                            await db.work_orders.update_one(
+                                {"_id": wo["_id"]},
+                                {"$set": {"etapes_realisation": etapes}}
+                            )
+                # Idem pour les ameliorations (champ improvement_id eventuellement stocke)
+                imp_id = execution.get("improvement_id")
+                if imp_id and tpl_id:
+                    imp = await db.improvements.find_one({"id": imp_id})
+                    if imp:
+                        etapes = imp.get("etapes_realisation", []) or []
+                        modified = False
+                        for e in etapes:
+                            if e.get("checklist_template_id") == tpl_id and not e.get("completed"):
+                                e["completed"] = True
+                                e["completed_at"] = datetime.now(timezone.utc).isoformat()
+                                e["completed_by_id"] = current_user.get("id")
+                                e["completed_by_name"] = f"{current_user.get('prenom', '')} {current_user.get('nom', '')}".strip() or current_user.get("email", "")
+                                e["checklist_execution_id"] = exec_id
+                                modified = True
+                                break
+                        if modified:
+                            await db.improvements.update_one(
+                                {"id": imp_id},
+                                {"$set": {"etapes_realisation": etapes}}
+                            )
+            except Exception as auto_err:
+                logger.warning(f"Erreur auto-cochage etape via checklist: {auto_err}")
+        
         return ChecklistExecution(**serialize_doc(execution))
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))

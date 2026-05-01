@@ -18,6 +18,7 @@ import { improvementsAPI, equipmentsAPI, locationsAPI, usersAPI } from '../../se
 import StatusChangeDialog from './StatusChangeDialog';
 import AssigneeSelector from '../AssigneeSelector';
 import { formatErrorMessage } from '../../utils/errorFormatter';
+import EtapesRealisationField from '../EtapesRealisation/EtapesRealisationField';
 
 const ImprovementFormDialog = ({ open, onOpenChange, workOrder, onSuccess }) => {
   const { toast } = useToast();
@@ -40,6 +41,7 @@ const ImprovementFormDialog = ({ open, onOpenChange, workOrder, onSuccess }) => 
     tempsEstime: ''
   });
   const [attachments, setAttachments] = useState([]);
+  const [etapes, setEtapes] = useState([]);
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
   const [showStatusDialog, setShowStatusDialog] = useState(false);
@@ -77,6 +79,7 @@ const ImprovementFormDialog = ({ open, onOpenChange, workOrder, onSuccess }) => 
         });
         setSavedImprovementId(workOrder.id);
         setSavedImprovementStatus(workOrder.statut);
+        setEtapes(workOrder.etapes_realisation || []);
       } else {
         setFormData({
           titre: '',
@@ -93,6 +96,7 @@ const ImprovementFormDialog = ({ open, onOpenChange, workOrder, onSuccess }) => 
         setAttachments([]);
         setSavedImprovementId(null);
         setSavedImprovementStatus(null);
+        setEtapes([]);
       }
     }
   }, [open, workOrder]);
@@ -211,7 +215,8 @@ const ImprovementFormDialog = ({ open, onOpenChange, workOrder, onSuccess }) => 
         dateLimite: formData.dateLimite ? new Date(formData.dateLimite).toISOString() : null,
         equipement_id: actualEquipementId,
         assigne_a_id: formData.assigne_a_id || null,
-        emplacement_id: formData.emplacement_id || null
+        emplacement_id: formData.emplacement_id || null,
+        etapes_realisation: etapes
       };
       delete submitData.sous_equipement_id;
 
@@ -452,6 +457,13 @@ const ImprovementFormDialog = ({ open, onOpenChange, workOrder, onSuccess }) => 
               />
             </div>
           </div>
+
+          {/* Section Étapes de réalisation */}
+          <EtapesRealisationField
+            value={etapes}
+            onChange={setEtapes}
+            equipmentId={formData.sous_equipement_id || formData.equipement_id || null}
+          />
 
           {/* Section Fichiers joints */}
           <div className="space-y-2 pt-4 border-t">
