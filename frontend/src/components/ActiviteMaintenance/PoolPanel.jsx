@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Card, CardContent } from '../ui/card';
 import { Input } from '../ui/input';
-import { Search, Wrench, Lightbulb, Sparkles, GripVertical } from 'lucide-react';
+import { Search, Wrench, Lightbulb, Sparkles, GripVertical, CheckCircle2, EyeOff } from 'lucide-react';
 
 const TYPE_META = {
   WORK_ORDER: { color: '#0ea5e9', icon: Wrench, label: 'OT', bg: 'bg-sky-50', border: 'border-sky-200', text: 'text-sky-700' },
@@ -15,12 +15,14 @@ const PRIO_BADGE = {
   BASSE: 'bg-blue-100 text-blue-700',
 };
 
-const PoolPanel = ({ pool = [], onDragStart, canAssign = false, onItemClick }) => {
+const PoolPanel = ({ pool = [], plannedRefs = {}, onDragStart, canAssign = false, onItemClick }) => {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('ALL');
+  const [hidePlanned, setHidePlanned] = useState(false);
 
   const filtered = pool.filter(p => {
     if (filter !== 'ALL' && p.type !== filter) return false;
+    if (hidePlanned && plannedRefs[p.id]) return false;
     if (search) {
       const q = search.toLowerCase();
       return (p.title || '').toLowerCase().includes(q) ||
@@ -28,6 +30,8 @@ const PoolPanel = ({ pool = [], onDragStart, canAssign = false, onItemClick }) =
     }
     return true;
   });
+
+  const totalPlanned = pool.filter(p => plannedRefs[p.id]).length;
 
   return (
     <Card className="lg:sticky lg:top-2 max-h-[calc(100vh-200px)] flex flex-col">
@@ -74,6 +78,24 @@ const PoolPanel = ({ pool = [], onDragStart, canAssign = false, onItemClick }) =
           ))}
         </div>
 
+        {/* Toggle "Masquer déjà planifiés" */}
+        {totalPlanned > 0 && (
+          <button
+            type="button"
+            onClick={() => setHidePlanned(v => !v)}
+            data-testid="pool-hide-planned-toggle"
+            className={`flex items-center justify-center gap-1 text-[10px] py-1 rounded border transition ${
+              hidePlanned
+                ? 'bg-blue-50 border-blue-300 text-blue-700'
+                : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+            }`}
+            title={hidePlanned ? 'Afficher toutes les tâches' : 'Masquer les tâches déjà planifiées'}
+          >
+            <EyeOff size={10} />
+            {hidePlanned ? 'Afficher tout' : `Masquer déjà planifiés (${totalPlanned})`}
+          </button>
+        )}
+
         {/* List */}
         <div className="flex-1 overflow-y-auto space-y-1.5 pr-1" data-testid="pool-list">
           {filtered.length === 0 && (
@@ -84,39 +106,67 @@ const PoolPanel = ({ pool = [], onDragStart, canAssign = false, onItemClick }) =
           {filtered.map(item => {
             const meta = TYPE_META[item.type] || TYPE_META.WORK_ORDER;
             const Icon = meta.icon;
+            const planned = plannedRefs[item.id];
+            const isPlanned = Boolean(planned);
+            const draggable = canAssign && !isPlanned;
+            const users = planned?.users ? Array.from(planned.users) : [];
+            const dates = planned?.dates ? Array.from(planned.dates).sort() : [];
+            const titleHint = isPlanned
+              ? `Déjà planifié(e) ${planned.count}× sur la période\n${users.length ? '→ ' + users.join(', ') : ''}${dates.length ? '\nDates : ' + dates.join(', ') : ''}`
+              : '';
             return (
               <div
                 key={`${item.type}-${item.id}`}
-                draggable={canAssign}
-                onDragStart={() => canAssign && onDragStart(item)}
-                onClick={() => onItemClick && canAssign && onItemClick(item)}
+                draggable={draggable}
+                onDragStart={() => draggable && onDragStart(item)}
+                onClick={() => !isPlanned && onItemClick && canAssign && onItemClick(item)}
                 data-testid={`pool-item-${item.id}`}
-                className={`p-2 rounded border ${meta.bg} ${meta.border} ${canAssign ? 'cursor-grab active:cursor-grabbing hover:shadow-sm' : 'cursor-default'} transition`}
+                data-planned={isPlanned ? 'true' : 'false'}
+                title={titleHint}
+                className={`relative p-2 rounded border transition ${
+                  isPlanned
+                    ? 'bg-gray-50 border-gray-200 opacity-60 cursor-not-allowed'
+                    : `${meta.bg} ${meta.border} ${canAssign ? 'cursor-grab active:cursor-grabbing hover:shadow-sm' : 'cursor-default'}`
+                }`}
               >
+                {isPlanned && (
+                  <span
+                    className="absolute top-1 right-1 inline-flex items-center gap-0.5 text-[9px] font-semibold bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full border border-emerald-300"
+                    data-testid={`pool-item-planned-badge-${item.id}`}
+                  >
+                    <CheckCircle2 size={9} />
+                    Planifié{planned.count > 1 ? ` ×${planned.count}` : ''}
+                  </span>
+                )}
                 <div className="flex items-start gap-1.5">
-                  <Icon size={12} className={meta.text + ' mt-0.5 shrink-0'} />
+                  <Icon size={12} className={(isPlanned ? 'text-gray-400' : meta.text) + ' mt-0.5 shrink-0'} />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1 flex-wrap">
                       {item.numero && (
-                        <span className={`text-[9px] font-mono ${meta.text} font-bold`}>
+                        <span className={`text-[9px] font-mono font-bold ${isPlanned ? 'text-gray-500' : meta.text}`}>
                           #{item.numero}
                         </span>
                       )}
-                      {item.priorite && PRIO_BADGE[item.priorite] && (
+                      {item.priorite && PRIO_BADGE[item.priorite] && !isPlanned && (
                         <span className={`text-[9px] px-1 rounded ${PRIO_BADGE[item.priorite]}`}>
                           {item.priorite}
                         </span>
                       )}
-                      <span className="text-[9px] text-gray-500 ml-auto">
+                      <span className={`text-[9px] ml-auto ${isPlanned ? 'text-gray-400' : 'text-gray-500'}`}>
                         {item.duration_hours}h
                       </span>
                     </div>
-                    <p className="text-xs text-gray-800 mt-0.5 line-clamp-2 leading-tight">
+                    <p className={`text-xs mt-0.5 line-clamp-2 leading-tight ${isPlanned ? 'text-gray-500 line-through decoration-gray-400/60' : 'text-gray-800'}`}>
                       {item.title}
                     </p>
-                    {item.dateLimite && (
+                    {item.dateLimite && !isPlanned && (
                       <p className="text-[9px] text-gray-500 mt-0.5">
                         Échéance : {new Date(item.dateLimite).toLocaleDateString('fr-FR')}
+                      </p>
+                    )}
+                    {isPlanned && users.length > 0 && (
+                      <p className="text-[9px] text-emerald-700 mt-0.5 truncate">
+                        → {users.slice(0, 2).join(', ')}{users.length > 2 ? ` +${users.length - 2}` : ''}
                       </p>
                     )}
                   </div>

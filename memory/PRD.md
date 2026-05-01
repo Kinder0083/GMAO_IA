@@ -22,9 +22,10 @@ Application GMAO/CMMS full-stack (React + FastAPI + MongoDB) pour gérer interve
 ## Last update (1 May 2026 — fork)
 
 ### P0 résolus
-- **Crash écran blanc DnD Activité Maintenance** : 3 corrections (intercepteur axios stringifie `detail`, frontend sécurise payload, backend pool fournit titre fallback).
-- **Doublons d'affectation** : un même OT/Amélioration/PM ne peut plus être affecté plusieurs fois au même technicien le même jour (vérification frontend + backend 409 lors du POST et du PUT/déplacement).
-- **GlobalErrorBoundary** : fallback visible (bandeau rouge "Recharger / Retour à l'accueil") wrappe toute l'app pour éviter tout futur écran blanc dû à un crash de rendu.
+- **Crash écran blanc DnD Activité Maintenance** : intercepteur axios stringifie `detail`, frontend sécurise payload, backend pool fournit titre fallback.
+- **Doublons d'affectation** : un même OT/Amélioration/PM ne peut plus être affecté 2× au même technicien le même jour (guard frontend + 409 backend sur POST et PUT).
+- **GlobalErrorBoundary** : fallback visible global (recharger / retour accueil).
+- **Pool visuel "déjà planifié"** : dans le panneau latéral, les OT/Amél/PM planifiés sur la période visible sont grisés, barrés, non draggables, avec badge "Planifié ×N" et tooltip détaillant technicien(s) + dates. Nouveau toggle "Masquer déjà planifiés".
 
 ## Backlog
 - P1 : Filtres rapides checkboxes "OT seulement / Amél. seulement / PM seulement / Cacher congés" sur Planning.

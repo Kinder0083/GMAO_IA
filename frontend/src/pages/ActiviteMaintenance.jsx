@@ -134,6 +134,23 @@ const ActiviteMaintenance = ({ service = 'MAINTENANCE' }) => {
     return m;
   }, [assignments]);
 
+  // Indexer les references planifiees sur la periode visible
+  // -> permet de griser les OT/Amel/PM deja planifies dans le pool
+  const plannedRefs = useMemo(() => {
+    const m = {};
+    assignments.forEach(a => {
+      if (!a.reference_id) return;
+      if (!['WORK_ORDER', 'IMPROVEMENT', 'PREVENTIVE_MAINTENANCE'].includes(a.type)) return;
+      if (!m[a.reference_id]) {
+        m[a.reference_id] = { count: 0, users: new Set(), dates: new Set() };
+      }
+      m[a.reference_id].count += 1;
+      if (a.user_name) m[a.reference_id].users.add(a.user_name);
+      if (a.date) m[a.reference_id].dates.add(a.date);
+    });
+    return m;
+  }, [assignments]);
+
   const computeDailyLoad = (userId, dateStr) => {
     const list = cellMap[`${userId}|${dateStr}`] || [];
     return list.reduce((sum, a) => sum + (a.duration_hours || 0), 0);
@@ -564,6 +581,7 @@ const ActiviteMaintenance = ({ service = 'MAINTENANCE' }) => {
         {/* Pool latéral */}
         <PoolPanel
           pool={pool}
+          plannedRefs={plannedRefs}
           onDragStart={onPoolDragStart}
           canAssign={canAssign}
           onItemClick={(item) => {
