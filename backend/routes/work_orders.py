@@ -445,12 +445,14 @@ async def update_work_order(wo_id: str, wo_update: WorkOrderUpdate, current_user
             old_assigne = existing_wo.get("assigne_a_id")
             logger.info(f"[PUSH TRIGGER UPDATE] Assignation: old={old_assigne} -> new={new_assigne}")
             if new_assigne != old_assigne:
+                etapes_count_update = len(wo.get("etapes_realisation") or existing_wo.get("etapes_realisation") or [])
                 asyncio.create_task(
                     notify_work_order_assigned(
                         db=db, work_order_id=wo.get("id", ""),
                         work_order_title=existing_wo.get("titre", ""),
                         work_order_numero=existing_wo.get("numero", ""),
-                        assigned_user_id=new_assigne
+                        assigned_user_id=new_assigne,
+                        etapes_count=etapes_count_update
                     )
                 )
                 asyncio.create_task(notify_work_order_assigned_web(db, wo, new_assigne, current_user.get("id")))

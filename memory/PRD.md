@@ -189,6 +189,36 @@ Stack : React + FastAPI + MongoDB + MQTT + ESP32 edge-computing.
   ADMIN, responsable service Maintenance, ou utilisateurs avec
   `planning.admin`/`planning.edit` peuvent créer/modifier/supprimer.
   Tests pytest **11/11 PASS**, frontend testing agent OK end-to-end.
+- 2026-05-01 : **Étapes de réalisation dans PDF + push notifs**. Le bouton
+  "Télécharger PDF" du `WorkOrderDialog` génère désormais une section
+  dédiée "Etapes de realisation (X/Y)" avec checkbox visuelle, numérotation,
+  description, info de validation (qui/quand) et lien vers checklist
+  associée le cas échéant — insérée juste avant la section "Rapport
+  detaille". Les push notifications d'assignation d'OT ajoutent un suffixe
+  `· N étape(s)` au body (POST, PUT initial, et changement d'assignee).
+- 2026-05-01 : **Onglets Activité multi-services dynamiques**. `PlanningHub`
+  charge les utilisateurs actifs et génère automatiquement un onglet
+  "Activité <Service>" pour chaque service (parmi MAINTENANCE / PRODUCTION
+  / QHSE / LOGISTIQUE / LABO) ayant au moins 1 user actif. Maintenance
+  reste prioritaire (toujours en premier, même sans user). La page
+  `ActiviteMaintenance.jsx` accepte désormais un prop `service` et est
+  réutilisable telle quelle pour tous les services.
+- 2026-05-01 : **Sync inverse CONGE ← availability**. Nouveau module
+  `routes/conge_sync.py` (`sync_availability_to_conge`,
+  `cleanup_conge_for_availability`) appelé par les routes
+  `/api/availabilities` POST/PUT/DELETE. Quand un user MAINTENANCE est
+  marqué `disponible=False` dans le Rythme, un assignment CONGE
+  `auto_generated=true` lié par `linked_availability_id` est créé
+  automatiquement (8h, gris). La suppression de l'avail supprime le CONGE
+  auto. Le passage à `disponible=True` supprime aussi le CONGE auto. Tests
+  pytest 9/9 PASS.
+- 2026-05-01 : **Vue Charge globale 30j**. Nouveau sous-onglet dans Activité
+  Maintenance : `ChargeGlobaleView.jsx` affiche un graphique Recharts à
+  barres empilées (OT / Amélioration / M.Préventive / Tâches libres /
+  Congés) sur 30 jours glissants, avec ligne de référence rouge =
+  capacité de l'équipe (nb_techs × 8h). Tooltip détaillé par jour, mise
+  en sourdine des week-ends. Bandeau stats au-dessus : période, capacité
+  totale, planifié + occupation (%), jours en surcharge.
 
 ## Backlog priorisé
 ### P1
