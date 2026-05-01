@@ -17,7 +17,8 @@ export const usePlanning = (currentDate) => {
    */
   const fetchUsers = useCallback(async () => {
     try {
-      const response = await usersAPI.getAll();
+      // getActive : exclut les utilisateurs au statut "inactif"
+      const response = await usersAPI.getActive();
       // Filtrer le compte de secours du planning
       return (response?.data || []).filter(u => u.email !== 'buenogy@gmail.com');
     } catch (error) {
