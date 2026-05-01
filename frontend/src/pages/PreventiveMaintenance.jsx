@@ -102,7 +102,6 @@ const PreventiveMaintenance = () => {
     // Retirer le param quelle que soit l'issue pour eviter les reouvertures
     searchParams.delete('open');
     setSearchParams(searchParams, { replace: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, loading, maintenance]);
 
   // Appliquer le filtre "en retard" depuis la navigation (header)
