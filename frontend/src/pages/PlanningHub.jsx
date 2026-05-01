@@ -3,6 +3,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '../components/ui/tabs'
 import { Calendar, Activity } from 'lucide-react';
 import Planning from './Planning';
 import ActiviteMaintenance from './ActiviteMaintenance';
+import ActiviteErrorBoundary from '../components/ActiviteMaintenance/ActiviteErrorBoundary';
 import { usersAPI } from '../services/api';
 
 /**
@@ -82,7 +83,9 @@ const PlanningHub = () => {
 
         {serviceTabs.map(svc => (
           <TabsContent key={svc} value={`activite_${svc}`} className="space-y-4 mt-2">
-            <ActiviteMaintenance service={svc} />
+            <ActiviteErrorBoundary>
+              <ActiviteMaintenance service={svc} />
+            </ActiviteErrorBoundary>
           </TabsContent>
         ))}
       </Tabs>

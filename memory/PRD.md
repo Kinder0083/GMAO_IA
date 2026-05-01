@@ -219,6 +219,21 @@ Stack : React + FastAPI + MongoDB + MQTT + ESP32 edge-computing.
   capacité de l'équipe (nb_techs × 8h). Tooltip détaillé par jour, mise
   en sourdine des week-ends. Bandeau stats au-dessus : période, capacité
   totale, planifié + occupation (%), jours en surcharge.
+- 2026-05-01 : **Export PDF de la Charge globale** (bouton "Exporter en
+  PDF" en haut à droite). html2canvas + jsPDF côté frontend, A4 paysage,
+  header daté + image du graphique + footer "GMAO Iris". Nom de fichier :
+  `Charge-Globale-<SERVICE>-<YYYY-MM-DD>.pdf`.
+- 2026-05-01 : **Hardening Activité Maintenance**. (1) Dans
+  `AssignmentDialog`, le clic sur un type (WORK_ORDER/IMPROVEMENT/PM…)
+  réinitialise la référence sélectionnée et la barre de recherche pour
+  éviter une référence stale du type précédent. La validation utilise
+  désormais `selectedRefItem` (référence présente dans le pool ET du bon
+  type) en plus de `selectedRefId`, supprimant le faux positif "Référence
+  requise" lorsqu'on enchaîne plusieurs types. (2) Cell rendering rendu
+  null-safe : fallback FREE_TASK sur `meta`, key fallback, defaut
+  '(Sans titre)' et 0h. (3) Nouveau composant `ActiviteErrorBoundary`
+  qui isole les erreurs au sous-arbre Activité (au lieu de l'écran
+  blanc complet) avec bouton "Recharger la page".
 
 ## Backlog priorisé
 ### P1

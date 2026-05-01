@@ -102,9 +102,12 @@ const AssignmentDialog = ({ open, onOpenChange, context, editing, techs = [], po
       toast({ title: 'Champs requis', description: 'Technicien, date et titre sont obligatoires', variant: 'destructive' });
       return;
     }
-    if (needsRef && !selectedRefId && !editing) {
-      toast({ title: 'Référence requise', description: 'Veuillez choisir un OT/Amélioration/PM dans la liste', variant: 'destructive' });
-      return;
+    if (needsRef && !editing) {
+      // En mode creation pour un type avec ref, on exige une reference valide dans le pool
+      if (!selectedRefId || !selectedRefItem) {
+        toast({ title: 'Référence requise', description: 'Veuillez choisir un OT/Amélioration/PM dans la liste', variant: 'destructive' });
+        return;
+      }
     }
     setLoading(true);
     try {
@@ -162,7 +165,12 @@ const AssignmentDialog = ({ open, onOpenChange, context, editing, techs = [], po
                     <button
                       key={opt.value}
                       type="button"
-                      onClick={() => setType(opt.value)}
+                      onClick={() => {
+                        setType(opt.value);
+                        // Reset la reference quand le type change pour eviter une selection stale
+                        setSelectedRefId(null);
+                        setRefSearch('');
+                      }}
                       data-testid={`type-${opt.value}`}
                       className={`p-2 rounded border-2 text-[10px] font-medium transition ${
                         type === opt.value ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'

@@ -1,10 +1,12 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, ReferenceLine, Cell } from 'recharts';
-import { TrendingUp, AlertTriangle, Calendar } from 'lucide-react';
+import { TrendingUp, AlertTriangle, Calendar, FileDown, Loader2 } from 'lucide-react';
 import { useToast } from '../../hooks/use-toast';
 import { maintenanceAssignmentsAPI, usersAPI } from '../../services/api';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 
 const fmtDate = (d) => {
   const yyyy = d.getFullYear();
@@ -38,6 +40,8 @@ const ChargeGlobaleView = ({ service = 'MAINTENANCE' }) => {
   const [loading, setLoading] = useState(false);
   const [techCount, setTechCount] = useState(0);
   const [data, setData] = useState([]);
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const exportRef = useRef(null);
 
   const today = useMemo(() => {
     const d = new Date();
@@ -137,8 +141,74 @@ const ChargeGlobaleView = ({ service = 'MAINTENANCE' }) => {
     );
   };
 
+  const handleExportPdf = async () => {
+    if (!exportRef.current) return;
+    setExportingPdf(true);
+    try {
+      const canvas = await html2canvas(exportRef.current, {
+        backgroundColor: '#ffffff',
+        scale: 2,
+        useCORS: true,
+        logging: false,
+      });
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('l', 'mm', 'a4'); // paysage
+      const pageW = pdf.internal.pageSize.getWidth();
+      const pageH = pdf.internal.pageSize.getHeight();
+      // Header
+      pdf.setFontSize(14);
+      pdf.setFont(undefined, 'bold');
+      pdf.text(`Charge Globale 30 jours - Equipe ${service}`, 10, 12);
+      pdf.setFontSize(9);
+      pdf.setFont(undefined, 'normal');
+      pdf.setTextColor(120);
+      pdf.text(
+        `Genere le ${new Date().toLocaleDateString('fr-FR')} a ${new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`,
+        10, 17
+      );
+      // Image
+      const imgW = pageW - 20;
+      const imgH = (canvas.height * imgW) / canvas.width;
+      const finalH = imgH > (pageH - 30) ? (pageH - 30) : imgH;
+      const finalW = (canvas.width * finalH) / canvas.height;
+      pdf.addImage(imgData, 'PNG', 10, 22, finalW, finalH);
+      // Footer
+      pdf.setFontSize(8);
+      pdf.setTextColor(150);
+      pdf.text('GMAO Iris - Activite Maintenance', 10, pageH - 5);
+
+      const dateStr = new Date().toISOString().slice(0, 10);
+      pdf.save(`Charge-Globale-${service}-${dateStr}.pdf`);
+      toast({ title: 'Export reussi', description: 'Le PDF a ete telecharge' });
+    } catch (err) {
+      console.error('Export PDF error:', err);
+      toast({ title: 'Erreur', description: "Impossible d'exporter en PDF", variant: 'destructive' });
+    } finally {
+      setExportingPdf(false);
+    }
+  };
+
   return (
     <div className="space-y-3" data-testid="charge-globale-view">
+      {/* Bouton export PDF */}
+      <div className="flex justify-end">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleExportPdf}
+          disabled={exportingPdf || loading}
+          data-testid="export-pdf-btn"
+          className="border-blue-300 text-blue-700 hover:bg-blue-50"
+        >
+          {exportingPdf ? (
+            <><Loader2 size={14} className="mr-1 animate-spin" />Génération...</>
+          ) : (
+            <><FileDown size={14} className="mr-1" />Exporter en PDF</>
+          )}
+        </Button>
+      </div>
+
+      <div ref={exportRef} className="space-y-3 bg-white p-2">
       {/* Stats résumé */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
         <Card className="bg-blue-50 border-blue-100">
@@ -225,6 +295,7 @@ const ChargeGlobaleView = ({ service = 'MAINTENANCE' }) => {
           )}
         </CardContent>
       </Card>
+      </div>
     </div>
   );
 };
