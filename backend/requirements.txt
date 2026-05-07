@@ -161,3 +161,5 @@ zeep==4.3.2
 zipp==3.23.0
 pamela==1.2.0
 weasyprint==68.1
+
+emergentintegrations==0.1.0

@@ -12,6 +12,7 @@ import {
   QRActionsAdmin
 } from '../components/Settings';
 import FormAIModelSettings from '../components/Settings/FormAIModelSettings';
+import MESAIModelSettings from '../components/Settings/MESAIModelSettings';
 import TrashSettings from '../components/Settings/TrashSettings';
 import AccidentAISettings from '../components/Settings/AccidentAISettings';
 import ImageCompressionSettings from '../components/Settings/ImageCompressionSettings';
@@ -68,6 +69,9 @@ const SpecialSettings = () => {
 
           {/* Modèle IA pour Formulaires */}
           <FormAIModelSettings />
+
+          {/* Modèle IA pour M.E.S (auto-mapping JSON) */}
+          <MESAIModelSettings />
 
           {/* Fuseau horaire et NTP */}
           <TimezoneSettings />

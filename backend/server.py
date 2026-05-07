@@ -1043,6 +1043,10 @@ from mes_routes import router as mes_router, init_mes_routes, mes_service as _me
 init_mes_routes(db, mqtt_manager)
 api_router.include_router(mes_router)
 
+# Routes IA d'auto-mapping pour M.E.S.
+from mes_ai_routes import router as mes_ai_router
+api_router.include_router(mes_ai_router)
+
 from mes_report_scheduler import init_mes_report_scheduler
 import email_service as email_service_module
 

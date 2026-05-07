@@ -3874,3 +3874,76 @@ class ResetAllResponse(BaseModel):
     success: bool
     total_deleted: int
     details: Dict[str, int]
+
+
+
+# ==================== MES AI : Auto-mapping de payload JSON ====================
+
+class MESPayloadMode(str, Enum):
+    MULTI_TOPIC = "MULTI_TOPIC"   # Mode historique : plusieurs topics, une valeur par topic
+    JSON_UNIFIED = "JSON_UNIFIED" # Nouveau : un seul topic, JSON multi-champ
+
+
+class MESFieldMapping(BaseModel):
+    """Mapping d'un champ extrait du payload JSON vers une destination dans la machine MES."""
+    key: str                      # Nom interne (ex: "cadence", "total", "etat", "temperature_celsius")
+    label: Optional[str] = None   # Libellé affiché à l'utilisateur
+    json_path: str                # Chemin dans le JSON (ex: "cadence", "sensor.temp", "metrics.oee")
+    data_type: str = "number"     # number | string | boolean | datetime
+    target: Optional[str] = None  # Destination metier : "cadence" | "total" | "state" | "shift_end" | "extra"
+    unit: Optional[str] = None    # cp/min, °C, %, etc.
+    description: Optional[str] = None
+    enabled: bool = True
+
+
+class MESPayloadAnalysisRequest(BaseModel):
+    """Requete d'analyse d'un payload JSON pour proposer un auto-mapping."""
+    payload: str                              # Le payload brut (JSON serialise)
+    machine_name: Optional[str] = None        # Pour donner du contexte au LLM
+    machine_type: Optional[str] = None        # Imp / cp/min
+    existing_mappings: Optional[List[MESFieldMapping]] = None
+
+
+class MESPayloadAnalysisResult(BaseModel):
+    success: bool
+    detected_fields: List[MESFieldMapping]
+    raw_sample: Optional[Dict[str, Any]] = None
+    model_used: Optional[str] = None
+    error: Optional[str] = None
+
+
+class MESSniffRequest(BaseModel):
+    """Demande de capture en direct sur un topic MQTT."""
+    topic: str
+    duration_seconds: int = 95   # 1m35 par defaut (cycle d'envoi typique 1 min)
+
+
+class MESSniffResult(BaseModel):
+    success: bool
+    topic: str
+    duration_seconds: int
+    messages: List[Dict[str, Any]]  # [{topic, payload, received_at}]
+    count: int
+    error: Optional[str] = None
+
+
+class MESAIConfig(BaseModel):
+    """Config admin du modele IA utilise pour l'auto-mapping MES."""
+    provider: str = "anthropic"
+    model: str = "claude-sonnet-4-5-20250929"
+    enabled: bool = True
+
+
+class MESAIConfigUpdate(BaseModel):
+    provider: Optional[str] = None
+    model: Optional[str] = None
+    enabled: Optional[bool] = None
+
+
+class MESTestMappingResult(BaseModel):
+    success: bool
+    raw_payload: Optional[str] = None
+    received_at: Optional[str] = None
+    extracted: Dict[str, Any] = {}
+    missing: List[str] = []
+    error: Optional[str] = None

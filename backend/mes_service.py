@@ -131,6 +131,11 @@ class MESService:
             "created_at": datetime.now(timezone.utc),
             "last_pulse_at": None,
             "is_running": False,
+            # Nouveau mode JSON unifie (optionnel)
+            "payload_mode": data.get("payload_mode", "MULTI_TOPIC"),
+            "unified_topic": data.get("unified_topic", "") or "",
+            "field_mappings": data.get("field_mappings", []) or [],
+            "live_values": {},
         }
         result = await self.db.mes_machines.insert_one(machine)
         machine["_id"] = result.inserted_id
@@ -146,6 +151,8 @@ class MESService:
             "mqtt_topic_state": str,
             "mqtt_topic_total": str,
             "mqtt_topic_shift_end": str,
+            "payload_mode": str,
+            "unified_topic": str,
         }
         for field, cast in fields_map.items():
             if field in data:
@@ -202,6 +209,26 @@ class MESService:
         if "sub_equipment_id" in data:
             sub = data["sub_equipment_id"]
             update["sub_equipment_id"] = ObjectId(sub) if sub else None
+
+        # Field mappings (mode JSON_UNIFIED)
+        if "field_mappings" in data and isinstance(data["field_mappings"], list):
+            cleaned = []
+            for fm in data["field_mappings"]:
+                if not isinstance(fm, dict):
+                    continue
+                if not fm.get("json_path") or not fm.get("key"):
+                    continue
+                cleaned.append({
+                    "key": str(fm.get("key")).strip()[:64],
+                    "label": fm.get("label") or fm.get("key"),
+                    "json_path": str(fm.get("json_path")),
+                    "data_type": fm.get("data_type") or "string",
+                    "target": fm.get("target") or "extra",
+                    "unit": fm.get("unit"),
+                    "description": fm.get("description") or "",
+                    "enabled": bool(fm.get("enabled", True)),
+                })
+            update["field_mappings"] = cleaned
 
         if update:
             await self.db.mes_machines.update_one({"_id": ObjectId(machine_id)}, {"$set": update})
@@ -906,22 +933,28 @@ class MESService:
     def _subscribe_machine(self, machine):
         # Liste des topics à souscrire pour cette machine
         topics = []
-        main_topic = machine.get("mqtt_topic")
-        if main_topic:
-            topics.append(main_topic)
-        # Pour le type cp/min, on souscrit aussi au topic d'état
-        if machine.get("type") == "cp/min":
-            state_topic = machine.get("mqtt_topic_state")
-            if state_topic:
-                topics.append(state_topic)
-            # Mode ESP32 optimisé : topic du compteur cumulé
-            total_topic = machine.get("mqtt_topic_total")
-            if total_topic:
-                topics.append(total_topic)
-            # Topic de fin de poste (rapport 3×8 automatique)
-            shift_topic = machine.get("mqtt_topic_shift_end")
-            if shift_topic:
-                topics.append(shift_topic)
+        # Mode JSON_UNIFIED : un seul topic + field_mappings
+        if machine.get("payload_mode") == "JSON_UNIFIED":
+            unified = machine.get("unified_topic")
+            if unified:
+                topics.append(unified)
+        else:
+            main_topic = machine.get("mqtt_topic")
+            if main_topic:
+                topics.append(main_topic)
+            # Pour le type cp/min, on souscrit aussi au topic d'état
+            if machine.get("type") == "cp/min":
+                state_topic = machine.get("mqtt_topic_state")
+                if state_topic:
+                    topics.append(state_topic)
+                # Mode ESP32 optimisé : topic du compteur cumulé
+                total_topic = machine.get("mqtt_topic_total")
+                if total_topic:
+                    topics.append(total_topic)
+                # Topic de fin de poste (rapport 3×8 automatique)
+                shift_topic = machine.get("mqtt_topic_shift_end")
+                if shift_topic:
+                    topics.append(shift_topic)
 
         if not topics or not self.mqtt_manager:
             return
@@ -995,6 +1028,16 @@ class MESService:
         try:
             db_sync = mongo_client[db_name]
 
+            # 0) Topic JSON unifie (mode JSON_UNIFIED) — prioritaire
+            machine_unified = db_sync.mes_machines.find_one({
+                "unified_topic": topic,
+                "payload_mode": "JSON_UNIFIED",
+                "active": True,
+            })
+            if machine_unified:
+                self._record_unified_sync(db_sync, machine_unified, payload)
+                return
+
             # 1) Topic principal (cadence ou impulsion)
             machine = db_sync.mes_machines.find_one({"mqtt_topic": topic, "active": True})
             if machine:
@@ -1032,6 +1075,91 @@ class MESService:
             logger.warning(f"[MES] ⚠️ Aucune machine trouvée pour le topic: {topic}")
         finally:
             mongo_client.close()
+
+    def _record_unified_sync(self, db_sync, machine, payload: str):
+        """Mode JSON_UNIFIED : un seul topic, payload JSON multi-champ.
+
+        On parse le JSON, on applique les field_mappings, on stocke les valeurs
+        extraites dans live_values + on route les valeurs metier critiques (cadence,
+        total, state, shift_end) vers les handlers existants pour rester compatible
+        avec les rapports / TRS / cadence_history etc.
+        """
+        import json as _json
+        try:
+            data = _json.loads(payload)
+        except (ValueError, TypeError) as e:
+            logger.warning(f"[MES] [UNIFIED] Payload non JSON pour '{machine.get('unified_topic')}': {e}")
+            return
+        if not isinstance(data, dict):
+            logger.warning(f"[MES] [UNIFIED] Payload JSON non-objet: {type(data)}")
+            return
+
+        from mes_ai_service import extract_value_from_path
+
+        mappings = machine.get("field_mappings", []) or []
+        live_values = {}
+        cadence_value = None
+        total_value = None
+        state_value = None
+        shift_end_payload = None
+        for fm in mappings:
+            if not fm.get("enabled", True):
+                continue
+            path = fm.get("json_path")
+            key = fm.get("key") or path
+            if not path:
+                continue
+            val = extract_value_from_path(data, path)
+            if val is None:
+                continue
+            live_values[key] = {"value": val, "unit": fm.get("unit")}
+            target = fm.get("target")
+            if target == "cadence":
+                cadence_value = val
+            elif target == "total":
+                total_value = val
+            elif target == "state":
+                state_value = val
+            elif target == "shift_end":
+                shift_end_payload = val
+
+        # Persiste les live_values sur la machine
+        db_sync.mes_machines.update_one(
+            {"_id": machine["_id"]},
+            {"$set": {
+                "live_values": live_values,
+                "live_values_at": datetime.now(timezone.utc),
+                "last_pulse_at": datetime.now(timezone.utc),
+            }},
+        )
+
+        # Routage vers les handlers existants pour conserver les rapports / TRS
+        if cadence_value is not None:
+            try:
+                self._record_direct_cadence_sync(db_sync, machine, str(cadence_value))
+            except Exception as e:
+                logger.warning(f"[MES] [UNIFIED] Routage cadence echoue: {e}")
+        if total_value is not None:
+            # Le handler attend un compteur cumule sous forme de payload texte
+            try:
+                self._record_total_sync(db_sync, machine, str(int(total_value) if isinstance(total_value, (int, float)) else total_value))
+            except Exception as e:
+                logger.warning(f"[MES] [UNIFIED] Routage total echoue: {e}")
+        if state_value is not None:
+            try:
+                self._record_state_sync(db_sync, machine, str(state_value))
+            except Exception as e:
+                logger.warning(f"[MES] [UNIFIED] Routage etat echoue: {e}")
+        if shift_end_payload is not None:
+            try:
+                # On serialise en JSON pour rester compatible avec _record_shift_end_sync
+                if isinstance(shift_end_payload, (dict, list)):
+                    self._record_shift_end_sync(db_sync, machine, _json.dumps(shift_end_payload))
+                else:
+                    self._record_shift_end_sync(db_sync, machine, str(shift_end_payload))
+            except Exception as e:
+                logger.warning(f"[MES] [UNIFIED] Routage shift_end echoue: {e}")
+
 
     def _record_pulse_machine_sync(self, db_sync, machine, payload: str):
         """Traite une impulsion (Imp) reçue. Compatible avec l'ancien format."""

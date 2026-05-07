@@ -8,12 +8,15 @@ import {
   Activity, Plus, Settings, Trash2, Play, Square, Clock, Target, Gauge,
   AlertTriangle, Wifi, WifiOff, Loader2, RefreshCw, Zap, Bell,
   BarChart3, TrendingUp, Timer, Package, ArrowLeft, CheckCircle2, XCircle,
-  ShieldAlert, CircleSlash, ListPlus, Calendar, Mail, X
+  ShieldAlert, CircleSlash, ListPlus, Calendar, Mail, X, Wand2, FileJson,
+  TestTube
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine
 } from 'recharts';
+import PayloadDetectionDialog from '../components/MES/PayloadDetectionDialog';
+import api from '../services/api';
 
 const API = BACKEND_URL;
 const getHeaders = () => ({ Authorization: `Bearer ${localStorage.getItem('token')}` });
@@ -1100,6 +1103,9 @@ const MachineSettingsModal = ({ machine, onClose }) => {
     type: machine.type || 'Imp',
     equipment_id: machine.equipment_id || '',
     sub_equipment_id: machine.sub_equipment_id || '',
+    payload_mode: machine.payload_mode || 'MULTI_TOPIC',
+    unified_topic: machine.unified_topic || '',
+    field_mappings: Array.isArray(machine.field_mappings) ? machine.field_mappings : [],
     alert_stopped_minutes: (src.alerts || src)?.alert_stopped_minutes ?? src.alerts?.stopped_minutes ?? 5,
     alert_under_cadence: (src.alerts || src)?.alert_under_cadence ?? src.alerts?.under_cadence ?? 0,
     alert_over_cadence: (src.alerts || src)?.alert_over_cadence ?? src.alerts?.over_cadence ?? 0,
@@ -1125,7 +1131,27 @@ const MachineSettingsModal = ({ machine, onClose }) => {
   const [equipments, setEquipments] = useState([]);
   const [childEquipments, setChildEquipments] = useState([]);
   const [loadingChildren, setLoadingChildren] = useState(false);
+  const [detectionOpen, setDetectionOpen] = useState(false);
+  const [testMappingResult, setTestMappingResult] = useState(null);
+  const [testingMapping, setTestingMapping] = useState(false);
   const { toast } = useToast();
+
+  const handleTestMapping = async () => {
+    setTestingMapping(true);
+    setTestMappingResult(null);
+    try {
+      const { data } = await api.post(`/mes/ai/test-mapping/${machine.id || machine._id}`);
+      setTestMappingResult(data);
+      if (!data.success) {
+        toast({ title: 'Test mapping', description: data.error || 'Echec', variant: 'destructive' });
+      }
+    } catch (e) {
+      const msg = typeof e.response?.data?.detail === 'string' ? e.response.data.detail : 'Erreur réseau';
+      toast({ title: 'Erreur', description: msg, variant: 'destructive' });
+    } finally {
+      setTestingMapping(false);
+    }
+  };
 
   useEffect(() => {
     axios.get(`${API}/api/mes/product-references`, { headers: getHeaders() })
@@ -1359,6 +1385,112 @@ const MachineSettingsModal = ({ machine, onClose }) => {
           {/* Capteur */}
           <div className="space-y-3">
             <h4 className="text-sm font-semibold text-gray-700 border-b pb-1">Capteur</h4>
+
+            {/* Mode payload */}
+            <div className="bg-gradient-to-br from-purple-50 to-indigo-50 border border-purple-200 rounded-lg p-3 space-y-2">
+              <label className="text-xs font-semibold text-purple-800 flex items-center gap-1">
+                <Wand2 size={12} /> Mode de réception MQTT
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <button type="button" disabled={readOnly}
+                  onClick={() => !readOnly && setForm(prev => ({ ...prev, payload_mode: 'MULTI_TOPIC' }))}
+                  className={`text-left p-2 rounded border-2 transition ${form.payload_mode === 'MULTI_TOPIC' ? 'border-indigo-500 bg-white' : 'border-gray-200 bg-white/60'} ${readOnly ? 'opacity-60 cursor-not-allowed' : 'hover:border-gray-300'}`}
+                  data-testid="settings-mode-multi">
+                  <div className="text-xs font-bold text-gray-800">Mode classique</div>
+                  <p className="text-[10px] text-gray-500 leading-tight">Plusieurs topics</p>
+                </button>
+                <button type="button" disabled={readOnly}
+                  onClick={() => !readOnly && setForm(prev => ({ ...prev, payload_mode: 'JSON_UNIFIED' }))}
+                  className={`text-left p-2 rounded border-2 transition ${form.payload_mode === 'JSON_UNIFIED' ? 'border-purple-500 bg-white' : 'border-gray-200 bg-white/60'} ${readOnly ? 'opacity-60 cursor-not-allowed' : 'hover:border-gray-300'}`}
+                  data-testid="settings-mode-unified">
+                  <div className="text-xs font-bold text-purple-800 flex items-center gap-1"><Wand2 size={11} /> JSON unifié + IA</div>
+                  <p className="text-[10px] text-gray-500 leading-tight">1 topic JSON multi-champs</p>
+                </button>
+              </div>
+            </div>
+
+            {form.payload_mode === 'JSON_UNIFIED' ? (
+              <div className="space-y-2">
+                <SettingsField label="Topic MQTT unifié" field="unified_topic" type="text"
+                  value={form.unified_topic} onChange={handleChange('unified_topic', 'text')} readOnly={readOnly} />
+                {!readOnly && (
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => setDetectionOpen(true)} disabled={!form.unified_topic}
+                      className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded text-xs font-medium hover:opacity-90 disabled:opacity-40"
+                      data-testid="settings-detect-btn">
+                      <Wand2 size={12} /> {form.field_mappings?.length ? 'Re-détecter' : 'Détecter'}
+                    </button>
+                    <button type="button" onClick={handleTestMapping} disabled={testingMapping || !form.field_mappings?.length}
+                      className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-emerald-600 text-white rounded text-xs font-medium hover:bg-emerald-700 disabled:opacity-40"
+                      data-testid="settings-test-mapping-btn">
+                      {testingMapping
+                        ? <><Loader2 size={12} className="animate-spin" /> Test…</>
+                        : <><TestTube size={12} /> Tester le mapping</>}
+                    </button>
+                  </div>
+                )}
+
+                {/* Mapping configuré */}
+                {form.field_mappings?.length > 0 && (
+                  <div className="bg-white border border-purple-200 rounded p-2 space-y-1">
+                    <p className="text-xs font-semibold text-purple-800 flex items-center gap-1">
+                      <FileJson size={12} /> {form.field_mappings.length} champ(s) mappé(s)
+                    </p>
+                    <div className="max-h-40 overflow-y-auto space-y-0.5">
+                      {form.field_mappings.map((fm, i) => (
+                        <div key={i} className="flex items-center gap-2 text-[10px]">
+                          <code className="bg-purple-50 text-purple-700 px-1 rounded font-mono">{fm.json_path}</code>
+                          <span className="text-gray-400">→</span>
+                          <span className="font-semibold text-gray-700 truncate">{fm.label || fm.key}</span>
+                          <span className="ml-auto text-[9px] bg-gray-100 text-gray-600 px-1 rounded">{fm.target}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Resultat du test */}
+                {testMappingResult && (
+                  <div className={`rounded p-2 border text-[11px] ${testMappingResult.success ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'}`} data-testid="test-mapping-result">
+                    <div className="font-semibold mb-1">
+                      {testMappingResult.success ? '✅ Mapping testé sur le dernier message' : '❌ Échec'}
+                    </div>
+                    {testMappingResult.received_at && (
+                      <div className="text-[10px] text-gray-500">Reçu : {testMappingResult.received_at}</div>
+                    )}
+                    {testMappingResult.error && (
+                      <div className="text-red-700 mt-1">{testMappingResult.error}</div>
+                    )}
+                    {testMappingResult.success && (
+                      <div className="grid grid-cols-2 gap-2 mt-1">
+                        <div>
+                          <div className="text-[10px] font-semibold text-gray-600 mb-0.5">Payload brut</div>
+                          <pre className="bg-gray-900 text-emerald-300 p-1.5 rounded text-[9px] max-h-32 overflow-auto">{testMappingResult.raw_payload}</pre>
+                        </div>
+                        <div>
+                          <div className="text-[10px] font-semibold text-gray-600 mb-0.5">Valeurs extraites</div>
+                          <div className="bg-white border rounded p-1 max-h-32 overflow-y-auto space-y-0.5">
+                            {Object.entries(testMappingResult.extracted || {}).map(([k, v]) => (
+                              <div key={k} className="flex justify-between gap-2">
+                                <span className="font-mono text-[9px] text-purple-700">{k}</span>
+                                <span className="font-semibold text-[10px] truncate">{String(v)}</span>
+                              </div>
+                            ))}
+                            {(testMappingResult.missing || []).map(k => (
+                              <div key={k} className="flex justify-between gap-2 text-red-600">
+                                <span className="font-mono text-[9px]">{k}</span>
+                                <span className="text-[10px]">manquant</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : (
+            <>
             <div className="grid grid-cols-2 gap-3">
               <SettingsField label="Topic MQTT" field="mqtt_topic" type="text"
                 value={form.mqtt_topic} onChange={handleChange('mqtt_topic', 'text')} readOnly={readOnly} />
@@ -1389,6 +1521,8 @@ const MachineSettingsModal = ({ machine, onClose }) => {
                   <p className="text-xs text-blue-600 -mt-2 ml-1">📊 Rapports automatiques par poste (matin/aprem/nuit).</p>
                 )}
               </>
+            )}
+            </>
             )}
             <SettingsField label="Adresse IP capteur" field="sensor_ip" type="text"
               value={form.sensor_ip} onChange={handleChange('sensor_ip', 'text')} readOnly={readOnly} />
@@ -1592,6 +1726,18 @@ const MachineSettingsModal = ({ machine, onClose }) => {
           </div>
         </div>
       )}
+      <PayloadDetectionDialog
+        open={detectionOpen}
+        onOpenChange={setDetectionOpen}
+        topic={form.unified_topic}
+        machineName={machine?.equipment_name || ''}
+        machineType={form.type}
+        existingMappings={form.field_mappings}
+        onApply={(selectedFields) => {
+          setForm(prev => ({ ...prev, field_mappings: selectedFields }));
+          toast({ title: 'Mapping appliqué', description: `${selectedFields.length} champ(s) configuré(s) — pensez à enregistrer` });
+        }}
+      />
     </div>
   );
 };
@@ -1611,8 +1757,12 @@ const CreateMachineModal = ({ onClose, onCreated }) => {
     alert_under_cadence: 0, alert_over_cadence: 0, alert_daily_target: 0,
     schedule_is_24h: true, schedule_start_hour: 6, schedule_end_hour: 22,
     schedule_production_days: [0, 1, 2, 3, 4],
+    payload_mode: 'MULTI_TOPIC',
+    unified_topic: '',
+    field_mappings: [],
   });
   const [saving, setSaving] = useState(false);
+  const [detectionOpen, setDetectionOpen] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -1647,20 +1797,44 @@ const CreateMachineModal = ({ onClose, onCreated }) => {
   };
 
   const save = async () => {
-    if (!form.equipment_id || !form.mqtt_topic) {
-      toast({ title: 'Veuillez remplir les champs obligatoires', variant: 'destructive' });
+    if (!form.equipment_id) {
+      toast({ title: 'Équipement parent obligatoire', variant: 'destructive' });
       return;
     }
-    if (form.type === 'cp/min' && !form.mqtt_topic_state) {
-      toast({ title: 'Le topic d\'état est obligatoire pour cp/min', variant: 'destructive' });
-      return;
+    if (form.payload_mode === 'JSON_UNIFIED') {
+      if (!form.unified_topic) {
+        toast({ title: 'Topic unifié obligatoire', description: 'Renseignez le topic MQTT qui reçoit le JSON', variant: 'destructive' });
+        return;
+      }
+      if (!form.field_mappings || form.field_mappings.length === 0) {
+        toast({ title: 'Aucun mapping configuré', description: 'Cliquez sur 🪄 Détecter automatiquement pour configurer les champs', variant: 'destructive' });
+        return;
+      }
+    } else {
+      if (!form.mqtt_topic) {
+        toast({ title: 'Topic MQTT obligatoire', variant: 'destructive' });
+        return;
+      }
+      if (form.type === 'cp/min' && !form.mqtt_topic_state) {
+        toast({ title: 'Le topic d\'état est obligatoire pour cp/min', variant: 'destructive' });
+        return;
+      }
     }
     setSaving(true);
     try {
-      await axios.post(`${API}/api/mes/machines`, form, { headers: getHeaders() });
+      // En mode JSON_UNIFIED on envoie aussi mqtt_topic = unified_topic pour compat. routage
+      const body = { ...form };
+      if (form.payload_mode === 'JSON_UNIFIED') {
+        body.mqtt_topic = form.unified_topic;
+        body.type = 'cp/min'; // mode JSON unifié = cadence directe
+      }
+      await axios.post(`${API}/api/mes/machines`, body, { headers: getHeaders() });
       toast({ title: 'Machine ajoutee' });
       onCreated();
-    } catch (e) { toast({ title: 'Erreur', description: e.response?.data?.detail, variant: 'destructive' }); }
+    } catch (e) {
+      const msg = typeof e.response?.data?.detail === 'string' ? e.response.data.detail : 'Erreur';
+      toast({ title: 'Erreur', description: msg, variant: 'destructive' });
+    }
     setSaving(false);
   };
 
@@ -1698,6 +1872,66 @@ const CreateMachineModal = ({ onClose, onCreated }) => {
               </select>
             </div>
           </div>
+
+          {/* Mode payload */}
+          <div className="bg-gradient-to-br from-purple-50 to-indigo-50 border border-purple-200 rounded-lg p-3 space-y-2">
+            <label className="text-xs font-semibold text-purple-800 flex items-center gap-1">
+              <Wand2 size={12} /> Mode de réception MQTT
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => setForm({ ...form, payload_mode: 'MULTI_TOPIC' })}
+                className={`text-left p-2 rounded border-2 transition ${form.payload_mode === 'MULTI_TOPIC' ? 'border-indigo-500 bg-white shadow-sm' : 'border-gray-200 bg-white/60 hover:border-gray-300'}`}
+                data-testid="mode-multi-topic">
+                <div className="text-xs font-bold text-gray-800">Mode classique</div>
+                <p className="text-[10px] text-gray-500 leading-tight">Plusieurs topics, une valeur par topic (Imp / cp/min / total / état)</p>
+              </button>
+              <button type="button" onClick={() => setForm({ ...form, payload_mode: 'JSON_UNIFIED' })}
+                className={`text-left p-2 rounded border-2 transition ${form.payload_mode === 'JSON_UNIFIED' ? 'border-purple-500 bg-white shadow-sm' : 'border-gray-200 bg-white/60 hover:border-gray-300'}`}
+                data-testid="mode-json-unified">
+                <div className="text-xs font-bold text-purple-800 flex items-center gap-1">
+                  <Wand2 size={11} /> JSON unifié + IA
+                </div>
+                <p className="text-[10px] text-gray-500 leading-tight">Un seul topic, JSON multi-champs, mapping détecté par l'IA</p>
+              </button>
+            </div>
+          </div>
+
+          {form.payload_mode === 'JSON_UNIFIED' ? (
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-medium text-gray-600">Topic MQTT unifié *</label>
+                <input type="text" value={form.unified_topic} placeholder="atelier/machine1/data"
+                  onChange={e => setForm({ ...form, unified_topic: e.target.value })}
+                  className="w-full mt-1 px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-purple-500"
+                  data-testid="mes-input-unified-topic" />
+                <p className="text-[10px] text-gray-500 mt-1">Topic recevant un JSON multi-champs (cadence, total, état, etc.)</p>
+              </div>
+              <button type="button" onClick={() => setDetectionOpen(true)}
+                disabled={!form.unified_topic && !form.field_mappings?.length}
+                className="w-full flex items-center justify-center gap-2 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-medium"
+                data-testid="mes-detect-btn">
+                <Wand2 size={14} /> Détecter automatiquement les champs
+              </button>
+              {form.field_mappings?.length > 0 && (
+                <div className="bg-white border border-purple-200 rounded p-2 space-y-1">
+                  <p className="text-xs font-semibold text-purple-800 flex items-center gap-1">
+                    <CheckCircle2 size={12} /> {form.field_mappings.length} mapping(s) configuré(s)
+                  </p>
+                  <div className="max-h-32 overflow-y-auto space-y-0.5">
+                    {form.field_mappings.map((fm, i) => (
+                      <div key={i} className="flex items-center gap-2 text-[10px]">
+                        <code className="bg-purple-50 text-purple-700 px-1 rounded font-mono">{fm.json_path}</code>
+                        <span className="text-gray-400">→</span>
+                        <span className="font-semibold text-gray-700">{fm.label || fm.key}</span>
+                        <span className="ml-auto text-[9px] bg-gray-100 text-gray-600 px-1 rounded">{fm.target}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+          <>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-medium text-gray-600">Topic MQTT *</label>
@@ -1749,6 +1983,8 @@ const CreateMachineModal = ({ onClose, onCreated }) => {
               </div>
             </>
           )}
+          </>
+          )}
           <div>
             <label className="text-xs font-medium text-gray-600">IP capteur</label>
             <input type="text" value={form.sensor_ip} placeholder="192.168.1.100"
@@ -1781,6 +2017,18 @@ const CreateMachineModal = ({ onClose, onCreated }) => {
           </button>
         </div>
       </div>
+      <PayloadDetectionDialog
+        open={detectionOpen}
+        onOpenChange={setDetectionOpen}
+        topic={form.unified_topic}
+        machineName={equipments.find(eq => eq.id === form.equipment_id)?.nom || ''}
+        machineType={form.type}
+        existingMappings={form.field_mappings}
+        onApply={(selectedFields) => {
+          setForm(prev => ({ ...prev, field_mappings: selectedFields }));
+          toast({ title: 'Mapping appliqué', description: `${selectedFields.length} champ(s) configuré(s)` });
+        }}
+      />
     </div>
   );
 };
