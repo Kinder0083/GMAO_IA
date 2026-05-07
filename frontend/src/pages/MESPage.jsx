@@ -16,6 +16,7 @@ import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine
 } from 'recharts';
 import PayloadDetectionDialog from '../components/MES/PayloadDetectionDialog';
+import DynamicLiveTiles from '../components/MES/DynamicLiveTiles';
 import api from '../services/api';
 
 const API = BACKEND_URL;
@@ -812,6 +813,8 @@ const MachineDashboard = ({ machineId, onBack }) => {
 
   useEffect(() => { loadMachine(); loadAlerts(); loadTrsHistory(); }, [loadMachine, loadAlerts, loadTrsHistory]);
   useEffect(() => { loadMetrics(); const i = setInterval(loadMetrics, 5000); return () => clearInterval(i); }, [loadMetrics]);
+  // Refetch machine periodically pour rafraichir live_values (mode JSON_UNIFIED)
+  useEffect(() => { const i = setInterval(loadMachine, 8000); return () => clearInterval(i); }, [loadMachine]);
   useEffect(() => { loadHistory(); const i = setInterval(loadHistory, 60000); return () => clearInterval(i); }, [loadHistory]);
 
   const simulatePulse = async () => {
@@ -1002,6 +1005,9 @@ const MachineDashboard = ({ machineId, onBack }) => {
         <MetricCard icon={TrendingUp} label="TRS" value={`${metrics?.trs ?? 0}%`} color="purple" />
         <MetricCard icon={Target} label="Cadence theo." value={`${metrics?.theoretical_cadence ?? 0}`} color="gray" />
       </div>
+
+      {/* Tuiles dynamiques (mode JSON_UNIFIED) */}
+      <DynamicLiveTiles machine={machine} />
 
       {/* TRS Advanced Breakdown */}
       <TRSBreakdown metrics={metrics} />
