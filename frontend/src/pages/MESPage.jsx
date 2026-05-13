@@ -22,6 +22,14 @@ import api from '../services/api';
 const API = BACKEND_URL;
 const getHeaders = () => ({ Authorization: `Bearer ${localStorage.getItem('token')}` });
 
+// Convertir une heure decimale (ex: 9.5) en string "HH:MM"
+const toTime = (h) => {
+  if (typeof h !== 'number' || isNaN(h)) return '00:00';
+  const hh = Math.floor(h);
+  const mm = Math.round((h - hh) * 60);
+  return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+};
+
 // Static color map for Tailwind (avoids dynamic class purging)
 const COLORS = {
   indigo: { bg: 'bg-indigo-50', border: 'border-indigo-100', icon: 'text-indigo-500', value: 'text-indigo-700' },
@@ -1121,6 +1129,7 @@ const MachineSettingsModal = ({ machine, onClose }) => {
     schedule_start_hour: (src.production_schedule || src)?.schedule_start_hour ?? (src.production_schedule || schedule)?.start_hour ?? 6,
     schedule_end_hour: (src.production_schedule || src)?.schedule_end_hour ?? (src.production_schedule || schedule)?.end_hour ?? 22,
     schedule_production_days: (src.production_schedule || schedule)?.production_days ?? [0, 1, 2, 3, 4],
+    schedule_planned_breaks: (src.production_schedule || schedule)?.planned_breaks ?? [],
     email_enabled: (src.email_notifications || emailNotif)?.enabled ?? false,
     email_recipients: (src.email_notifications || emailNotif)?.recipients ?? [],
     email_alert_types: (src.email_notifications || emailNotif)?.alert_types ?? [],
@@ -1576,6 +1585,115 @@ const MachineSettingsModal = ({ machine, onClose }) => {
                   </button>
                 ))}
               </div>
+            </div>
+
+            {/* Pauses planifiees (legal breaks) */}
+            <div className="mt-2 bg-amber-50/60 border border-amber-200 rounded-lg p-3 space-y-2" data-testid="planned-breaks-section">
+              <div className="flex items-center justify-between">
+                <h5 className="text-xs font-bold text-amber-900 flex items-center gap-1">
+                  <Clock size={12} /> Pauses planifiées (non comptées en arrêt)
+                </h5>
+                {!readOnly && (
+                  <button type="button"
+                    onClick={() => setForm(prev => ({
+                      ...prev,
+                      schedule_planned_breaks: [
+                        ...(prev.schedule_planned_breaks || []),
+                        { name: 'Nouvelle pause', start_hour: '12:00', end_hour: '13:00', days: [...(prev.schedule_production_days || [0,1,2,3,4])] }
+                      ]
+                    }))}
+                    className="text-[10px] px-2 py-0.5 bg-amber-600 text-white rounded hover:bg-amber-700 flex items-center gap-1"
+                    data-testid="add-planned-break-btn">
+                    <Plus size={10} /> Ajouter
+                  </button>
+                )}
+              </div>
+              <p className="text-[10px] text-amber-800/80 leading-tight">
+                Pauses légales (déjeuner, casse-croûte, …). Elles ne pénalisent pas la disponibilité machine ni le TRS.
+              </p>
+
+              {(form.schedule_planned_breaks || []).length === 0 && (
+                <p className="text-[10px] text-gray-500 italic">Aucune pause planifiée.</p>
+              )}
+
+              {(form.schedule_planned_breaks || []).map((br, idx) => (
+                <div key={idx} className="bg-white border border-amber-200 rounded p-2 space-y-1.5" data-testid={`planned-break-${idx}`}>
+                  <div className="flex items-center gap-2">
+                    <input type="text" value={br.name || ''}
+                      placeholder="Pause déjeuner"
+                      disabled={readOnly}
+                      onChange={e => setForm(prev => ({
+                        ...prev,
+                        schedule_planned_breaks: prev.schedule_planned_breaks.map((b, i) => i === idx ? { ...b, name: e.target.value } : b)
+                      }))}
+                      className="flex-1 text-xs px-2 py-1 border rounded focus:ring-1 focus:ring-amber-500 disabled:bg-gray-50"
+                      data-testid={`break-name-${idx}`}
+                    />
+                    {!readOnly && (
+                      <button type="button"
+                        onClick={() => setForm(prev => ({
+                          ...prev,
+                          schedule_planned_breaks: prev.schedule_planned_breaks.filter((_, i) => i !== idx)
+                        }))}
+                        className="text-red-500 hover:text-red-700 p-1"
+                        title="Supprimer cette pause"
+                        data-testid={`break-delete-${idx}`}>
+                        <Trash2 size={12} />
+                      </button>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[9px] text-gray-600 block">Début</label>
+                      <input type="time" value={typeof br.start_hour === 'number' ? toTime(br.start_hour) : (br.start_hour || '12:00')}
+                        disabled={readOnly}
+                        onChange={e => setForm(prev => ({
+                          ...prev,
+                          schedule_planned_breaks: prev.schedule_planned_breaks.map((b, i) => i === idx ? { ...b, start_hour: e.target.value } : b)
+                        }))}
+                        className="w-full text-xs px-2 py-1 border rounded focus:ring-1 focus:ring-amber-500 disabled:bg-gray-50"
+                        data-testid={`break-start-${idx}`}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[9px] text-gray-600 block">Fin</label>
+                      <input type="time" value={typeof br.end_hour === 'number' ? toTime(br.end_hour) : (br.end_hour || '13:00')}
+                        disabled={readOnly}
+                        onChange={e => setForm(prev => ({
+                          ...prev,
+                          schedule_planned_breaks: prev.schedule_planned_breaks.map((b, i) => i === idx ? { ...b, end_hour: e.target.value } : b)
+                        }))}
+                        className="w-full text-xs px-2 py-1 border rounded focus:ring-1 focus:ring-amber-500 disabled:bg-gray-50"
+                        data-testid={`break-end-${idx}`}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[9px] text-gray-600 block mb-0.5">Jours concernés</label>
+                    <div className="flex flex-wrap gap-1">
+                      {['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'].map((day, dIdx) => {
+                        const selected = (br.days || []).includes(dIdx);
+                        return (
+                          <button key={dIdx} type="button" disabled={readOnly}
+                            onClick={() => setForm(prev => ({
+                              ...prev,
+                              schedule_planned_breaks: prev.schedule_planned_breaks.map((b, i) => i === idx ? {
+                                ...b,
+                                days: selected ? (b.days || []).filter(d => d !== dIdx) : [...(b.days || []), dIdx].sort()
+                              } : b)
+                            }))}
+                            className={`px-1.5 py-0.5 text-[10px] rounded border transition ${
+                              selected ? 'bg-amber-600 text-white border-amber-600' : 'bg-white text-gray-500 border-gray-200 hover:border-amber-400'
+                            } ${readOnly ? 'opacity-70 cursor-not-allowed' : ''}`}
+                            data-testid={`break-${idx}-day-${dIdx}`}>
+                            {day}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
 

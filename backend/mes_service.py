@@ -77,6 +77,60 @@ class MESService:
 
     # ==================== MACHINES CRUD ====================
 
+    @staticmethod
+    def _break_seconds_in_window(schedule: dict, start_dt, end_dt) -> int:
+        """Calculer le nombre total de secondes de pauses planifiees qui tombent
+        dans la fenetre [start_dt, end_dt]. Tient compte des jours d'application."""
+        breaks = (schedule or {}).get("planned_breaks") or []
+        if not breaks or start_dt >= end_dt:
+            return 0
+        total = 0
+        # Iterer jour par jour
+        cursor_day = start_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_day = end_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+        while cursor_day <= end_day:
+            wd = cursor_day.weekday()  # 0=lundi
+            for b in breaks:
+                days = b.get("days") or [0, 1, 2, 3, 4, 5, 6]
+                if wd not in days:
+                    continue
+                sh = float(b.get("start_hour") or 0)
+                eh = float(b.get("end_hour") or 0)
+                if eh <= sh:
+                    continue
+                b_start = cursor_day.replace(
+                    hour=int(sh), minute=int((sh - int(sh)) * 60)
+                )
+                b_end = cursor_day.replace(
+                    hour=int(eh) if eh < 24 else 23,
+                    minute=int((eh - int(eh)) * 60) if eh < 24 else 59,
+                )
+                # Intersection avec [start_dt, end_dt]
+                inter_start = max(b_start, start_dt)
+                inter_end = min(b_end, end_dt)
+                if inter_end > inter_start:
+                    total += int((inter_end - inter_start).total_seconds())
+            cursor_day += timedelta(days=1)
+        return total
+
+    @staticmethod
+    def _is_in_planned_break(dt, schedule: dict) -> bool:
+        """True si `dt` tombe dans une pause planifiee."""
+        breaks = (schedule or {}).get("planned_breaks") or []
+        if not breaks:
+            return False
+        wd = dt.weekday()
+        hour_dec = dt.hour + dt.minute / 60 + dt.second / 3600
+        for b in breaks:
+            days = b.get("days") or [0, 1, 2, 3, 4, 5, 6]
+            if wd not in days:
+                continue
+            sh = float(b.get("start_hour") or 0)
+            eh = float(b.get("end_hour") or 0)
+            if sh <= hour_dec < eh:
+                return True
+        return False
+
     async def create_machine(self, data: dict) -> dict:
         # Type: "Imp" (impulsion 1/0) ou "cp/min" (cadence directe)
         machine_type = data.get("type", "Imp")
@@ -113,6 +167,7 @@ class MESService:
                 "start_hour": int(data.get("schedule_start_hour", 6)),
                 "end_hour": int(data.get("schedule_end_hour", 22)),
                 "production_days": data.get("schedule_production_days", [0, 1, 2, 3, 4]),  # Mon-Fri
+                "planned_breaks": data.get("schedule_planned_breaks", []) or [],
             },
             "alerts": {
                 "stopped_minutes": int(data.get("alert_stopped_minutes", 5)),
@@ -189,6 +244,36 @@ class MESService:
                 update[path] = cast(data[key])
         if "schedule_production_days" in data:
             update["production_schedule.production_days"] = [int(d) for d in data["schedule_production_days"]]
+
+        # Pauses planifiees (legal breaks)
+        if "schedule_planned_breaks" in data and isinstance(data["schedule_planned_breaks"], list):
+            cleaned_breaks = []
+            for b in data["schedule_planned_breaks"]:
+                if not isinstance(b, dict):
+                    continue
+                start_h = b.get("start_hour")
+                end_h = b.get("end_hour")
+                # Tolerer "HH:MM" -> float
+                if isinstance(start_h, str) and ":" in start_h:
+                    hh, mm = start_h.split(":")
+                    start_h = float(hh) + float(mm) / 60
+                if isinstance(end_h, str) and ":" in end_h:
+                    hh, mm = end_h.split(":")
+                    end_h = float(hh) + float(mm) / 60
+                try:
+                    start_h = float(start_h)
+                    end_h = float(end_h)
+                except (TypeError, ValueError):
+                    continue
+                if end_h <= start_h:
+                    continue
+                cleaned_breaks.append({
+                    "name": str(b.get("name") or "Pause"),
+                    "start_hour": round(start_h, 4),
+                    "end_hour": round(end_h, 4),
+                    "days": [int(d) for d in (b.get("days") or []) if str(d).lstrip("-").isdigit()],
+                })
+            update["production_schedule.planned_breaks"] = cleaned_breaks
 
         # Email notification fields
         email_fields = {
@@ -482,6 +567,20 @@ class MESService:
             else:
                 planned_seconds = (now - prod_start).total_seconds()
 
+        # Soustraire les pauses planifiees (temps de pause legal, non comptabilise
+        # en indisponibilite). La fenetre exacte est celle de la production planifiee.
+        if planned_seconds > 0:
+            if is_24h:
+                window_start = today_start
+                window_end = now
+            else:
+                window_start = today_start.replace(hour=start_hour)
+                window_end = min(now, today_start.replace(hour=end_hour))
+            breaks_seconds = self._break_seconds_in_window(schedule, window_start, window_end)
+            planned_seconds = max(planned_seconds - breaks_seconds, 0)
+            # Aussi soustraire les pauses de l'arret journalier pour ne pas penaliser
+            downtime_today = max(downtime_today - breaks_seconds, 0)
+
         # Availability = (Planned - Downtime) / Planned
         if planned_seconds > 0:
             operating_seconds = max(planned_seconds - downtime_today, 0)
@@ -722,6 +821,10 @@ class MESService:
             current_hour = now.hour
             if current_hour < start_hour or current_hour >= end_hour:
                 return  # Outside production hours, skip alerts
+
+        # Pause planifiee (legal break) : pas d'alertes pendant ces creneaux
+        if self._is_in_planned_break(now, schedule):
+            return
 
         # Check stopped
         stopped_min = alerts_config.get("stopped_minutes", 0)
