@@ -1,6 +1,6 @@
 {
-  "name": "frontend",
-  "version": "0.1.0",
+  "name": "fsao-iris-frontend",
+  "version": "1.12.0",
   "private": true,
   "dependencies": {
     "@babel/runtime": "^7.28.6",
