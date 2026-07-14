@@ -23,6 +23,12 @@ router = APIRouter(tags=["Mises a jour"])
 from update_manager import UpdateManager
 
 update_manager = UpdateManager(db)
+# Alignement avec le dépôt de travail officiel FSAO Iris.
+# Cela évite que l'ancienne valeur par défaut historique "GMAO" soit utilisée
+# lorsque les variables ne sont pas encore présentes dans backend/.env.
+update_manager.github_user = os.environ.get("GITHUB_USER", "Kinder0083")
+update_manager.github_repo = os.environ.get("GITHUB_REPO", "GMAO_IA")
+update_manager.github_branch = os.environ.get("GITHUB_BRANCH", "main")
 
 APP_ROOT = Path(__file__).resolve().parents[2]
 APP_TECH_SLUG = "gmao-iris"
