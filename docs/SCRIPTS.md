@@ -30,7 +30,7 @@ Le script réalise les opérations suivantes :
 
 ### Accès au dépôt privé GitHub
 
-Le script propose maintenant quatre modes d'accès :
+Le script propose quatre modes d'accès :
 
 ```text
 1) Connexion guidée GitHub automatique - recommandé
@@ -100,14 +100,6 @@ La logique actuelle est :
 
 Cette approche évite de stocker une clé SSH ou un token GitHub dans le conteneur.
 
-### Mise à jour
-
-Comme l'application est installée depuis une archive sans dossier `.git`, le conteneur ne fait plus de `git pull`.
-
-Le fichier `backend/post-update.sh` reste généré pour réinstaller les dépendances, reconstruire le frontend et redémarrer le backend après remplacement des fichiers applicatifs.
-
-Une procédure dédiée de mise à jour par archive pourra être ajoutée ultérieurement.
-
 ### Sécurité
 
 Le script :
@@ -136,7 +128,61 @@ Avant d'exécuter le script :
 - vérifier l'espace disque disponible ;
 - conserver le backup du script original.
 
-## 2. `gmao-ssl-gdrive-setup.sh`
+## 2. `gmao-iris-update.sh`
+
+Script dédié à la **mise à jour par archive** d'une installation FSAO Iris existante.
+
+Ce script est prévu pour être lancé depuis l'hôte Proxmox, sans recréer le conteneur LXC.
+
+### Rôle du script de mise à jour
+
+Le script réalise les opérations suivantes :
+
+- sélection du conteneur LXC FSAO Iris existant ;
+- choix guidé de la source de mise à jour avec les mêmes quatre méthodes que l'installation ;
+- préparation d'une archive applicative sur l'hôte Proxmox ;
+- transfert de l'archive dans le conteneur ;
+- extraction dans un dossier de staging ;
+- restauration des fichiers `backend/.env` et `frontend/.env` existants ;
+- installation des dépendances backend ;
+- compilation du frontend ;
+- arrêt temporaire du backend Supervisor ;
+- sauvegarde de l'ancienne installation ;
+- bascule du staging vers `/opt/gmao-iris` ;
+- redémarrage du backend et rechargement de Nginx.
+
+### Source de mise à jour
+
+Le script propose :
+
+```text
+1) Connexion guidée GitHub automatique - recommandé
+2) Clé SSH déjà configurée
+3) URL Git personnalisée
+4) Archive locale déjà téléchargée
+```
+
+Le mode recommandé reste la connexion guidée GitHub automatique avec `gh`, surtout pour un utilisateur novice.
+
+### Sauvegarde et rollback
+
+Avant de remplacer l'application, le script déplace l'installation existante dans :
+
+```bash
+/opt/gmao-iris-backups/<timestamp>/app
+```
+
+Si la préparation de la nouvelle version échoue pendant le staging, l'ancienne version reste en place.
+
+Après bascule, le script affiche une commande de rollback manuel permettant de restaurer l'ancienne version depuis le dossier de sauvegarde.
+
+### Limites actuelles
+
+Le script ne met pas encore à jour la base MongoDB par migration dédiée.
+
+Les scripts éventuels de migration de schéma devront être ajoutés explicitement si le modèle de données évolue fortement entre deux versions.
+
+## 3. `gmao-ssl-gdrive-setup.sh`
 
 Script post-installation nettoyé pour :
 
