@@ -1,29 +1,29 @@
 """
-Configuration OpenAPI/Swagger enrichie pour FSAO Atlas
+Configuration OpenAPI/Swagger enrichie pour FSAO Iris
 """
 
 # Description principale de l'API
 API_DESCRIPTION = """
-# FSAO Atlas - API de Fonctionnement des Services Assistee par Ordinateur
+# FSAO Iris - API de Fonctionnement des Services Assistée par Ordinateur
 
-Systeme complet de gestion de maintenance industrielle avec module **M.E.S.** (Manufacturing Execution System).
+Système complet de gestion de maintenance industrielle avec module **M.E.S.** (Manufacturing Execution System).
 
 ## Modules principaux
 
 | Module | Description |
 |--------|-------------|
 | **Authentification** | Connexion, inscription, gestion des tokens JWT |
-| **Ordres de Travail** | CRUD, pieces jointes, suivi du temps |
-| **Equipements** | Hierarchie d'actifs, statuts, historique |
-| **Maintenance Preventive** | Planification, frequences, execution automatique |
-| **M.E.S.** | Suivi de production en temps reel, TRS, rebuts, alertes |
-| **Inventaire** | Gestion des pieces de rechange, seuils d'alerte |
-| **MQTT** | Communication temps reel avec les capteurs |
-| **Rapports** | Generation PDF/Excel, planification d'envoi automatique |
+| **Ordres de Travail** | CRUD, pièces jointes, suivi du temps |
+| **Équipements** | Hiérarchie d'actifs, statuts, historique |
+| **Maintenance Préventive** | Planification, fréquences, exécution automatique |
+| **M.E.S.** | Suivi de production en temps réel, TRS, rebuts, alertes |
+| **Inventaire** | Gestion des pièces de rechange, seuils d'alerte |
+| **MQTT** | Communication temps réel avec les capteurs |
+| **Rapports** | Génération PDF/Excel, planification d'envoi automatique |
 
 ## Authentification
 
-Toutes les routes protegees necessitent un token JWT dans le header :
+Toutes les routes protégées nécessitent un token JWT dans le header :
 
 ```
 Authorization: Bearer <token>
@@ -31,11 +31,11 @@ Authorization: Bearer <token>
 
 Le token est obtenu via `POST /api/auth/login`.
 
-## Roles
+## Rôles
 
-- **ADMIN** : Acces complet a toutes les fonctionnalites
+- **ADMIN** : Accès complet à toutes les fonctionnalités
 - **RESPONSABLE_SERVICE** : Gestion de son service
-- **TECHNICIEN** : Operations de maintenance
+- **TECHNICIEN** : Opérations de maintenance
 - **OPERATEUR** : Consultation et saisie basique
 """
 
