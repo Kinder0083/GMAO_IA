@@ -61,7 +61,7 @@ Elle doit plutôt :
 - afficher les sauvegardes applicatives disponibles ;
 - distinguer rollback applicatif et rollback MongoDB.
 
-## 4. Actions appliquées
+## 4. Actions appliquées côté backend
 
 Le fichier `backend/routes/update_routes.py` a été complété avec une passerelle vers le workflow archive Proxmox.
 
@@ -118,25 +118,30 @@ Si `.git` est absent, le endpoint ne tente plus un rollback Git et renvoie la co
 chmod +x gmao-iris-rollback.sh && ./gmao-iris-rollback.sh
 ```
 
-## 5. Ce qui reste à faire côté frontend
+## 5. Actions appliquées côté frontend
 
-Le frontend `frontend/src/pages/Updates.jsx` affiche encore une logique ancienne :
+Le fichier `frontend/src/pages/Updates.jsx` a été adapté au nouveau workflow.
 
-- bouton `Mettre à jour maintenant` ;
-- gestion de conflits Git ;
-- historique Git ;
-- rollback Git ;
-- attente de redémarrage automatique après mise à jour.
+L'interface affiche désormais :
 
-La prochaine passe doit adapter l'interface pour :
+- la version actuelle ;
+- la dernière version détectée ;
+- le mode de déploiement `archive_proxmox` ;
+- un message clair indiquant si l'action doit être lancée depuis l'hôte Proxmox ;
+- les commandes copiables pour l'installation, la mise à jour et le rollback applicatif ;
+- un bouton de pré-vérification qui appelle `POST /api/updates/archive-precheck` ;
+- la sortie du pré-check quand elle est disponible ;
+- les sauvegardes applicatives via `GET /api/updates/archive-backups` ;
+- les logs serveur ;
+- les nouveautés et l'historique de mise à jour.
 
-1. charger `GET /api/updates/deployment-workflow` ;
-2. afficher une carte **Mode archive Proxmox** ;
-3. désactiver ou remplacer le bouton de mise à jour automatique si `requires_proxmox_host=true` ;
-4. afficher les commandes à lancer depuis Proxmox ;
-5. afficher les sauvegardes via `GET /api/updates/archive-backups` ;
-6. renommer clairement le rollback applicatif et le rollback MongoDB ;
-7. masquer ou déclasser les fonctions Git si `.git` est absent.
+Les éléments suivants ont été retirés de l'interface principale :
+
+- bouton magique `Mettre à jour maintenant` ;
+- dialogue de résolution de conflits Git ;
+- historique Git comme chemin principal ;
+- rollback Git comme action principale ;
+- attente automatique de redémarrage backend après mise à jour.
 
 ## 6. Risques identifiés
 
@@ -160,11 +165,11 @@ L'ancien endpoint `/api/updates/rollback` restaure MongoDB.
 
 Le nouveau `gmao-iris-rollback.sh` restaure uniquement les fichiers applicatifs.
 
-L'interface doit clairement distinguer les deux pour éviter une erreur utilisateur.
+L'interface distingue maintenant le rollback applicatif, mais l'ancien rollback MongoDB reste présent côté backend pour compatibilité historique.
 
 ## 7. Recommandation
 
-La section Mise à jour doit devenir un tableau de bord de pilotage et d'assistance, pas un bouton magique qui lance des commandes Proxmox depuis le conteneur.
+La section Mise à jour doit rester un tableau de bord de pilotage et d'assistance, pas un bouton magique qui lance des commandes Proxmox depuis le conteneur.
 
 Pour une installation novice et fiable, le bon flux est :
 
@@ -172,3 +177,7 @@ Pour une installation novice et fiable, le bon flux est :
 2. elle affiche les commandes Proxmox exactes ;
 3. l'utilisateur lance la mise à jour depuis l'hôte Proxmox ;
 4. l'application relit ensuite l'état, la version et les logs disponibles.
+
+## 8. Prochaine passe conseillée
+
+Neutraliser ou remplacer proprement l'ancienne méthode `UpdateService.apply_update()` qui cherche `MAJ_FSAO.sh`, pour éviter qu'un ancien endpoint ou appel futur puisse relancer la mauvaise logique.
