@@ -1,995 +1,255 @@
 # FSAO Iris
 
-Application de Fonctionnement des Services Assistee par Ordinateur (FSAO) complete et auto-hebergee.
+**FSAO Iris** est une application web full-stack auto-hébergée dédiée au fonctionnement des services industriels, à la maintenance, à la QHSE et au suivi de production.
 
-**Version :** 1.12.0
-**Concepteur :** Greg
-**Derniere mise a jour :** Avril 2026
-
----
-
-## Presentation
-
-FSAO Iris est une application web full-stack concue pour gerer l'ensemble du cycle de maintenance industrielle et du fonctionnement des services : ordres de travail, equipements, maintenance preventive, inventaire, surveillance, M.E.S., cameras, chat en temps reel, et bien plus. Elle integre une couche d'**intelligence artificielle** pour l'analyse automatique des donnees QHSE. Elle se deploie sur un serveur Proxmox LXC en une commande et dispose d'un systeme de mise a jour integre.
+- **Nom officiel :** FSAO Iris
+- **Version :** 1.12.0
+- **Concepteur :** Greg
+- **Dernière mise à jour fonctionnelle :** Avril 2026
+- **Déploiement cible :** Proxmox LXC / Debian 12
 
 ---
 
-## Fonctionnalites principales
+## 1. Présentation
 
-### Intelligence Artificielle (IA)
+FSAO Iris centralise les processus opérationnels d'un service industriel : ordres de travail, équipements, maintenance préventive, demandes d'intervention, inventaire, achats, consignations LOTO, QHSE, plan de surveillance, presqu'accidents, M.E.S., capteurs IoT, caméras et tableaux de bord.
 
-FSAO Iris integre des fonctionnalites d'IA generative (Gemini Pro) pour automatiser et enrichir les processus QHSE.
+L'application intègre également des fonctions d'intelligence artificielle pour aider à analyser les données de maintenance et de QHSE, générer des synthèses, exploiter les historiques et assister les utilisateurs dans certaines actions métier.
 
-#### IA - Checklists et Maintenance
-- **Generation automatique de checklists** : Upload d'un document technique, l'IA genere un template de checklist complet
-- **Generation automatique de programmes de maintenance** : Upload d'une documentation constructeur, l'IA genere un plan de maintenance preventive
-- **Analyse IA des non-conformites** : Analyse l'historique des executions de checklists pour detecter les patterns recurrents, tendances negatives et equipements a risque
-- **Creation d'ordres de travail curatifs en 1 clic** : Depuis les resultats de l'analyse IA, creation automatique d'OT pour les actions correctives suggerees
-- **Alertes email automatiques** : Envoi automatique d'emails aux responsables de service quand des patterns critiques sont detectes
-
-#### IA - Presqu'accidents
-- **Analyse des causes racines** : Methode 5 Pourquoi + diagramme Ishikawa generes automatiquement par l'IA a partir de la description de l'incident, avec suggestion d'actions preventives et evaluation severite/recurrence
-- **Detection d'incidents similaires** : Lors de la creation d'un presqu'accident, l'IA recherche automatiquement les incidents similaires dans l'historique pour capitaliser sur les actions deja entreprises
-- **Analyse IA des tendances** : Analyse globale de tous les presqu'accidents pour identifier les patterns recurrents, zones a risque, predictions de risques futurs, avec envoi d'alertes email aux responsables
-- **Rapport de synthese QHSE** : Generation automatique d'un rapport structure (resume executif, KPIs, analyse par service, top risques, plan d'action) pret pour presentation en reunion QHSE, avec option d'impression
-
-#### IA - Historique Achat
-- **Analyse IA des achats** : Analyse automatique de l'historique des achats pour identifier les tendances de depenses, fournisseurs les plus sollicites, categories d'achat recurrentes et optimisations possibles
-- **Archives IA** : Consultation de l'historique de toutes les analyses IA effectuees sur les achats, avec possibilite de comparer les resultats dans le temps
-- Acces depuis le module "Historique Achat" via les boutons "Analyse IA" et "Archives IA"
-
-#### IA - Arbre des Causes (Analyse d'Accidents)
-- **Analyse structuree des accidents** : Module complet d'analyse des accidents de maintenance en 5 phases guidees par l'IA
-- **Methode QQOQCP** : Questionnement structure (Quoi, Qui, Ou, Quand, Comment, Pourquoi) avec suggestions IA
-- **Methode des 5 Pourquoi** : Iterations successives pour identifier la cause racine, avec guidage IA et detection automatique de la cause fondamentale
-- **Diagramme d'Ishikawa (5M)** : Analyse par les 5 familles de causes (Main d'oeuvre, Materiel, Methodes, Milieu, Matieres) avec diagramme visuel interactif et analyse IA
-- **Grille ALARM** : Analyse des facteurs contributifs (Patient, Taches, Individu, Equipe, Environnement, Organisation, Contexte) avec classification IA
-- **Generation d'actions correctives** : L'IA propose des actions correctives et preventives a partir de l'analyse complete, avec creation directe d'Ordres de Travail, de Maintenances Preventives ou de Checklists
-- **Modele IA configurable** : Choix du modele d'IA (GPT-5.2, GPT-4o, Gemini, Claude) dans les Parametres speciaux
-- Acces depuis le menu "Arbre des Causes" dans la sidebar
-
-#### IA - Assistant (Adria)
-- Assistant IA conversationnel integre (personnalisable : nom, genre, modele LLM)
-- **Memoire de conversation** : Adria se souvient du contexte des echanges precedents
-- **Contexte enrichi** : Requetes dynamiques vers les donnees FSAO (OT, equipements, alertes, inventaire) pour des reponses factuelles
-- **Creation d'OT par IA** : "Cree un OT urgent pour reparer la pompe P-001" - Adria cree l'OT automatiquement avec titre, description, priorite, categorie et equipement lie
-- **Auto-assignation intelligente** : Lors de la creation d'un OT, Adria assigne automatiquement l'OT a l'utilisateur connecte. Si un nom de technicien est specifie ("assigne-le a Axel"), l'IA resout le nom et assigne au bon utilisateur
-- **Modification d'OT par IA** : "Ajoute la description suivante a l'OT 5864 : essais tirage personnel" ou "Passe l'OT #5801 en priorite haute" - Adria modifie l'OT existant (description, priorite, statut, equipement, assignation, categorie). La recherche d'OT priorise le numero exact avant l'ID ou le titre
-- **Cloture d'OT par IA** : "Termine l'OT Bioci 1, ca a pris 2h, j'ai change le filtre" - Adria cloture l'OT en une seule commande : ajout du temps passe, enregistrement des pieces utilisees (avec deduction stock automatique), commentaire de cloture, passage au statut TERMINE
-- **Creation de Widgets IA** : "Cree un camembert des OT par priorite" - Adria genere et cree des widgets sur le Dashboard Service
-- **Support des formules mathematiques** : "Cree une jauge taux resolution = OT termines / total * 100" - L'IA genere les sources de donnees et les formules ($references, IF, ROUND, SUM, AVG)
-- **Automatisations IA** : Configuration de regles automatiques en langage naturel (alertes capteurs, rappels maintenance, escalades, seuils inventaire)
-- Historique des conversations IA accessible depuis le module "Historique IA"
-
-#### IA - Tableau de Bord
-- **Tableau de bord IA unifie** avec 5 onglets : Tendances, Ordres de Travail, Capteurs, Surveillance, Automatisations
-- **Notifications push** : Alertes temps reel quand une automatisation se declenche (capteur, seuil, etc.)
-- **Diagnostic IA** : Analyse des causes probables et recommandations pour chaque OT
-- **Resume IA** : Synthese automatique des interventions
-- **Anomalies capteurs** : Detection predictive par analyse de l'historique des mesures
-
-### Consignations LOTO (Lockout/Tagout)
-- Workflow de consignation en 4 etapes : Demande → Consignation → Intervention → Deconsignation
-- **Cadenas multiples** : plusieurs utilisateurs peuvent poser leur cadenas sur une meme consignation. L'equipement n'est deconsigne que lorsque le dernier cadenas est retire
-- **Points d'isolation** : definition des points d'isolation avec type (vanne, disjoncteur, etc.) et localisation
-- **Signatures electroniques** : signature manuscrite + code PIN pour chaque etape du workflow
-- **Suppression reservee aux administrateurs** : seuls les admins peuvent supprimer une consignation (statuts Demande/Annule/Deconsigne) avec confirmation
-- **Journalisation complete** : toutes les operations LOTO (creation, consignation, cadenas, deconsignation, suppression) sont enregistrees dans le journal d'audit
-- **Liaison OT/MP/Amelioration** : possibilite de lier une consignation a un ordre de travail, une maintenance preventive ou une amelioration, avec remplissage automatique de l'equipement, du motif et de la duree prevue
-- **Icone cadenas cliquable** : dans les listes d'OT, d'ameliorations et de maintenance preventive, une icone cadenas coloree indique le statut LOTO et permet de naviguer vers la page LOTO
-- **Mise a jour temps reel** : les icones cadenas se mettent a jour automatiquement via WebSocket
-- **Filtres avances** : filtrage par periode (mois, annee, personnalisee) et par equipement (liste deroulante alphabetique) avec compteur de resultats
-- **Types d'energie** : electrique, hydraulique, pneumatique, thermique, chimique, mecanique
-
-### Ordres de travail
-- Creation, assignation, suivi et historique complet
-- **Tri par date** : les OT sont affiches du plus recent au plus ancien (tri robuste gerant les formats de date mixtes)
-- Gestion des priorites, statuts et temps (estime vs reel)
-- **Statuts avances** : OUVERT, EN_COURS, EN_ATTENTE, ATT_MATERIEL (attente materiel), ATT_DECISION (attente decision), TERMINE. Les statuts ATT_MATERIEL et ATT_DECISION permettent de renseigner des informations complementaires (materiel attendu, decision en attente) qui sont sauvegardees et affichees dans le detail de l'OT
-- **Assignation a un utilisateur ou un service** : le selecteur d'assignation (AssigneeSelector) affiche les services (poles) avec le nombre de membres, puis les utilisateurs tries alphabetiquement. Tous les profils (administrateurs, techniciens, etc.) sont proposes grace a un filtre MongoDB robuste compatible avec les bases legacy
-- **Numerotation unique** : compteur atomique MongoDB (`find_one_and_update` avec `$inc`) garantissant l'unicite des numeros d'OT meme en cas de creation simultanee ou apres suppression
-- Pieces jointes multiples (photos, videos, documents jusqu'a 25 Mo)
-- **Glisser-deposer (drag & drop)** : zone de depot visuelle avec feedback (bordure en pointilles, surbrillance bleue au survol) pour ajouter des fichiers par simple glisser-deposer depuis le bureau, en plus des boutons "Parcourir" et "Appareil photo"
-- **Miniatures des pieces jointes** : affichage des miniatures d'images directement dans les formulaires de creation, modification et visualisation des ordres de travail. Les images protegees sont chargees via des blob URLs authentifies
-- **Previsualisation des pieces jointes** : ouverture directe des fichiers (PDF, images, videos) dans le navigateur sans telechargement force
-- **Galerie de pieces jointes** : miniatures cliquables avec lightbox plein ecran (navigation clavier, support images/PDF/videos/texte)
-- Filtrage avance par date, periode, statut, priorite
-- Templates d'ordres de travail reutilisables
-- Bons de travail generables en PDF
-
-### Equipements
-- Inventaire complet avec structure hierarchique (parent/enfant)
-- Suivi de l'etat operationnel, historique des maintenances
-- Gestion des garanties, couts et compteurs (metres)
-- Vues en liste et en arborescence
-- **QR Codes** : Generation de QR codes et d'etiquettes imprimables pour chaque equipement. Le scan d'un QR code mene a une page publique affichant les informations de l'equipement et des actions rapides configurables (creation d'OT, signalement, demande, etc.). Les actions sont gerees depuis l'interface d'administration (Parametres > Actions QR)
-- **Creation de Demande d'Intervention publique via QR Code** : Les utilisateurs non authentifies (operateurs, sous-traitants) peuvent creer une Demande d'Intervention directement depuis la page QR d'un equipement, via un formulaire mobile epure. Les photos peuvent etre jointes par glisser-deposer, appareil photo ou galerie. Une notification email est automatiquement envoyee aux responsables maintenance avec des boutons d'action "Convertir en OT" et "Refuser" integres
-
-### Maintenance preventive
-- Planification recurrente (hebdomadaire, mensuel, trimestriel, annuel)
-- Planning visuel (calendrier Gantt)
-- Checklists de maintenance, alertes automatiques
-- Execution immediate possible
-
-### Inventaire et achats
-- Gestion des pieces detachees et alertes de stock bas
-- Suivi des fournisseurs et des couts
-- Demandes d'achat avec workflow de validation
-- Historique des achats avec statistiques par utilisateur et par mois
-
-### Surveillance et securite
-- Plan de surveillance avec suivi des controles periodiques (onglets par annee, generation automatique des controles recurrents)
-- **Correspondance intelligente** : L'IA analyse les rapports de controle et met a jour les controles existants au lieu de creer des doublons. Calcul automatique de l'ecart (jours) entre date prevue et date de realisation
-- **Correspondance manuelle** : En cas d'ambiguite, l'utilisateur peut confirmer ou creer un nouveau controle
-- Rapports de surveillance (3 modes : cartes, tableau, graphiques) avec filtrage par annee et KPIs (taux de realisation, ecart moyen, respect des delais)
-- Export PDF et Excel des rapports de surveillance
-- Gestion des presqu'accidents avec formulaire enrichi (7 sections : identification, description, personnes, evaluation risque, equipement, actions, pieces jointes)
-- Champs presqu'accidents : categorie d'incident, equipement lie FSAO, mesures immediates, type lesion potentielle, temoins, conditions, facteurs contributifs
-- Integration cameras (snapshots, alertes via Frigate/MQTT)
-- Autorisations particulieres (formulaires et suivi)
-
-### M.E.S. (Manufacturing Execution System) — architecture ESP32 edge-computing
-- **Suivi de production en temps reel** sur 25+ machines en 24/7 sans saturation MongoDB
-- **Architecture edge-computing** : chaque machine (ESP32) calcule sa cadence localement et publie sur MQTT (state, total cumule, fin de poste). Le backend ne stocke plus de pulses bruts, uniquement des agregations
-- **Deux modes de comptage** :
-  - **Imp** : impulsions traditionnelles (compatibilite ascendante avec capteurs simples)
-  - **cp/min** : cadence directe en coups par minute envoyee par l'ESP32 (recommande)
-- **Etats explicites** : ecoute du topic d'etat `ACTIVE` / `IDLE` (au lieu de deduction par detection de pulses)
-- **Equipement Parent / Sous-equipement** : configuration hierarchique pour les lignes de production a plusieurs sous-systemes
-- **Agregations multi-niveaux automatiques** :
-  - `mes_cadence_history` : 1 doc par machine et par minute
-  - `mes_daily_summary` : 1 doc par machine et par jour
-  - `mes_shift_summary` : 1 doc par machine et par poste 3x8
-- **Rapports 3x8 shifts** : compte-rendu automatique declenche par le topic MQTT `shift_end` (matin/apres-midi/nuit)
-- **Delai de retention configurable** depuis l'UI (Parametres -> Donnees) pour purger automatiquement les agregations anciennes
-- **Page Rapports M.E.S. completement revue** :
-  - Onglet **Vue d'ensemble** : KPIs site (TRS global, production totale, machines actives), Top/Flop des machines, heatmap horaire, metriques par poste
-  - Onglet **Detail par machine** : cadence par minute, distribution horaire, comparaison entre periodes
-  - Filtres avances : periode (jour, semaine, mois, custom), machines, postes
-- **Indexes MongoDB optimises** pour eviter les erreurs `QueryExceededMemoryLimitNoDiskUseAllowed` sur grosse volumetrie
-- Compatibilite ascendante avec les capteurs traditionnels via le mode Imp
-
-### Progressive Web App (PWA)
-- **Installation sur l'ecran d'accueil** : FSAO Iris peut etre installe comme une application native
-  - **Android** : Via le navigateur Chrome, bouton "Ajouter a l'ecran d'accueil" ou banniere d'installation automatique
-  - **iOS** : Via Safari, bouton Partager → "Sur l'ecran d'accueil"
-- **Notifications push navigateur** (Web Push via VAPID/pywebpush) : alertes automatiques envoyees sur les appareils mobiles et desktop lors de l'assignation d'un OT, changement de statut, panne equipement ou message prive
-- **Fonctionnement hors-ligne partiel** : cache intelligent des ressources statiques via Service Worker
-- **Mise a jour automatique et cache-busting** : le Service Worker detecte les nouvelles versions et met a jour le cache. Un fichier `version.json` est mis a jour a chaque build. Un hook React (`useVersionCheck`) verifie periodiquement ce fichier (toutes les 5 minutes + au retour sur l'onglet) et declenche un rechargement automatique de la page si une nouvelle version est detectee, eliminant le besoin de `CTRL+MAJ+F5`
-
-### Interface mobile responsive
-- **Header adaptatif** : les icones secondaires (backup, cameras, M.E.S., alertes MQTT, surveillance, inventaire) sont masquees sur mobile pour ne garder que les icones essentielles (chat, echeances, notifications, OT, profil)
-- **Sidebar overlay** : sur les ecrans mobiles (< 768px), la sidebar se transforme en panneau superpose avec un fond sombre, au lieu de pousser le contenu
-- **Menu hamburger** : icone standard pour ouvrir/fermer la sidebar sur mobile
-- **Viewport optimise iOS** : support de `viewport-fit=cover` et prevention du defilement horizontal
-
-### Navigation intelligente depuis le header (deep-linking)
-- **Cloche multi-badges** : L'icone cloche du header affiche 3 badges colores independants :
-  - **Rouge** : nombre d'ordres de travail en attente materiel (statut ATT_MATERIEL, EN_ATTENTE) + en attente decision (ATT_DECISION)
-  - **Violet** : nombre d'ameliorations en attente
-  - **Vert** : nombre de maintenances preventives echues (date depassee)
-  - Cliquer sur la cloche ouvre un menu deroulant detaillant les compteurs "Att. Materiel" et "Att. Decision" separement, avec acces direct a chaque categorie et filtre pre-applique
-- **Clic sur les badges du header** : redirige vers la page correspondante avec des filtres pre-appliques
-  - Icone echeances (calendrier) → page correspondante filtree sur les elements en retard
-  - Icone surveillance (oeil) → plan de surveillance filtre sur les controles en retard
-  - Icone inventaire (package) → inventaire filtre sur les articles en alerte
-- **Ouverture directe** : les notifications in-app permettent d'ouvrir directement un OT specifique
-
-### Journal des modifications ("Quoi de neuf ?")
-- Panneau lateral accessible depuis l'icone "Sparkles" dans le header
-- Badge "NEW" signalant les nouvelles versions non lues
-- Interface d'administration pour gerer les versions et leurs entrees (Parametres > Changelog)
-- Systeme de feedback utilisateur (pouce haut/bas) sur chaque version
-- Statistiques de vote visibles pour l'administrateur
-- La version affichee sur la page de connexion est automatiquement synchronisee avec le dernier numero de version du changelog
-
-### Communication et collaboration
-- Chat en temps reel (WebSocket) avec previsualisation des fichiers joints
-- Tableau d'affichage collaboratif (Whiteboard, WebSocket)
-- Consignes inter-equipes avec acquittement
-- Notifications temps reel pour les ordres de travail et equipements
-- **Notifications push mobile** : via PWA (Web Push VAPID) pour navigateurs et via Expo Push Service pour l'application mobile native
-- **Nettoyage automatique des tokens push** : verification periodique des accuses de reception Expo et desactivation des tokens invalides
-
-### Rapports et analytics
-- Tableaux de bord en temps reel
-- Dashboard personnalisable avec widgets custom
-- **Raccourcis bureau style Windows** : Creation de raccourcis vers n'importe quelle page ou URL externe via `CTRL + Clic Droit` (menu contextuel global). Trois tailles disponibles (petit, moyen, grand), personnalisation de l'icone et du label, tri par glisser-deposer en mode edition. Les raccourcis sont affiches en haut du dashboard, separes visuellement des widgets
-- **Mode edition du dashboard** : bouton "Modifier" pour reorganiser les widgets et raccourcis par drag & drop. Un bouton **"+ Widget"** permet de restaurer les widgets precedemment supprimes
-- **Widget Ecart Temps Estime/Reel** : affiche le pourcentage d'ecart entre le temps estime et le temps reel des OT termines, sur le mois glissant et l'annee glissante
-- **Widget Charge OT Restante** : affiche le total des heures estimees pour les OT ouverts, avec le nombre de techniciens maintenance concernes
-- **Dashboard Service par onglets** : 9 onglets independants (ADV, LOGISTIQUE, PRODUCTION, QHSE, MAINTENANCE, LABO, INDUS, DIRECTION, AUTRE), chacun avec ses propres widgets personnalises, preference d'onglet sauvegardee par utilisateur
-- **Widgets connectes aux donnees reelles** : endpoint `/api/dashboard/widget-data` fournissant 12+ metriques en temps reel (OT en cours, taux completion, MTTR, stock alerte, ecart temps estime/reel sur mois et annee glissants, charge OT ouverts, techniciens maintenance, etc.)
-- **Widgets personnalises avec sources Excel** : upload de fichier Excel local (.xlsx, .xls, .csv) ou connexion a un serveur Samba/reseau
-- **Pre-visualisation interactive Excel** : apres upload, grille type tableur avec lettres de colonnes (A, B, C...) et numeros de lignes, modes de selection Cellule/Colonne pour remplir automatiquement les references, onglets pour fichiers multi-feuilles
-- **Constructeur visuel de formules** : interface drag-and-click remplacant la saisie manuelle, avec chips cliquables pour les sources ($Source1, $Source2), boutons operateurs (+, -, *, /, %), palette de fonctions par categorie (Math: SUM/AVG/MIN/MAX/ROUND, Logique: IF/IFERROR, Pourcentage: PERCENTAGE/GROWTH_RATE), apercu avec coloration syntaxique et evaluation en temps reel (debounce 600ms)
-- Statistiques detaillees et analyse des couts
-- Exports PDF, Excel, CSV (admin)
-- Rapports hebdomadaires automatiques par email
-
-### Import / Export et sauvegardes
-- Import/export de 63 modules (selecteur par 12 categories)
-- Export complet en ZIP (data.xlsx + fichiers uploades)
-- Import ZIP pour restauration complete
-- Sauvegardes automatiques planifiees (quotidien/hebdo/mensuel)
-- Destinations : local, Google Drive, ou les deux
-- Nettoyage automatique (retention 1 a 5 backups)
-- Verification d'integrite des archives ZIP
-- Historique avec telechargement, notifications email
-- Icone de statut dans le header (vert = backup recent)
-
-### Gestion des utilisateurs et roles
-- 10+ roles preconfigures : Administrateur, Technicien, Responsable Maintenance, Chef de Production, Responsable QHSE, etc.
-- Permissions granulaires par module (view, edit, delete) - **48 modules** configurables
-- **Modules recents** : Consignations LOTO, Contrats, Dashboard Service, Formation, Autorisations Particulieres
-- **Modules IA** : Tableau de bord IA, Automatisations IA, Widgets IA (Adria) - configurables par role
-- **Migration automatique** : endpoint `/api/roles/migrate-permissions` pour ajouter les permissions manquantes aux roles existants
-- Gestion des equipes, services et responsables hierarchiques
-- Planning de disponibilite
-- Preferences utilisateur personnalisees
-
-### IoT et capteurs
-- Dashboard IoT avec visualisation des capteurs
-- Integration MQTT (publication/souscription, logs)
-- Collecte automatique de donnees capteurs et compteurs
-
-### Documentation et journal
-- Gestion documentaire avec explorateur de fichiers
-- Manuel integre avec chapitres
-- Journal d'activite complet (audit)
-
-### Systeme de mise a jour
-- Detection automatique des nouvelles versions (comparaison commit Git)
-- Mise a jour en un clic depuis l'interface admin
-- Avertissement broadcast a tous les utilisateurs connectes avant MAJ
-- Script post-update automatique (dependances + rebuild frontend)
-- Messages d'erreur detailles en cas d'echec (etape exacte identifiee)
-- Historique des mises a jour avec erreurs et avertissements visibles
-- Endpoint de diagnostic `/api/qr/check-deps` pour verifier les dependances
-
-### Autres
-- Demandes d'arret de maintenance avec workflow email
-- Demandes d'amelioration avec suivi
-- Demandes d'intervention avec pieces jointes, glisser-deposer, conversion en OT et transfert automatique des photos
-- **KPI Demandes d'Intervention sur le Dashboard** : indicateurs en temps reel affichant le nombre de DI en attente et le temps de reponse moyen, mis a jour automatiquement
-- Acces SSH distant depuis l'interface (admin) — Terminal interactif via WebSocket + Paramiko (connexion SSH native, compatible Debian 12/yescrypt)
-- Configuration Tailscale depuis l'interface web
-- **Gestion automatique du fuseau horaire (DST)** : detection et application automatique du passage heure d'ete / heure d'hiver via le module Python `zoneinfo`. Les utilisateurs n'ont plus a ajuster manuellement l'offset 2 fois par an. La timezone du site est configurable depuis Parametres -> Fuseau horaire.
-
-### Coherence des donnees & Sante systeme
-- **Panneau "Coherence des donnees"** dans Parametres speciaux (admin uniquement) : scanne et repare les incoherences connues en base
-  - **`user_actif_statut_sync`** : utilisateurs dont le champ legacy `actif` (boolean) est desynchronise du `statut` UI (ACTIF/INACTIF). Cassait le widget "Charge OT restante" et plusieurs filtres backend
-  - **`service_responsables_duplicates`** : doublons dans la collection `service_responsables` pour un meme couple (service, user_id)
-  - **`time_entries_integrity`** : pointages d'OT/ameliorations avec timestamp stocke en string (invisibles aux rapports), `user_id` non-canonique, ou orphelin. Repare automatiquement (conversion timestamp en datetime, resync user_id, marquage `[Utilisateur supprime]`)
-  - **`orphan_user_assignments`** (informational) : liste les OT/ameliorations/maintenances preventives ayant des pointages assignes a un utilisateur supprime. Tableau cliquable avec liens deep-link vers le document, et **modal "Reassigner"** integre permettant de transferer en masse les pointages vers un utilisateur actif (sans avoir a ouvrir le document)
-  - **`work_orders_duplicate_numero`** : plusieurs ordres de travail portant le meme numero humain (#XXXX). Reparation auto : le plus ancien garde son numero, les autres sont renumerotes ; le compteur MongoDB est resynchronise
-- **Mode dry-run par defaut** : toutes les reparations disposent d'un bouton "Simuler" avant le bouton "Reparer" pour eviter les modifications accidentelles
-- **Scan quotidien automatique** a 02h30 (APScheduler) : si des incoherences sont detectees, un email d'alerte est envoye aux destinataires configures dans Sante systeme (cooldown 24h)
-- **Badge topbar "Coherence des donnees"** (admin uniquement) : icone Database avec compteur orange si actionable_issues > 0, point vert si la base est saine. Click -> Sante systeme. Refresh auto toutes les 5 minutes
-- **Card dediee dans Sante systeme** : affiche le statut du dernier scan (timestamp + repartition par check) avec bouton "Scanner maintenant"
-- **Type d'alerte email `data_integrity`** configurable dans la section Alertes Email (active/desactive, destinataires)
-
-### Visite guidee personnalisee par profil
-- A la premiere connexion, une visite guidee interactive presente les modules de l'application
-- La visite est **automatiquement adaptee au profil** (service) de l'utilisateur connecte :
-  - **Maintenance** : Equipements, Ordres de travail, Maintenance preventive, Planning, Inventaire, Demandes d'intervention
-  - **Production** : M.E.S., Planning, Ordres de travail, Demandes d'intervention, Compteurs, Presqu'accidents
-  - **QHSE** : Presqu'accidents + IA, Rapport Presqu'accidents, Analytics Checklists, Plan de Surveillance, Documentations, Contrats
-  - **Logistique / ADV** : Inventaire, Demandes d'achat, Fournisseurs, Equipements, Historique Achat
-  - **Direction / Admin** : Dashboard Service, Rapports, Gestion d'equipe, Utilisateurs, Rapport Presqu'accidents, Rapports Hebdomadaires
-  - **Generique** (aucun service defini) : Equipements, Ordres de travail, Planning, Presqu'accidents, Rapports
-- Les etapes communes (menu, dashboard, notifications, chat, assistant IA) sont presentes pour tous les profils
-- Les textes de chaque etape sont adaptes au metier de l'utilisateur
-- La visite peut etre relancee a tout moment depuis les parametres
+L'objectif du projet est de fournir une plateforme interne unique, exploitable sur un serveur local ou distant, adaptée aux besoins réels d'un environnement industriel.
 
 ---
 
-## Architecture technique
+## 2. Périmètre fonctionnel
 
-```
-fsao-iris/
-├── backend/                    # API FastAPI (Python 3.11+)
-│   ├── server.py               # Point d'entree principal, widgets, startup events
-│   ├── models.py               # Modeles Pydantic
-│   ├── auth.py                 # Authentification JWT + bcrypt
-│   ├── dependencies.py         # Dependances FastAPI (auth guards)
+### Maintenance industrielle
+
+- Création, suivi et clôture des ordres de travail.
+- Gestion des priorités, statuts, temps estimés et temps réels.
+- Assignation par utilisateur ou par service.
+- Pièces jointes, photos, documents, vidéos et prévisualisation.
+- Bons de travail générables.
+- Modèles d'ordres de travail réutilisables.
+
+### Équipements
+
+- Inventaire des équipements industriels.
+- Hiérarchie parent / sous-équipement.
+- Historique des interventions.
+- Suivi des états opérationnels.
+- Gestion des garanties, compteurs et coûts.
+- QR codes et actions rapides depuis le terrain.
+
+### Maintenance préventive
+
+- Planification récurrente.
+- Checklists de maintenance.
+- Planning visuel.
+- Alertes et exécutions planifiées.
+- Génération assistée par IA de programmes de maintenance à partir de documents techniques.
+
+### QHSE et sécurité
+
+- Gestion des presqu'accidents.
+- Analyse des causes racines.
+- Méthodes 5 Pourquoi, Ishikawa, QQOQCP et arbre des causes.
+- Plan de surveillance et rapports associés.
+- Gestion des autorisations particulières.
+- Rapports QHSE assistés par IA.
+
+### Consignations LOTO
+
+- Workflow de consignation en plusieurs étapes.
+- Points d'isolation par énergie : électrique, hydraulique, pneumatique, thermique, chimique ou mécanique.
+- Cadenas multiples.
+- Signatures électroniques.
+- Journalisation complète des opérations.
+- Liaison possible avec les OT, maintenances préventives et actions d'amélioration.
+
+### Inventaire, achats et fournisseurs
+
+- Gestion des pièces détachées.
+- Alertes de stock bas.
+- Fournisseurs et historique d'achats.
+- Demandes d'achat avec workflow de validation.
+- Analyse IA de l'historique d'achat.
+
+### M.E.S. et IoT
+
+- Suivi de production en temps réel.
+- Architecture ESP32 / MQTT orientée edge-computing.
+- Cadence machine, états de production et compteurs cumulés.
+- Agrégations MongoDB par minute, jour et poste.
+- Rapports de production et indicateurs 3x8.
+- Dashboard capteurs et logs MQTT.
+
+### Collaboration et exploitation
+
+- Chat temps réel.
+- Tableau d'affichage / whiteboard.
+- Notifications push PWA.
+- Sauvegardes locales et Google Drive.
+- Mise à jour applicative depuis l'interface admin.
+- Journal d'activité et audit.
+
+---
+
+## 3. Intelligence artificielle
+
+FSAO Iris intègre un assistant IA nommé **Adria** ainsi que plusieurs fonctions IA spécialisées :
+
+- génération de checklists à partir de documents techniques ;
+- génération de plans de maintenance préventive ;
+- analyse des non-conformités et tendances récurrentes ;
+- aide à l'analyse des presqu'accidents ;
+- génération de rapports de synthèse QHSE ;
+- analyse de l'historique d'achat ;
+- aide à la création, modification et clôture d'ordres de travail ;
+- création de widgets et indicateurs de tableau de bord.
+
+Les modèles et clés IA doivent être configurés dans l'environnement applicatif avant utilisation.
+
+---
+
+## 4. Stack technique
+
+| Couche | Technologie |
+|---|---|
+| Frontend | React 19, Tailwind CSS, Shadcn/UI, Lucide Icons |
+| Backend | FastAPI, Python 3.11+, Uvicorn |
+| Base de données | MongoDB 7.0+ |
+| Temps réel | WebSocket, Socket.IO selon modules |
+| Planification | APScheduler |
+| Authentification | JWT, bcrypt |
+| Reverse proxy | Nginx |
+| Supervision process | Supervisor |
+| Notifications | Web Push / VAPID, Expo Push |
+| IoT | MQTT, ESP32, capteurs et compteurs |
+| Déploiement principal | Proxmox LXC Debian 12 |
+
+---
+
+## 5. Architecture du dépôt
+
+```text
+.
+├── backend/                    # API FastAPI, services métier, routes, migrations
+│   ├── server.py               # Point d'entrée principal de l'API
+│   ├── models.py               # Modèles de données
+│   ├── auth.py                 # Authentification
 │   ├── routes/                 # Routes modulaires extraites
-│   │   ├── shared.py           # Utilitaires partages (db, serialize_doc, NOT_DELETED, compteurs atomiques)
-│   │   ├── work_orders.py      # CRUD OT (tri, statuts, assignation)
-│   │   ├── users.py            # CRUD utilisateurs, permissions
-│   │   ├── equipments.py       # Equipements (hierarchie)
-│   │   ├── intervention_requests.py # DI (conversion OT)
-│   │   ├── improvements.py     # Ameliorations
-│   │   ├── reports.py          # Rapports et analytics
-│   │   ├── service_manager.py  # Cibles d'assignation, stats service
-│   │   └── notification_health.py # Sante des notifications
-│   ├── user_preferences_routes.py # Dashboard layouts et raccourcis
-│   ├── *_routes.py             # 35+ modules de routes API
-│   ├── custom_widgets_routes.py # Widgets personnalises (templates, upload Excel, preview, formules)
-│   ├── formula_engine.py       # Moteur de formules (SUM, AVG, IF, PERCENTAGE, etc.)
-│   ├── ai_maintenance_routes.py # IA : checklists, maintenance, non-conformites
-│   ├── ai_presqu_accident_routes.py # IA : causes racines, incidents similaires, tendances, rapport QHSE
-│   ├── *_service.py            # 16 services metier
-│   ├── websocket_manager.py    # Chat WebSocket
-│   ├── realtime_manager.py     # Notifications temps reel
-│   ├── notifications.py        # Notifications push mobile (Expo)
-│   ├── whiteboard_manager.py   # Tableau d'affichage WebSocket
-│   ├── mqtt_manager.py         # Integration MQTT
-│   ├── backup_service.py       # Sauvegardes auto (local + Google Drive)
-│   ├── backup_routes.py        # API sauvegardes + OAuth Google Drive
-│   ├── import_export_routes.py # Import/export 63 modules
-│   ├── update_service.py       # Mises a jour depuis GitHub
-│   ├── migrations/             # Scripts de migration DB
-│   ├── uploads/                # Fichiers uploades
-│   └── .env                    # Configuration (voir ci-dessous)
+│   ├── migrations/             # Scripts de migration base de données
+│   └── uploads/                # Fichiers uploadés en exploitation locale
 │
-├── frontend/                   # Application React 19
-│   ├── src/
-│   │   ├── pages/              # 66 pages
-│   │   ├── components/         # Composants reutilisables
-│   │   │   ├── ui/             # Shadcn/UI
-│   │   │   ├── chat/           # Chat temps reel
-│   │   │   ├── Common/         # Composants communs (AIChatWidget, adriaCommandHandlers)
-│   │   │   ├── Dashboard/      # Raccourcis, menu contextuel, barre d'edition
-│   │   │   │   ├── GlobalContextMenu.jsx   # Menu CTRL+Clic Droit (creation raccourcis)
-│   │   │   │   ├── SortableShortcut.jsx    # Rendu raccourci style Windows (S/M/L)
-│   │   │   │   ├── ShortcutEditDialog.jsx  # Dialog edition raccourci
-│   │   │   │   └── DashboardEditToolbar.jsx # Barre d'outils mode edition + bouton "+ Widget"
-│   │   │   ├── WorkOrders/     # Formulaires et dialogs OT
-│   │   │   │   └── WorkOrderFormDialog.jsx # Creation/edition OT avec AssigneeSelector
-│   │   │   ├── AssigneeSelector.jsx # Selecteur d'assignation (services + utilisateurs)
-│   │   │   └── Surveillance/   # Plan de surveillance (ManualMatchDialog, SurveillanceAIExtract)
-│   │   └── hooks/              # Hooks React personnalises
-│   ├── public/                 # Assets statiques
-│   ├── nginx.conf              # Config Nginx production
-│   └── package.json            # Dependances (React 19, Tailwind, etc.)
+├── frontend/                   # Application React
+│   ├── src/pages/              # Pages applicatives
+│   ├── src/components/         # Composants réutilisables
+│   ├── public/                 # Assets statiques et PWA
+│   └── package.json            # Dépendances frontend
 │
-├── gmao-iris-install.sh        # Script installation Proxmox (complet)
-├── gmao-ssl-gdrive-setup.sh    # Script post-install SSL + Google Drive
-├── updates/                    # Metadonnees de version
-│   └── version.json
-├── CHANGELOG.md                # Notes de version
-└── README.md                   # Ce fichier
+├── updates/                    # Métadonnées de version et mise à jour
+├── gmao-iris-install.sh        # Script d'installation Proxmox LXC
+├── gmao-ssl-gdrive-setup.sh    # Script SSL + Google Drive
+├── CHANGELOG.md                # Historique des versions
+└── README.md                   # Présentation du projet
 ```
-
-### Stack technique
-
-| Couche      | Technologie                                     |
-|-------------|--------------------------------------------------|
-| Frontend    | React 19, Shadcn/UI, Tailwind CSS, Lucide Icons |
-| Backend     | FastAPI (Python 3.11+), Uvicorn                  |
-| Base de donnees | MongoDB 7.0+                                |
-| Temps reel  | WebSocket (chat, whiteboard, notifications)      |
-| Scheduler   | APScheduler (backups, rapports, M.E.S.)          |
-| Auth        | JWT + bcrypt                                     |
-| Serveur web | Nginx (reverse proxy, SSL, static files)         |
-| Process     | Supervisor                                       |
-| Notifications | Web Push (VAPID/pywebpush) + Expo Push          |
-| PWA         | Service Worker, manifest.json, installation mobile |
-| Deploiement | Proxmox LXC (Debian 12)                         |
-| IA          | Emergent LLM (Gemini 2.5 Flash) - assistant Adria, analyse QHSE, generation documents |
 
 ---
 
-## Installation
+## 6. Installation recommandée
 
-### Installation Proxmox LXC (recommandee)
+L'installation recommandée se fait sur un serveur **Proxmox** via un container **LXC Debian 12**.
 
-Le script d'installation cree automatiquement un container LXC Debian 12 avec tout le necessaire.
-
-**Depuis le serveur Proxmox (host) :**
+Depuis l'hôte Proxmox :
 
 ```bash
 bash gmao-iris-install.sh
 ```
 
-Le script interactif vous demandera :
-- Token GitHub (acces au depot prive)
-- Configuration reseau (IP statique ou DHCP)
-- Identifiants administrateur
-- Mode d'acces distant (URL manuelle, Tailscale, ou local uniquement)
+Le script prépare l'environnement applicatif, installe les dépendances système, configure les services principaux et déploie FSAO Iris.
 
-**Ce qui est installe automatiquement :**
-- MongoDB 7.0, Node.js 20, Python 3.11+, Nginx, Supervisor
-- Build complet du frontend (yarn)
-- Environnement virtuel Python avec toutes les dependances
-- Comptes administrateurs, services configures et demarres
-- Hooks Git pour mise a jour automatique des dependances
-
-### Post-installation : SSL + Google Drive
-
-Apres l'installation, executez le script de configuration SSL et Google Drive **dans le container LXC** :
+Après installation, la configuration SSL et Google Drive peut être lancée depuis le container LXC :
 
 ```bash
 sudo bash gmao-ssl-gdrive-setup.sh
 ```
 
-Ce script interactif :
-1. Demande votre nom de domaine (ex: `fsaoiris.duckdns.org`)
-2. Verifie la resolution DNS
-3. Installe Certbot et genere un certificat SSL Let's Encrypt
-4. Configure Nginx avec HTTPS (redirection HTTP, proxy API, WebSocket)
-5. Met a jour le `.env` backend (URLs HTTPS, Google Drive)
-6. Configure le renouvellement automatique du certificat
-7. Redemarre les services et teste la connexion
-
-### Installation Docker (alternative)
-
-```bash
-git clone https://github.com/Kinder0083/GMAO.git
-cd GMAO
-docker-compose up -d
-```
-
-**Acces :**
-- Frontend : `http://localhost:3000`
-- API : `http://localhost:8001`
-- Documentation API : `http://localhost:8001/docs`
+> Remarque : la procédure Docker ne doit être considérée comme supportée que si un fichier `docker-compose.yml` maintenu est présent dans le dépôt.
 
 ---
 
-## Configuration
+## 7. Configuration minimale
 
-### Variables d'environnement backend (`backend/.env`)
+La configuration principale se fait via le fichier `backend/.env`.
+
+Variables importantes :
 
 ```env
-# Base de donnees
 MONGO_URL=mongodb://localhost:27017
 DB_NAME=gmao_iris
-
-# Securite
-SECRET_KEY=<cle_generee_openssl_rand_hex_32>
-
-# URLs (adapter a votre domaine)
+SECRET_KEY=<cle_secrete_jwt>
 FRONTEND_URL=https://votre-domaine.com
 BACKEND_URL=https://votre-domaine.com
 APP_URL=https://votre-domaine.com
-
-# SMTP (emails)
 SMTP_SERVER=smtp.gmail.com
 SMTP_PORT=587
 SMTP_USERNAME=votre-email@gmail.com
 SMTP_PASSWORD=<mot_de_passe_application>
 SMTP_SENDER_EMAIL=votre-email@gmail.com
 SMTP_FROM_NAME=FSAO Iris
-SMTP_USE_TLS=true
-
-# Google Drive (optionnel - pour sauvegardes cloud)
-GOOGLE_CLIENT_ID=xxxx.apps.googleusercontent.com
-GOOGLE_CLIENT_SECRET=GOCSPX-xxxx
-GOOGLE_DRIVE_REDIRECT_URI=https://votre-domaine.com/api/backup/drive/callback
-
-# IA (assistant chat)
-EMERGENT_LLM_KEY=sk-emergent-xxxx
-
-# Notifications Push PWA (Web Push VAPID)
-VAPID_PUBLIC_KEY=<cle_publique_VAPID>
-VAPID_PRIVATE_KEY=<cle_privee_VAPID>
-VAPID_CLAIMS_EMAIL=mailto:votre-email@domaine.com
-
-# Cameras (optionnel)
-CAMERA_ENCRYPTION_KEY=<cle_generee>
-
-# Documentation API
-DOCS_USER=admin
-DOCS_PASS=<mot_de_passe>
+EMERGENT_LLM_KEY=<cle_ia_si_utilisee>
+VAPID_PUBLIC_KEY=<cle_publique_vapid>
+VAPID_PRIVATE_KEY=<cle_privee_vapid>
 ```
 
-### Configuration Google Drive
-
-Pour utiliser Google Drive comme destination de sauvegarde :
-
-**Etape 1 : Creer un projet Google Cloud**
-1. Allez sur [Google Cloud Console](https://console.cloud.google.com)
-2. Creez un nouveau projet (ou selectionnez un projet existant)
-3. Notez le **numero du projet** (visible dans les parametres du projet)
-
-**Etape 2 : Activer l'API Google Drive (OBLIGATOIRE)**
-1. Dans le menu lateral, allez dans **APIs & Services > Bibliotheque**
-2. Recherchez **"Google Drive API"**
-3. Cliquez dessus puis cliquez sur **"Activer"** (Enable)
-4. **Attendez 1-2 minutes** pour que l'activation se propage
-
-> **IMPORTANT :** Sans cette etape, vous obtiendrez une erreur `HttpError 403 - accessNotConfigured` lors de l'upload vers Google Drive. Lien direct pour activer : `https://console.developers.google.com/apis/api/drive.googleapis.com/overview?project=VOTRE_NUMERO_PROJET`
-
-**Etape 3 : Configurer l'ecran de consentement OAuth**
-1. Allez dans **APIs & Services > Ecran de consentement OAuth**
-2. Choisissez **"Externe"** comme type d'utilisateur
-3. Remplissez les champs obligatoires (nom de l'application, email de contact)
-4. Dans les **Scopes**, ajoutez : `https://www.googleapis.com/auth/drive.file`
-5. Dans **Utilisateurs test**, ajoutez votre adresse email Google
-6. Publiez ou gardez en mode test (suffisant pour usage interne)
-
-**Etape 4 : Creer les identifiants OAuth 2.0**
-1. Allez dans **APIs & Services > Identifiants**
-2. Cliquez sur **"Creer des identifiants" > "ID client OAuth"**
-3. Type d'application : **Application Web**
-4. Nom : `FSAO Iris` (ou autre)
-5. **URI de redirection autorisee** : ajoutez exactement :
-   ```
-   https://votre-domaine.com/api/backup/drive/callback
-   ```
-6. Copiez le **Client ID** et le **Client Secret** generes
-
-**Etape 5 : Configurer le backend**
-1. Renseignez les variables dans `backend/.env` :
-   ```env
-   GOOGLE_CLIENT_ID=xxxx.apps.googleusercontent.com
-   GOOGLE_CLIENT_SECRET=GOCSPX-xxxx
-   GOOGLE_DRIVE_REDIRECT_URI=https://votre-domaine.com/api/backup/drive/callback
-   ```
-2. Redemarrez le backend :
-   ```bash
-   supervisorctl restart gmao-iris-backend
-   ```
-
-**Etape 6 : Connecter depuis l'application**
-1. Dans FSAO Iris : **Import/Export > Sauvegardes Automatiques**
-2. Cliquez sur **"Connecter Google Drive"**
-3. Autorisez l'acces dans la fenetre Google
-4. Vous devriez voir le statut **"Connecte"** en vert
-
-**Comportement des sauvegardes Google Drive :**
-- Les sauvegardes sont automatiquement stockees dans un dossier **"Backup FSAO"** sur Google Drive
-- Le dossier est cree automatiquement s'il n'existe pas
-- Vous pouvez egalement uploader manuellement un backup existant vers Google Drive via l'icone d'upload dans l'historique des sauvegardes
-
-### Checklist rapide Google Drive
-
-| Etape | Verification |
-|-------|-------------|
-| API Google Drive activee | Console Google > APIs & Services > Bibliotheque > Google Drive API > **Activee** |
-| Ecran de consentement configure | Console Google > APIs & Services > Ecran de consentement > **Configure** |
-| Identifiants OAuth crees | Console Google > APIs & Services > Identifiants > **ID client OAuth present** |
-| URI de redirection correcte | L'URI dans Google Cloud = `GOOGLE_DRIVE_REDIRECT_URI` dans `.env` |
-| Variables `.env` renseignees | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_DRIVE_REDIRECT_URI` |
-| Backend redemarre | `supervisorctl restart gmao-iris-backend` apres modification du `.env` |
-| Connexion dans l'app | Import/Export > Sauvegardes Automatiques > **Connecte (vert)** |
+Les fichiers `.env`, clés privées, certificats et identifiants OAuth ne doivent jamais être versionnés.
 
 ---
 
-## Utilisation
+## 8. Exploitation
 
-### Comptes par defaut (apres installation Proxmox)
+En exploitation, les points essentiels à surveiller sont :
 
-1. **Compte administrateur** : defini pendant l'installation
-2. **Compte de secours** : `buenogy@gmail.com` / `Admin2024!`
-
-> Changez ou supprimez le compte de secours en production.
-
-### Endpoints API principaux
-
-| Methode | Endpoint | Description |
-|---------|----------|-------------|
-| POST | `/api/auth/login` | Authentification |
-| GET | `/api/auth/me` | Profil utilisateur |
-| GET | `/api/work-orders` | Ordres de travail |
-| PUT | `/api/work-orders/{id}` | Modifier un OT (statut, assignation, description...) |
-| GET | `/api/equipments` | Equipements |
-| GET | `/api/preventive-maintenance` | Maintenance preventive |
-| GET | `/api/inventory` | Inventaire |
-| POST | `/api/export/{module}` | Export donnees (admin) |
-| POST | `/api/import/{module}` | Import donnees (admin) |
-| GET | `/api/backup/schedules` | Planifications de sauvegarde |
-| POST | `/api/backup/run` | Sauvegarde manuelle |
-| POST | `/api/backup/drive/upload/{id}` | Upload manuel d'un backup vers Google Drive |
-| GET | `/api/backup/drive/connect` | Connexion OAuth Google Drive |
-| GET | `/api/backup/drive/status` | Statut connexion Google Drive |
-| GET | `/api/version` | Version de l'application (dynamique depuis changelog) |
-| GET | `/api/bell-counts` | Compteurs cloche header (OT, ameliorations, preventif) |
-| GET | `/api/releases` | Journal des modifications (changelog) |
-| POST | `/api/releases` | Ajouter une version au changelog (admin) |
-| POST | `/api/releases/{id}/vote` | Voter (pouce haut/bas) sur une version |
-| GET | `/api/qr/equipment/{id}/image` | Generer le QR code d'un equipement (PNG) |
-| GET | `/api/qr/equipment/{id}/label` | Generer une etiquette QR imprimable (PNG) |
-| GET | `/api/qr/page/{id}` | Donnees page publique QR d'un equipement |
-| GET | `/api/qractions` | Actions rapides configurees pour les pages QR |
-| GET | `/api/qr/check-deps` | Diagnostic des dependances QR |
-| POST | `/api/updates/broadcast-warning` | Avertissement avant MAJ |
-| POST | `/api/ai/chat` | Chat avec l'assistante IA Adria |
-| POST | `/api/ai/checklist/generate-from-doc` | IA : generer checklist depuis document |
-| POST | `/api/ai/maintenance/generate-from-doc` | IA : generer plan maintenance depuis document |
-| POST | `/api/ai-maintenance/analyze-nonconformities` | IA : analyser non-conformites checklists |
-| POST | `/api/ai-maintenance/create-curative-wos` | IA : creer OT curatifs |
-| POST | `/api/ai-presqu-accident/analyze-root-causes` | IA : analyse causes racines (5 Pourquoi + Ishikawa) |
-| POST | `/api/ai-presqu-accident/find-similar` | IA : detection incidents similaires |
-| POST | `/api/ai-presqu-accident/analyze-trends` | IA : analyse tendances presqu'accidents |
-| POST | `/api/ai-presqu-accident/generate-report` | IA : rapport synthese QHSE |
-| POST | `/api/surveillance/create-batch-from-ai` | Correspondance intelligente Plan de Surveillance |
-| POST | `/api/surveillance/confirm-match` | Confirmation manuelle d'une correspondance |
-| GET | `/api/surveillance/rapport-stats` | KPIs du rapport de surveillance |
-| POST | `/api/qr/public/intervention-request` | Creation d'une DI publique (sans authentification) depuis le QR code |
-| POST | `/api/qr/public/intervention-request/{id}/attachments` | Ajout de pieces jointes a une DI publique |
-| GET | `/api/stats/intervention-requests` | Statistiques et KPIs des demandes d'intervention (en attente, temps de reponse) |
-| GET | `/api/intervention-requests/{id}/attachments/{att_id}` | Telecharger une piece jointe de DI (authentifie) |
-| GET | `/api/work-orders/{id}/attachments/{att_id}` | Telecharger une piece jointe d'OT (authentifie) |
-| GET | `/api/loto/` | Liste des consignations LOTO |
-| POST | `/api/loto/` | Creer une consignation LOTO |
-| GET | `/api/loto/{id}` | Detail d'une consignation |
-| DELETE | `/api/loto/{id}` | Supprimer une consignation (admin) |
-| POST | `/api/loto/{id}/workflow` | Action workflow (consigner, deconsigner...) |
-| POST | `/api/loto/{id}/cadenas` | Poser ou retirer un cadenas |
-| GET | `/api/loto/stats` | Statistiques des consignations |
-| GET | `/api/loto/by-linked` | Consignations par entite liee |
-| POST | `/api/push-notifications/register` | Enregistrer un token push (mobile) |
-| DELETE | `/api/push-notifications/unregister` | Desactiver un token push |
-| POST | `/api/push-notifications/test` | Envoyer une notification push de test |
-| GET | `/api/dashboard/widget-data` | Donnees temps reel pour les widgets du dashboard (ecart temps, charge OT, techniciens) |
-| GET | `/api/assignment-targets` | Cibles d'assignation : services (poles) puis utilisateurs actifs tries alphabetiquement |
-| GET/PUT | `/api/user-preferences` | Preferences utilisateur (layout dashboard, raccourcis, onglet actif) |
-| GET | `/api/custom-widgets?service={name}` | Widgets personnalises filtres par service |
-| GET | `/api/custom-widgets/tpl/list` | Templates de widgets predefinis |
-| POST | `/api/custom-widgets/tpl/{id}/create` | Creer un widget depuis un template |
-| POST | `/api/custom-widgets/upload/excel` | Upload de fichier Excel local (.xlsx, .xls, .csv) |
-| POST | `/api/custom-widgets/preview/excel-local/{id}` | Pre-visualisation interactive d'un fichier Excel uploade |
-| POST | `/api/custom-widgets/test/formula` | Tester une formule avec des valeurs de test |
-| GET | `/api/roles/services/list` | Liste des services pour les onglets du Dashboard Service |
-| POST | `/api/roles/migrate-permissions` | Migration des permissions manquantes pour roles existants |
-| PATCH | `/api/users/me/preferences` | Sauvegarder les preferences utilisateur (onglet actif, etc.) |
-| WS | `/ws/chat/` | Chat temps reel |
-| WS | `/ws/whiteboard/` | Tableau d'affichage |
-| WS | `/api/ws/realtime/{entity}` | Notifications temps reel |
-
-Documentation Swagger complete : `https://votre-domaine.com/docs` (identifiants dans `.env`)
+- disponibilité de MongoDB ;
+- état des services backend, frontend, Nginx et Supervisor ;
+- espace disque disponible pour les uploads et sauvegardes ;
+- validité du certificat SSL ;
+- état des sauvegardes locales et Google Drive ;
+- logs applicatifs ;
+- cohérence des données MongoDB ;
+- connectivité MQTT si les modules IoT / M.E.S. sont utilisés.
 
 ---
 
-## Administration
+## 9. Sécurité
 
-### Commandes Proxmox
+Avant une mise en production, vérifier au minimum :
 
-```bash
-# Entrer dans le container
-pct enter <CTID>
-
-# Statut des services
-supervisorctl status
-systemctl status mongod
-systemctl status nginx
-
-# Logs backend
-tail -f /var/log/gmao-iris-backend.err.log
-tail -f /var/log/gmao-iris-backend.out.log
-
-# Redemarrer le backend
-supervisorctl restart gmao-iris-backend
-
-# Tester et redemarrer Nginx
-nginx -t && systemctl reload nginx
-
-# Mise a jour manuelle
-cd /opt/gmao-iris && ./update.sh
-```
-
-### Sauvegardes
-
-**Via l'interface (recommande) :**
-- Import/Export > Sauvegardes Automatiques
-- Planifier des backups quotidiens/hebdomadaires/mensuels
-- Destinations : local, Google Drive, ou les deux
-- Les heures des planifications utilisent le fuseau horaire configure dans Parametres > Fuseau horaire
-- Upload manuel vers Google Drive : cliquez sur l'icone d'upload a cote d'un backup dans l'historique
-- Les fichiers sont stockes dans le dossier **"Backup FSAO"** sur Google Drive
-- Icone disquette dans le header : **vert** = backup recent reussi, **rouge** = echec, **gris** = aucun ou ancien
-
-**Via la ligne de commande :**
-```bash
-# Backup MongoDB
-mongodump --db gmao_iris --out /backup/fsao-$(date +%Y%m%d)
-
-# Snapshot Proxmox (depuis le host)
-vzdump <CTID> --mode snapshot --compress zstd
-```
-
-### SSL / Certificat
-
-```bash
-# Verifier le certificat
-certbot certificates
-
-# Renouveler manuellement
-certbot renew
-
-# Le renouvellement automatique est configure via cron ou certbot.timer
-```
+- génération d'une vraie `SECRET_KEY` ;
+- mots de passe administrateur uniques ;
+- configuration HTTPS ;
+- restriction des accès SSH et admin ;
+- sauvegardes régulières ;
+- absence de secrets dans le dépôt ;
+- revue des scripts externes chargés côté frontend ;
+- droits utilisateurs et rôles adaptés à l'organisation.
 
 ---
 
-## Depannage
+## 10. Notes de version
 
-### Backend ne demarre pas
+La version de référence actuelle du projet est :
 
-```bash
-# Verifier les logs
-tail -50 /var/log/gmao-iris-backend.err.log
-
-# Verifier MongoDB
-systemctl status mongod
-
-# Reinstaller les dependances
-cd /opt/gmao-iris/backend
-source venv/bin/activate
-pip install -r requirements.txt
-pip install emergentintegrations --extra-index-url https://d33sy5i8bnduwe.cloudfront.net/simple/
-supervisorctl restart gmao-iris-backend
+```text
+FSAO Iris 1.12.0
 ```
 
-### Erreur 502 Bad Gateway
-
-```bash
-# Verifier que le backend tourne
-supervisorctl status gmao-iris-backend
-
-# Redemarrer
-supervisorctl restart gmao-iris-backend
-sleep 5
-nginx -t && systemctl reload nginx
-```
-
-### Impossible de se connecter
-
-```bash
-cd /opt/gmao-iris/backend
-source venv/bin/activate
-
-# Lister les utilisateurs
-python3 -c "
-from pymongo import MongoClient
-import os
-from dotenv import load_dotenv
-load_dotenv()
-client = MongoClient(os.environ['MONGO_URL'])
-db = client[os.environ.get('DB_NAME', 'gmao_iris')]
-for user in db.users.find():
-    print(f\"Email: {user['email']}, Role: {user['role']}, Statut: {user.get('statut','?')}\")
-"
-```
-
-### Google Drive : erreur de connexion
-
-Si le callback OAuth echoue, le message d'erreur s'affiche dans un toast sur la page Import/Export.
-Causes frequentes :
-- **redirect_uri_mismatch** : L'URI dans Google Cloud Console ne correspond pas a `GOOGLE_DRIVE_REDIRECT_URI` dans le `.env`
-- **invalid_grant** : Le code d'autorisation a expire (reessayez)
-- **Packages manquants** : Verifiez que `google-auth-oauthlib` est installe (`pip list | grep google`)
-
-### Google Drive : erreur lors de l'upload (403)
-
-Si l'upload vers Google Drive echoue avec une erreur `HttpError 403 - accessNotConfigured` :
-1. **L'API Google Drive n'est pas activee** dans votre projet Google Cloud
-2. Allez sur : `https://console.developers.google.com/apis/api/drive.googleapis.com/overview?project=VOTRE_NUMERO_PROJET`
-3. Cliquez sur **"Activer"**
-4. Attendez **1-2 minutes** puis reessayez
-5. Si vous venez d'activer l'API, il peut falloir jusqu'a 5 minutes pour la propagation
-
-### Sauvegardes planifiees ne se declenchent pas
-
-Si les backups planifies ne s'executent pas a l'heure prevue :
-1. **Verifiez le fuseau horaire** : Parametres > Fuseau Horaire. Le scheduler utilise ce fuseau pour determiner l'heure de declenchement
-2. **Verifiez les logs** : `tail -100 /var/log/gmao-iris-backend.err.log | grep Backup`
-3. Vous devriez voir : `[Backup] Fuseau horaire configure: GMT+X` au demarrage
-4. **Redemarrez le backend** apres avoir modifie le fuseau horaire : `supervisorctl restart gmao-iris-backend`
-
-### PWA : Banniere d'installation absente
-
-Si la banniere d'installation de la PWA n'apparait pas :
-1. **HTTPS obligatoire** : La PWA necessite une connexion HTTPS (via Tailscale Funnel, Let's Encrypt, etc.)
-2. **Navigateur compatible** : Chrome (Android), Safari (iOS). Firefox ne supporte pas l'installation PWA
-3. **Deja installe ?** : Si l'application est deja installee, la banniere ne s'affiche plus
-4. **Cache** : Videz le cache du navigateur (`Ctrl+Shift+Delete` ou parametres Safari)
-5. **Sur iOS** : Il n'y a pas de banniere automatique. Utilisez le bouton Partager → "Sur l'ecran d'accueil"
-
-### Terminal SSH : Erreur de connexion WebSocket
-
-**Symptômes :** Le terminal SSH affiche "Erreur de connexion WebSocket" ou reste bloqué sur "Connexion à root@..."
-
-**Cause racine (Debian 12 / Proxmox LXC) :**
-Nginx résout `localhost` en IPv6 (`[::1]`) sur Debian 12, mais Uvicorn n'écoute que sur IPv4 (`127.0.0.1`). Résultat : `connect() failed (111: Connection refused)` sur toutes les routes `/api`, y compris le WebSocket SSH.
-
-**Vérification :**
-```bash
-# Ces erreurs dans les logs nginx confirment le problème IPv6 :
-tail -20 /var/log/nginx/error.log | grep "\[::1\]"
-# → connect() failed (111: Connection refused) upstream: "http://[::1]:8001/..."
-
-# Test direct du WebSocket backend (doit retourner 101) :
-curl -v -H "Upgrade: websocket" -H "Connection: Upgrade" \
-  -H "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==" \
-  -H "Sec-WebSocket-Version: 13" \
-  http://localhost:8001/api/ssh/ws 2>&1 | grep "HTTP/"
-# → HTTP/1.1 101 Switching Protocols  ← Backend OK, problème dans nginx
-```
-
-**Correctif nginx** (`/etc/nginx/sites-available/gmao-iris`) :
-
-Remplacer **tous** les `proxy_pass http://localhost:8001` par `proxy_pass http://127.0.0.1:8001`, et ajouter une location dédiée pour le WebSocket SSH **avant** le bloc `/api` :
-
-```nginx
-server {
-    listen 80;
-    server_name _;
-    client_max_body_size 200M;
-
-    location / {
-        root /opt/gmao-iris/frontend/build;
-        try_files $uri $uri/ /index.html;
-    }
-
-    # WebSocket SSH Terminal — AVANT /api (priorité nginx)
-    location /api/ssh/ws {
-        proxy_pass http://127.0.0.1:8001;   # 127.0.0.1 obligatoire (pas localhost)
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_read_timeout 3600s;
-        proxy_send_timeout 3600s;
-        proxy_buffering off;
-    }
-
-    location /api {
-        proxy_pass http://127.0.0.1:8001;   # 127.0.0.1 obligatoire (pas localhost)
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_read_timeout 300s;
-        proxy_send_timeout 300s;
-        proxy_buffering off;
-    }
-
-    location /ws/chat/ {
-        proxy_pass http://127.0.0.1:8001;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_read_timeout 86400;
-        proxy_send_timeout 86400;
-    }
-
-    location /ws/whiteboard/ {
-        proxy_pass http://127.0.0.1:8001;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_read_timeout 86400;
-        proxy_send_timeout 86400;
-    }
-}
-```
-
-**Application du correctif :**
-```bash
-sudo nginx -t && sudo systemctl reload nginx
-```
-
-> **Note :** Ce correctif est automatiquement appliqué par `gmao-iris-install.sh` et `backend/post-update.sh` depuis la version 1.11.0. Les installations existantes doivent le corriger manuellement une fois.
+Les détails fonctionnels sont suivis dans `CHANGELOG.md` et dans `updates/version.json`.
 
 ---
 
-### Terminal SSH : Authentification refusée
+## 11. Statut du projet
 
-```bash
-# Vérifier la config sshd sur le serveur cible
-sshd -T | grep -E "permitrootlogin|passwordauthentication"
+FSAO Iris est un projet applicatif industriel avancé, orienté usage interne, amélioration continue et digitalisation des processus maintenance/QHSE/production.
 
-# Pour autoriser root par mot de passe :
-# Dans /etc/ssh/sshd_config :
-# PermitRootLogin yes
-# PasswordAuthentication yes
-# systemctl restart sshd
-
-# Test paramiko direct (remplacer VOTRE_MDP) :
-/opt/gmao-iris/backend/venv/bin/python3 - <<'EOF'
-import paramiko
-c = paramiko.SSHClient()
-c.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-try:
-    c.connect('127.0.0.1', port=22, username='root', password='VOTRE_MDP',
-              timeout=10, allow_agent=False, look_for_keys=False)
-    _, out, _ = c.exec_command('whoami')
-    print("SUCCÈS :", out.read().decode().strip())
-    c.close()
-except Exception as e:
-    print("ÉCHEC :", type(e).__name__, str(e))
-EOF
-```
-
-
-
-Si les notifications push ne fonctionnent pas :
-1. **Verifiez les cles VAPID** dans `backend/.env` (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_CLAIMS_EMAIL`)
-2. **HTTPS obligatoire** : Les notifications Web Push ne fonctionnent qu'en HTTPS
-3. **Autorisez les notifications** : Le navigateur doit avoir autorise les notifications pour le site
-4. **Verifiez l'abonnement** : Dans Parametres > Notifications, verifiez que l'abonnement push est actif
-5. **Cache Service Worker** : Si le SW est ancien, videz le cache et rechargez. Le versionnement du cache dans `sw.js` force les mises a jour
-6. **Generez de nouvelles cles VAPID** si necessaire :
-   ```bash
-   cd /opt/gmao-iris/backend
-   source venv/bin/activate
-   python3 -c "from py_vapid import Vapid; v = Vapid(); v.generate_keys(); print('Public:', v.public_key); print('Private:', v.private_key)"
-   ```
-
----
-
-## Collections MongoDB
-
-| Collection | Description |
-|------------|-------------|
-| `users` | Utilisateurs et permissions |
-| `work_orders` | Ordres de travail |
-| `equipments` | Equipements (hierarchie parent/enfant) |
-| `preventive_maintenance` | Plans de maintenance preventive |
-| `inventory` | Pieces et stock |
-| `locations` | Emplacements |
-| `vendors` | Fournisseurs |
-| `backup_schedules` | Planifications de sauvegarde |
-| `backup_history` | Historique des sauvegardes |
-| `backup_status` | Statut derniere sauvegarde |
-| `drive_credentials` | Tokens OAuth Google Drive |
-| `surveillance_plans` | Plans de surveillance |
-| `presqu_accidents` | Presqu'accidents (enrichi: categorie, equipement, lesion, facteurs, temoins, conditions) |
-| `improvement_requests` | Demandes d'amelioration |
-| `loto_consignations` | Consignations LOTO (workflow, cadenas, signatures) |
-| `purchase_requests` | Demandes d'achat |
-| `releases` | Journal des modifications (changelog, feedback) |
-| `qractions` | Actions rapides pour pages QR (label, url, icone, auth) |
-| `chat_messages` | Messages de chat |
-| `consignes` | Consignes inter-equipes |
-| `documentations` | Documents |
-| `sensors` | Capteurs IoT |
-| `ai_analysis_history` | Historique des analyses IA (causes racines, tendances, rapports) |
-| `ai_pa_archives` | Archives des analyses IA presqu'accidents |
-| `custom_widgets` | Widgets personnalises par service |
-| `uploaded_excel_files` | Fichiers Excel uploades pour les widgets |
-| `notifications` | Notifications in-app (inclut alertes IA critiques) |
-| `device_tokens` | Tokens push pour notifications mobiles (Expo) |
-| `user_preferences` | Preferences utilisateur (layout dashboard, raccourcis, onglets) |
-| `counters` | Compteurs atomiques (numeros d'OT, DI, etc.) pour garantir l'unicite |
-| `service_responsables` | Responsables de services (pour les poles d'assignation) |
-| ... | Et 40+ autres collections |
-
----
-
-## Developpement
-
-### Frontend
-
-```bash
-cd frontend
-yarn install
-yarn start     # Serveur dev sur http://localhost:3000
-```
-
-### Backend
-
-```bash
-cd backend
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-uvicorn server:app --reload --port 8001
-```
-
----
-
-## Licence
-
-Ce projet est sous licence Proprietaire.
-
-## Support
-
-- Documentation API : `/docs` (Swagger) ou `/redoc`
-- Logs : `/var/log/gmao-iris-backend.err.log`
-- Issues : GitHub
-
----
-
-**Developpe par Greg**
-**Version 1.11.0 - Mars 2026**
+Le dépôt `GMAO_IA` sert de dépôt de travail et d'amélioration autour de FSAO Iris.
