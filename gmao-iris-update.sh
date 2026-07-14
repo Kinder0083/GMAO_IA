@@ -97,7 +97,10 @@ banner() {
 require_proxmox() {
   [[ "$(id -u)" -eq 0 ]] || err "Ce script doit être exécuté en root sur l'hôte Proxmox."
   command -v pct >/dev/null 2>&1 || err "La commande pct est introuvable. Exécuter ce script sur Proxmox."
-  command -v git >/dev/null 2>&1 || apt-get update && apt-get install -y git
+  if ! command -v git >/dev/null 2>&1; then
+    apt-get update
+    apt-get install -y git
+  fi
 }
 
 ensure_github_cli() {
