@@ -2,14 +2,9 @@
 ###############################################################################
 # FSAO Iris v1.12.0 - Mise à jour par archive Proxmox LXC / Debian 12
 #
-# Objectif :
-# - préparer une archive applicative depuis l'hôte Proxmox ;
-# - transférer cette archive dans un conteneur FSAO Iris existant ;
-# - préparer la nouvelle version en staging ;
-# - sauvegarder l'installation actuelle ;
-# - remplacer l'application uniquement après build réussi ;
-# - restaurer les fichiers .env existants ;
-# - redémarrer Supervisor et Nginx.
+# Usage :
+#   ./gmao-iris-update.sh          Mise à jour interactive
+#   ./gmao-iris-update.sh --check  Pré-vérification sans mise à jour
 ###############################################################################
 
 set -Eeuo pipefail
@@ -57,8 +52,18 @@ on_error() {
 
 trap cleanup EXIT
 trap 'on_error $LINENO' ERR
-
 exec > >(tee -a "$LOG_FILE") 2>&1
+
+usage() {
+  cat <<EOF
+${APP_NAME} v${APP_VERSION} - Mise à jour par archive
+
+Usage :
+  ./gmao-iris-update.sh          lancer la mise à jour interactive
+  ./gmao-iris-update.sh --check  vérifier les prérequis sans mettre à jour
+  ./gmao-iris-update.sh --help   afficher cette aide
+EOF
+}
 
 read_tty() {
   local prompt="$1"
@@ -85,7 +90,7 @@ yes_no() {
 }
 
 banner() {
-  clear
+  clear || true
   echo "╔════════════════════════════════════════════════════════════════╗"
   echo "║      ${APP_NAME} v${APP_VERSION} - Mise à jour par archive      ║"
   echo "╚════════════════════════════════════════════════════════════════╝"
@@ -94,12 +99,67 @@ banner() {
   echo ""
 }
 
+check_command() {
+  local command_name="$1"
+  local label="${2:-$1}"
+  if command -v "$command_name" >/dev/null 2>&1; then
+    ok "$label détecté"
+    return 0
+  fi
+  warn "$label manquant"
+  return 1
+}
+
+check_mode() {
+  banner
+  echo "Mode pré-vérification : aucune mise à jour ne sera lancée."
+  echo ""
+
+  local failures=0
+  [[ "$(id -u)" -eq 0 ]] && ok "Exécution root" || { warn "Le script doit être lancé en root"; failures=$((failures+1)); }
+  check_command pct "Proxmox pct" || failures=$((failures+1))
+  check_command git "Git" || warn "Git sera installé si nécessaire"
+  check_command tar "tar" || warn "tar doit être disponible pour préparer les archives"
+
+  if pct list >/dev/null 2>&1; then
+    ok "Liste des conteneurs accessible"
+    echo ""
+    pct list || true
+  else
+    warn "Impossible de lire les conteneurs LXC"
+    failures=$((failures+1))
+  fi
+
+  if getent hosts github.com >/dev/null 2>&1; then
+    ok "Résolution DNS GitHub OK"
+  else
+    warn "Résolution DNS GitHub impossible"
+    failures=$((failures+1))
+  fi
+
+  echo ""
+  echo "Espace disque indicatif :"
+  df -h / /opt 2>/dev/null || df -h /
+
+  echo ""
+  if [[ "$failures" -eq 0 ]]; then
+    ok "Pré-vérification terminée : hôte compatible pour un test de mise à jour."
+  else
+    warn "Pré-vérification terminée avec $failures point(s) bloquant(s) ou à corriger."
+    exit 1
+  fi
+}
+
 require_proxmox() {
   [[ "$(id -u)" -eq 0 ]] || err "Ce script doit être exécuté en root sur l'hôte Proxmox."
   command -v pct >/dev/null 2>&1 || err "La commande pct est introuvable. Exécuter ce script sur Proxmox."
   if ! command -v git >/dev/null 2>&1; then
     apt-get update
     apt-get install -y git
+  fi
+  if ! command -v tar >/dev/null 2>&1; then
+    apt-get update
+    apt-get install -y tar
   fi
 }
 
@@ -130,7 +190,6 @@ ensure_github_cli_auth() {
   fi
 
   warn "Connexion GitHub requise. Le script va lancer une connexion guidée."
-  echo ""
   echo "Le terminal affichera un code et une adresse GitHub."
   echo "Ouvrez l'adresse sur votre PC, connectez-vous à GitHub, puis validez le code."
   echo ""
@@ -208,6 +267,8 @@ select_container() {
       err "Mise à jour impossible si le conteneur est arrêté."
     fi
   fi
+
+  pct exec "$CTID" -- test -d "$APP_DIR" || err "Installation FSAO Iris introuvable dans $APP_DIR."
 }
 
 prepare_source_archive() {
@@ -224,7 +285,6 @@ prepare_source_archive() {
   fi
 
   local repo_dir="$HOST_WORKDIR/repo"
-
   case "$SOURCE_METHOD" in
     1)
       ensure_github_cli
@@ -235,7 +295,7 @@ prepare_source_archive() {
       ;;
     2)
       msg "Clonage via clé SSH déjà configurée..."
-      git ls-remote "$GIT_URL" "$BRANCH" >/dev/null || err "Accès SSH au dépôt impossible. Vérifiez la clé SSH de l'hôte Proxmox."
+      git ls-remote "$GIT_URL" "$BRANCH" >/dev/null || err "Accès SSH au dépôt impossible."
       git clone --depth 1 --branch "$BRANCH" "$GIT_URL" "$repo_dir"
       ;;
     3)
@@ -255,7 +315,6 @@ prepare_source_archive() {
     --exclude='*.pyc' \
     --exclude='__pycache__' \
     -czf "$SOURCE_ARCHIVE" -C "$repo_dir" .
-
   ok "Archive prête : $SOURCE_ARCHIVE"
 }
 
@@ -378,6 +437,13 @@ final_summary() {
 }
 
 main() {
+  case "${1:-}" in
+    --help|-h) usage; exit 0 ;;
+    --check) check_mode; exit 0 ;;
+    "") ;;
+    *) usage; err "Option inconnue : $1" ;;
+  esac
+
   banner
   require_proxmox
   select_container
