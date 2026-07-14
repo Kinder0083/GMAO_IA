@@ -147,16 +147,30 @@ Les modèles et clés IA doivent être configurés dans l'environnement applicat
 │   ├── public/                 # Assets statiques et PWA
 │   └── package.json            # Dépendances frontend
 │
+├── docs/                       # Documentation installation, sécurité, exploitation
 ├── updates/                    # Métadonnées de version et mise à jour
-├── gmao-iris-install.sh        # Script d'installation Proxmox LXC
-├── gmao-ssl-gdrive-setup.sh    # Script SSL + Google Drive
+├── gmao-iris-install.sh        # Script d'installation Proxmox LXC historique
+├── gmao-ssl-gdrive-setup.sh    # Script SSL + Google Drive nettoyé
 ├── CHANGELOG.md                # Historique des versions
 └── README.md                   # Présentation du projet
 ```
 
 ---
 
-## 6. Installation recommandée
+## 6. Documentation
+
+Les documents principaux sont regroupés dans `docs/` :
+
+| Document | Rôle |
+|---|---|
+| `docs/INSTALLATION.md` | Procédure d'installation de référence |
+| `docs/SECURITE.md` | Règles de sécurité minimales avant mise en service |
+| `docs/EXPLOITATION.md` | Bonnes pratiques d'exploitation, sauvegarde, mise à jour et restauration |
+| `docs/SCRIPTS.md` | Description des scripts et points de vigilance |
+
+---
+
+## 7. Installation recommandée
 
 L'installation recommandée se fait sur un serveur **Proxmox** via un container **LXC Debian 12**.
 
@@ -178,7 +192,7 @@ sudo bash gmao-ssl-gdrive-setup.sh
 
 ---
 
-## 7. Configuration minimale
+## 8. Configuration minimale
 
 La configuration principale se fait via le fichier `backend/.env`.
 
@@ -186,8 +200,10 @@ Variables importantes :
 
 ```env
 MONGO_URL=mongodb://localhost:27017
-DB_NAME=gmao_iris
+DB_NAME=fsao_iris
 SECRET_KEY=<cle_secrete_jwt>
+DOCS_USER=admin
+DOCS_PASS=<mot_de_passe_fort>
 FRONTEND_URL=https://votre-domaine.com
 BACKEND_URL=https://votre-domaine.com
 APP_URL=https://votre-domaine.com
@@ -206,7 +222,7 @@ Les fichiers `.env`, clés privées, certificats et identifiants OAuth ne doiven
 
 ---
 
-## 8. Exploitation
+## 9. Exploitation
 
 En exploitation, les points essentiels à surveiller sont :
 
@@ -221,7 +237,7 @@ En exploitation, les points essentiels à surveiller sont :
 
 ---
 
-## 9. Sécurité
+## 10. Sécurité
 
 Avant une mise en production, vérifier au minimum :
 
@@ -236,7 +252,7 @@ Avant une mise en production, vérifier au minimum :
 
 ---
 
-## 10. Notes de version
+## 11. Notes de version
 
 La version de référence actuelle du projet est :
 
@@ -248,7 +264,7 @@ Les détails fonctionnels sont suivis dans `CHANGELOG.md` et dans `updates/versi
 
 ---
 
-## 11. Statut du projet
+## 12. Statut du projet
 
 FSAO Iris est un projet applicatif industriel avancé, orienté usage interne, amélioration continue et digitalisation des processus maintenance/QHSE/production.
 
