@@ -9,10 +9,12 @@
 # - créer un conteneur LXC Debian 12 ;
 # - installer les dépendances système ;
 # - installer MongoDB 7 uniquement si le CPU supporte AVX ;
-# - déployer FSAO Iris depuis une archive préparée sur l'hôte Proxmox ;
+# - proposer plusieurs méthodes simples d'accès au dépôt privé GitHub ;
+# - préparer une archive applicative sur l'hôte Proxmox ;
+# - transférer cette archive dans le conteneur ;
 # - configurer backend, frontend, Supervisor et Nginx ;
 # - créer les comptes administrateurs demandés ;
-# - éviter de stocker un token GitHub dans le conteneur.
+# - éviter de stocker une clé SSH ou un token GitHub dans le conteneur.
 ###############################################################################
 
 set -Eeuo pipefail
@@ -22,11 +24,17 @@ APP_VERSION="1.12.0"
 APP_TECH_SLUG="gmao-iris"
 APP_DIR="/opt/${APP_TECH_SLUG}"
 DB_NAME="fsao_iris"
+DEFAULT_REPO_FULL="Kinder0083/GMAO_IA"
 DEFAULT_GIT_URL="git@github.com:Kinder0083/GMAO_IA.git"
 DEFAULT_BRANCH="main"
 LOG_FILE="/tmp/fsao-iris-install-$(date +%Y%m%d_%H%M%S).log"
 HOST_WORKDIR=""
 SOURCE_ARCHIVE=""
+SOURCE_METHOD=""
+REPO_FULL="$DEFAULT_REPO_FULL"
+GIT_URL="$DEFAULT_GIT_URL"
+BRANCH="$DEFAULT_BRANCH"
+LOCAL_ARCHIVE=""
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -40,19 +48,20 @@ ok() { echo -e "${GREEN}✓${NC} $1"; }
 warn() { echo -e "${YELLOW}⚠${NC} $1"; }
 err() { echo -e "${RED}✗${NC} $1"; exit 1; }
 
+cleanup() {
+  if [[ -n "${HOST_WORKDIR:-}" && -d "$HOST_WORKDIR" ]]; then
+    rm -rf "$HOST_WORKDIR" 2>/dev/null || true
+  fi
+}
+
 on_error() {
   local code=$?
   local line=${1:-?}
   echo -e "${RED}✗ Erreur ligne ${line} - code ${code}. Journal : ${LOG_FILE}${NC}" >&2
 }
-trap 'on_error $LINENO' ERR
 
-cleanup_host_workdir() {
-  if [[ -n "${HOST_WORKDIR:-}" && -d "$HOST_WORKDIR" ]]; then
-    rm -rf "$HOST_WORKDIR"
-  fi
-}
-trap cleanup_host_workdir EXIT
+trap cleanup EXIT
+trap 'on_error $LINENO' ERR
 
 exec > >(tee -a "$LOG_FILE") 2>&1
 
@@ -101,8 +110,94 @@ banner() {
 require_proxmox() {
   [[ "$(id -u)" -eq 0 ]] || err "Ce script doit être exécuté en root sur l'hôte Proxmox."
   command -v pct >/dev/null 2>&1 || err "La commande pct est introuvable. Exécuter ce script sur Proxmox."
-  command -v git >/dev/null 2>&1 || err "git est requis sur l'hôte Proxmox. Installez-le puis relancez."
-  command -v tar >/dev/null 2>&1 || err "tar est requis sur l'hôte Proxmox."
+}
+
+ensure_host_command() {
+  local command_name="$1"
+  local package_name="${2:-$1}"
+  if ! command -v "$command_name" >/dev/null 2>&1; then
+    msg "Installation du paquet hôte : $package_name"
+    apt-get update
+    apt-get install -y "$package_name"
+  fi
+}
+
+ensure_github_cli() {
+  if command -v gh >/dev/null 2>&1; then
+    ok "GitHub CLI détecté."
+    return
+  fi
+
+  msg "Installation de GitHub CLI sur l'hôte Proxmox..."
+  apt-get update
+  apt-get install -y curl ca-certificates gnupg
+  mkdir -p -m 755 /etc/apt/keyrings
+  curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+    | tee /etc/apt/keyrings/githubcli-archive-keyring.gpg >/dev/null
+  chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
+  echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+    > /etc/apt/sources.list.d/github-cli.list
+  apt-get update
+  apt-get install -y gh
+  ok "GitHub CLI installé."
+}
+
+ensure_github_cli_auth() {
+  if gh auth status -h github.com >/dev/null 2>&1; then
+    ok "Session GitHub CLI déjà active."
+    return
+  fi
+
+  warn "Connexion GitHub requise. Le script va lancer une connexion guidée."
+  echo ""
+  echo "Le terminal affichera un code et une adresse GitHub."
+  echo "Ouvrez l'adresse sur votre PC, connectez-vous à GitHub, puis validez le code."
+  echo ""
+  read -r -p "Appuyez sur Entrée pour continuer..." < /dev/tty
+
+  gh auth login --hostname github.com --git-protocol ssh --web
+  gh auth setup-git --hostname github.com >/dev/null 2>&1 || true
+  gh auth status -h github.com >/dev/null 2>&1 || err "Connexion GitHub CLI non validée."
+  ok "Connexion GitHub CLI validée."
+}
+
+select_source_method() {
+  echo ""
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo "  Accès au dépôt privé GitHub"
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo ""
+  echo "1) Connexion guidée GitHub automatique - recommandé"
+  echo "2) Clé SSH déjà configurée"
+  echo "3) URL Git personnalisée"
+  echo "4) Archive locale déjà téléchargée"
+  echo ""
+
+  SOURCE_METHOD=$(read_tty "Votre choix" "1")
+
+  case "$SOURCE_METHOD" in
+    1)
+      REPO_FULL=$(read_tty "Dépôt GitHub" "$DEFAULT_REPO_FULL")
+      BRANCH=$(read_tty "Branche" "$DEFAULT_BRANCH")
+      ;;
+    2)
+      GIT_URL=$(read_tty "URL SSH du dépôt" "$DEFAULT_GIT_URL")
+      BRANCH=$(read_tty "Branche" "$DEFAULT_BRANCH")
+      ;;
+    3)
+      GIT_URL=$(read_tty "URL Git complète du dépôt")
+      [[ -z "$GIT_URL" ]] && err "URL Git obligatoire."
+      BRANCH=$(read_tty "Branche" "$DEFAULT_BRANCH")
+      ;;
+    4)
+      LOCAL_ARCHIVE=$(read_tty "Chemin complet de l'archive .tar.gz locale")
+      [[ -f "$LOCAL_ARCHIVE" ]] || err "Archive introuvable : $LOCAL_ARCHIVE"
+      BRANCH="archive-locale"
+      ;;
+    *)
+      err "Choix invalide."
+      ;;
+  esac
 }
 
 detect_template() {
@@ -145,8 +240,8 @@ select_bridge() {
   for br in $BRIDGES; do
     local state ip
     state=$(ip link show "$br" 2>/dev/null | grep -o "state [A-Z]*" | awk '{print $2}' || true)
-    ip=$(ip addr show "$br" 2>/dev/null | grep "inet " | awk '{print $2}' | head -1 || true)
-    echo "  $i) $br - état: ${state:-inconnu} ${ip:+- IP: $ip}"
+    ip=$(ip -4 addr show "$br" 2>/dev/null | grep "inet " | awk '{print $2}' | head -1 || true)
+    echo "  $i) $br - ${state:-UNKNOWN} ${ip:+- IP: $ip}"
     i=$((i + 1))
   done
 
@@ -163,19 +258,24 @@ select_bridge() {
 }
 
 configure_network() {
-  local bridge_ip bridge_cidr bridge_gw prefix suggested_ip mode
-  bridge_ip=$(ip addr show "$SELECTED_BRIDGE" | grep "inet " | awk '{print $2}' | cut -d'/' -f1 | head -1 || true)
-  bridge_cidr=$(ip addr show "$SELECTED_BRIDGE" | grep "inet " | awk '{print $2}' | cut -d'/' -f2 | head -1 || true)
+  msg "Configuration réseau du conteneur..."
+  local bridge_ip bridge_cidr bridge_gw suggested_ip mode network_prefix
+  bridge_ip=$(ip -4 addr show "$SELECTED_BRIDGE" | grep "inet " | awk '{print $2}' | cut -d'/' -f1 | head -1 || true)
+  bridge_cidr=$(ip -4 addr show "$SELECTED_BRIDGE" | grep "inet " | awk '{print $2}' | cut -d'/' -f2 | head -1 || true)
   bridge_gw=$(ip route | grep "default.*$SELECTED_BRIDGE" | awk '{print $3}' | head -1 || true)
   [[ -z "$bridge_gw" ]] && bridge_gw="$bridge_ip"
-  [[ -z "$bridge_ip" || -z "$bridge_cidr" ]] && err "Impossible de détecter l'IP/CIDR du bridge $SELECTED_BRIDGE."
 
-  prefix=$(echo "$bridge_ip" | cut -d'.' -f1-3)
-  suggested_ip="${prefix}.150"
+  if [[ -n "$bridge_ip" ]]; then
+    network_prefix=$(echo "$bridge_ip" | cut -d'.' -f1-3)
+    suggested_ip="${network_prefix}.150"
+  else
+    suggested_ip="192.168.1.150"
+    bridge_cidr="24"
+    bridge_gw="192.168.1.1"
+  fi
 
-  echo "Configuration détectée : $bridge_ip/$bridge_cidr - gateway $bridge_gw"
-  echo "  1) IP statique"
-  echo "  2) DHCP"
+  echo "1) IP statique"
+  echo "2) DHCP"
   mode=$(read_tty "Mode réseau" "1")
 
   if [[ "$mode" == "1" ]]; then
@@ -193,11 +293,41 @@ configure_network() {
 
 prepare_source_archive() {
   msg "Préparation de l'archive applicative sur l'hôte Proxmox..."
+  ensure_host_command git git
+  ensure_host_command tar tar
+
   HOST_WORKDIR=$(mktemp -d /tmp/fsao-iris-src.XXXXXX)
-  local repo_dir="$HOST_WORKDIR/repo"
   SOURCE_ARCHIVE="$HOST_WORKDIR/fsao-iris-source.tar.gz"
 
-  git clone --depth 1 --branch "$BRANCH" "$GIT_URL" "$repo_dir"
+  if [[ "$SOURCE_METHOD" == "4" ]]; then
+    msg "Utilisation de l'archive locale : $LOCAL_ARCHIVE"
+    tar -tzf "$LOCAL_ARCHIVE" >/dev/null || err "Archive locale invalide ou illisible."
+    cp "$LOCAL_ARCHIVE" "$SOURCE_ARCHIVE"
+    ok "Archive locale copiée."
+    return
+  fi
+
+  local repo_dir="$HOST_WORKDIR/repo"
+
+  case "$SOURCE_METHOD" in
+    1)
+      ensure_github_cli
+      ensure_github_cli_auth
+      msg "Vérification de l'accès GitHub au dépôt $REPO_FULL..."
+      gh repo view "$REPO_FULL" >/dev/null || err "Accès refusé ou dépôt introuvable : $REPO_FULL"
+      gh repo clone "$REPO_FULL" "$repo_dir" -- --depth 1 --branch "$BRANCH"
+      ;;
+    2)
+      msg "Clonage via clé SSH déjà configurée..."
+      git ls-remote "$GIT_URL" "$BRANCH" >/dev/null || err "Accès SSH au dépôt impossible. Vérifiez la clé SSH de l'hôte Proxmox."
+      git clone --depth 1 --branch "$BRANCH" "$GIT_URL" "$repo_dir"
+      ;;
+    3)
+      msg "Clonage via URL Git personnalisée..."
+      git clone --depth 1 --branch "$BRANCH" "$GIT_URL" "$repo_dir"
+      ;;
+  esac
+
   rm -rf "$repo_dir/.git"
   tar \
     --exclude='backend/.env' \
@@ -205,6 +335,7 @@ prepare_source_archive() {
     --exclude='node_modules' \
     --exclude='backend/venv' \
     --exclude='frontend/build' \
+    --exclude='backups' \
     --exclude='*.pyc' \
     --exclude='__pycache__' \
     -czf "$SOURCE_ARCHIVE" -C "$repo_dir" .
@@ -234,7 +365,6 @@ create_container() {
 
 check_network() {
   msg "Vérification réseau du conteneur..."
-  pct exec "$CTID" -- ping -c 3 8.8.8.8 >/dev/null 2>&1 || err "Pas de connectivité Internet dans le conteneur."
   if ! pct exec "$CTID" -- getent hosts deb.debian.org >/dev/null 2>&1; then
     warn "DNS non fonctionnel. Configuration DNS temporaire."
     pct exec "$CTID" -- tee /etc/resolv.conf >/dev/null << 'DNS_EOF'
@@ -242,6 +372,7 @@ nameserver 1.1.1.1
 nameserver 8.8.8.8
 DNS_EOF
   fi
+  pct exec "$CTID" -- getent hosts deb.debian.org >/dev/null 2>&1 || err "DNS ou Internet non fonctionnel dans le conteneur."
   ok "Réseau OK."
 }
 
@@ -252,18 +383,16 @@ set -Eeuo pipefail
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get upgrade -y
-apt-get install -y locales curl wget git gnupg ca-certificates build-essential supervisor nginx ufw python3 python3-pip python3-venv smbclient mailutils postfix ffmpeg libgl1-mesa-glx libglib2.0-0 libsm6 libxext6 libxrender1 libxml2-dev libxslt1-dev
-
+apt-get install -y locales curl wget git gnupg ca-certificates build-essential supervisor nginx ufw python3 python3-pip python3-venv smbclient mailutils postfix ffmpeg tar iputils-ping libgl1-mesa-glx libglib2.0-0 libsm6 libxext6 libxrender1 libxml2-dev libxslt1-dev
 grep -q "en_US.UTF-8 UTF-8" /etc/locale.gen || echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen
 locale-gen >/dev/null 2>&1
-
 curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
 apt-get install -y nodejs
 npm install -g yarn
 
 if ! grep -q avx /proc/cpuinfo 2>/dev/null; then
   echo "ERREUR : CPU sans AVX. MongoDB 7.x nécessite AVX."
-  echo "Alternative : utiliser un hôte Proxmox compatible AVX ou déployer MongoDB sur un serveur séparé compatible."
+  echo "Alternative : utiliser un hôte AVX ou déployer MongoDB sur un serveur compatible."
   exit 42
 fi
 
@@ -278,7 +407,6 @@ mkdir -p /var/lib/mongodb /var/log/mongodb /run/mongodb
 chown -R mongodb:mongodb /var/lib/mongodb /var/log/mongodb /run/mongodb 2>/dev/null || true
 systemctl enable mongod
 systemctl start mongod
-
 echo "fsao-iris.local" > /etc/mailname
 debconf-set-selections <<< "postfix postfix/mailname string fsao-iris.local"
 debconf-set-selections <<< "postfix postfix/main_mailer_type string Internet Site"
@@ -406,7 +534,6 @@ async def main():
     client.close()
 asyncio.run(main())
 PYEOF
-
 if [ -f scripts/ensure_mes_indexes.py ]; then python3 scripts/ensure_mes_indexes.py || true; fi
 deactivate
 
@@ -437,10 +564,10 @@ chmod +x backend/post-update.sh
 cat > update.sh << 'UPDATESH'
 #!/bin/bash
 set -Eeuo pipefail
-cd /opt/gmao-iris
-if [ -n "$(git status --porcelain 2>/dev/null || true)" ]; then echo "Modifications locales présentes. Mise à jour annulée."; exit 1; fi
-echo "Cette installation a été déployée depuis une archive. Pour mettre à jour, relancez le script d'installation ou remplacez le dossier applicatif depuis une nouvelle archive contrôlée."
-exit 0
+echo "Cette installation a été déployée par archive sans dossier .git."
+echo "Pour mettre à jour, préparez une nouvelle archive depuis l'hôte Proxmox puis redéployez l'application."
+echo "Après remplacement des fichiers, lancez : bash /opt/gmao-iris/backend/post-update.sh"
+exit 1
 UPDATESH
 chmod +x update.sh
 APP_EOF
@@ -471,19 +598,13 @@ server {
     location /api/ssh/ws { proxy_pass http://127.0.0.1:8001; proxy_http_version 1.1; proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection "upgrade"; proxy_set_header Host $host; proxy_set_header X-Real-IP $remote_addr; proxy_read_timeout 3600s; proxy_send_timeout 3600s; proxy_buffering off; }
     location /api { proxy_pass http://127.0.0.1:8001; proxy_http_version 1.1; proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection "upgrade"; proxy_set_header Host $host; proxy_set_header X-Real-IP $remote_addr; proxy_read_timeout 300s; proxy_send_timeout 300s; proxy_buffering off; }
     location /ws/chat/ { proxy_pass http://127.0.0.1:8001; proxy_http_version 1.1; proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection "upgrade"; proxy_set_header Host $host; proxy_set_header X-Real-IP $remote_addr; proxy_read_timeout 86400; proxy_send_timeout 86400; }
-    location /ws/whiteboard/ { proxy_pass http://127.0.0.1:8001; proxy_http_version 1.1; proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection "upgrade"; proxy_set_header Host $host; proxy_set_header X-Real-IP $remote_addr; proxy_read_timeout 86400; proxy_send_timeout 86400; }
+    location /ws/whiteboard/ { proxy_pass http://127.0.0.1:8001; proxy_http_version 1.1; proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection "upgrade"; proxy_set_header Host $host; proxy_read_timeout 86400; proxy_send_timeout 86400; }
 }
 NGINX_EOF
   pct exec "$CTID" -- ln -sf /etc/nginx/sites-available/gmao-iris /etc/nginx/sites-enabled/
   pct exec "$CTID" -- nginx -t
   pct exec "$CTID" -- systemctl reload nginx
   pct exec "$CTID" -- bash -c 'ufw --force enable >/dev/null 2>&1 || true; ufw allow 22/tcp >/dev/null 2>&1 || true; ufw allow 80/tcp >/dev/null 2>&1 || true; ufw allow 443/tcp >/dev/null 2>&1 || true'
-}
-
-install_hook_if_requested() {
-  if [[ "$INSTALL_POST_MERGE_HOOK" == "o" ]]; then
-    warn "Hook post-merge ignoré : cette installation est déployée depuis archive sans dépôt Git dans le conteneur."
-  fi
 }
 
 final_summary() {
@@ -507,9 +628,8 @@ main() {
   detect_storage
   select_bridge
   configure_network
-
-  GIT_URL=$(read_tty "URL Git du dépôt à cloner sur l'hôte Proxmox" "$DEFAULT_GIT_URL")
-  BRANCH=$(read_tty "Branche" "$DEFAULT_BRANCH")
+  select_source_method
+  prepare_source_archive
 
   CTID=100
   while pct status "$CTID" >/dev/null 2>&1; do CTID=$((CTID+1)); done
@@ -536,8 +656,6 @@ main() {
 
   INSTALL_EMERGENT_INTEGRATIONS="n"
   yes_no "Installer la dépendance optionnelle emergentintegrations ?" "n" && INSTALL_EMERGENT_INTEGRATIONS="o"
-  INSTALL_POST_MERGE_HOOK="n"
-  yes_no "Installer le hook git post-merge automatique ?" "n" && INSTALL_POST_MERGE_HOOK="o"
   INSTALL_TAILSCALE="n"; TAILSCALE_AUTH_KEY=""; MANUAL_URL=""
   if yes_no "Configurer Tailscale ?" "n"; then INSTALL_TAILSCALE="o"; TAILSCALE_AUTH_KEY=$(read_secret_tty "Clé Tailscale"); fi
   MANUAL_URL=$(read_tty "URL publique/manuelle optionnelle" "")
@@ -545,11 +663,11 @@ main() {
   echo "Produit: $APP_NAME $APP_VERSION"
   echo "Conteneur: $CTID - $RAM Mo - $CORES CPU - ${DISK_SIZE} Go"
   echo "Réseau: $IP_CONFIG"
-  echo "Git hôte Proxmox: $GIT_URL ($BRANCH)"
+  echo "Source méthode: $SOURCE_METHOD"
+  echo "Branche/source: $BRANCH"
   echo "Base MongoDB: $DB_NAME"
   yes_no "Confirmer l'installation ?" "n" || err "Installation annulée."
 
-  prepare_source_archive
   create_container
   check_network
   install_system
@@ -562,7 +680,6 @@ main() {
   push_source_archive
   deploy_app
   configure_services
-  install_hook_if_requested
   final_summary
 }
 
