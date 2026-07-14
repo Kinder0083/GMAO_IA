@@ -16,6 +16,7 @@ Le script réalise les opérations suivantes :
 - installation des dépendances système ;
 - installation de Node.js, Python, Nginx, Supervisor et MongoDB ;
 - arrêt de l'installation si le CPU ne supporte pas AVX, afin d'éviter un fallback MongoDB fragile ;
+- choix guidé du mode d'accès au dépôt privé GitHub ;
 - préparation d'une archive applicative sur l'hôte Proxmox ;
 - transfert de cette archive dans le conteneur ;
 - génération de `backend/.env` ;
@@ -27,21 +28,34 @@ Le script réalise les opérations suivantes :
 - configuration Nginx ;
 - ouverture des ports nécessaires via UFW.
 
-### Stratégie de déploiement
+### Accès au dépôt privé GitHub
 
-Le dépôt n'est plus cloné directement dans le conteneur LXC.
+Le script propose maintenant quatre modes d'accès :
 
-La logique actuelle est :
+```text
+1) Connexion guidée GitHub automatique - recommandé
+2) Clé SSH déjà configurée
+3) URL Git personnalisée
+4) Archive locale déjà téléchargée
+```
 
-1. cloner le dépôt depuis l'hôte Proxmox ;
-2. supprimer le dossier `.git` ;
-3. créer une archive `tar.gz` propre ;
-4. pousser cette archive dans le conteneur avec `pct push` ;
-5. extraire l'application dans `/opt/gmao-iris`.
+#### 1. Connexion guidée GitHub automatique
 
-Cette approche évite de stocker une clé SSH ou un token GitHub dans le conteneur.
+Mode recommandé pour un utilisateur novice.
 
-### Accès GitHub
+Le script :
+
+1. installe `gh` si GitHub CLI n'est pas présent sur l'hôte Proxmox ;
+2. lance une connexion guidée avec GitHub ;
+3. vérifie l'accès au dépôt ;
+4. clone le dépôt depuis l'hôte Proxmox ;
+5. prépare l'archive applicative.
+
+L'utilisateur doit uniquement suivre le code affiché dans le terminal et valider la connexion GitHub dans son navigateur.
+
+#### 2. Clé SSH déjà configurée
+
+Mode recommandé si l'hôte Proxmox possède déjà une clé SSH autorisée sur GitHub.
 
 Par défaut, le script propose :
 
@@ -49,9 +63,50 @@ Par défaut, le script propose :
 git@github.com:Kinder0083/GMAO_IA.git
 ```
 
-Pour un dépôt privé, l'hôte Proxmox doit donc disposer d'un accès Git fonctionnel, par exemple via une clé SSH GitHub configurée pour l'utilisateur qui exécute le script.
+Le script teste l'accès avec `git ls-remote` avant de continuer.
 
-Aucun token GitHub n'est demandé ni stocké par le script.
+#### 3. URL Git personnalisée
+
+Mode avancé permettant de fournir une autre URL Git complète.
+
+Exemples :
+
+```bash
+git@github.com:Kinder0083/GMAO_IA.git
+https://github.com/Kinder0083/GMAO_IA.git
+```
+
+Pour un dépôt privé, l'URL choisie doit être compatible avec l'authentification déjà disponible sur l'hôte Proxmox.
+
+#### 4. Archive locale déjà téléchargée
+
+Mode de secours.
+
+L'utilisateur fournit le chemin complet d'une archive `.tar.gz` déjà présente sur l'hôte Proxmox.
+
+Le script vérifie que l'archive est lisible, puis la transfère directement dans le conteneur.
+
+### Stratégie de déploiement
+
+Le dépôt n'est pas cloné directement dans le conteneur LXC.
+
+La logique actuelle est :
+
+1. obtenir la source applicative depuis l'hôte Proxmox ;
+2. supprimer le dossier `.git` si le dépôt a été cloné ;
+3. créer une archive `tar.gz` propre ;
+4. pousser cette archive dans le conteneur avec `pct push` ;
+5. extraire l'application dans `/opt/gmao-iris`.
+
+Cette approche évite de stocker une clé SSH ou un token GitHub dans le conteneur.
+
+### Mise à jour
+
+Comme l'application est installée depuis une archive sans dossier `.git`, le conteneur ne fait plus de `git pull`.
+
+Le fichier `backend/post-update.sh` reste généré pour réinstaller les dépendances, reconstruire le frontend et redémarrer le backend après remplacement des fichiers applicatifs.
+
+Une procédure dédiée de mise à jour par archive pourra être ajoutée ultérieurement.
 
 ### Sécurité
 
@@ -60,6 +115,8 @@ Le script :
 - n'affiche pas le mot de passe root du conteneur ;
 - ne crée plus de compte admin de secours fixe ;
 - ne contient plus de mot de passe admin codé en dur ;
+- ne demande aucun token GitHub manuel ;
+- ne stocke aucune clé GitHub dans le conteneur ;
 - génère une clé `SECRET_KEY` forte avec `openssl rand -hex 32` ;
 - génère une clé `CAMERA_ENCRYPTION_KEY` ;
 - crée `backend/.env` avec permissions `600` ;
@@ -70,21 +127,14 @@ Le script :
 
 Avant d'exécuter le script :
 
-- vérifier que l'hôte Proxmox a accès au dépôt GitHub ;
+- vérifier que l'hôte Proxmox a accès à Internet ;
 - vérifier que le CPU de l'hôte supporte AVX ;
 - tester d'abord sur un environnement non critique ;
 - choisir une IP disponible si le mode IP statique est utilisé ;
 - préparer les mots de passe admin, root LXC et documentation API ;
+- si le mode GitHub CLI est utilisé, prévoir un accès au navigateur pour valider la connexion ;
 - vérifier l'espace disque disponible ;
 - conserver le backup du script original.
-
-### Backup disponible
-
-Le script original avant refonte est conservé ici :
-
-```bash
-backups/gmao-iris-install.sh.backup-2026-07-14
-```
 
 ## 2. `gmao-ssl-gdrive-setup.sh`
 
@@ -106,24 +156,3 @@ gmao-iris-backend
 ```
 
 Ces chemins sont conservés pour ne pas casser les installations existantes.
-
-## 3. Bonnes pratiques avant exécution
-
-Avant d'exécuter un script :
-
-1. lire le script complet ;
-2. vérifier le dépôt ciblé ;
-3. sauvegarder MongoDB si une installation existe déjà ;
-4. sauvegarder `backend/.env` si une installation existe déjà ;
-5. vérifier les mots de passe et clés ;
-6. tester sur un environnement non critique ;
-7. documenter l'action réalisée.
-
-## 4. Améliorations restantes possibles
-
-- ajouter un mode `--dry-run` ;
-- ajouter une vérification post-installation plus complète ;
-- ajouter une procédure de rollback automatisée ;
-- extraire la configuration Nginx dans un fichier modèle ;
-- extraire la configuration Supervisor dans un fichier modèle ;
-- ajouter un mode de mise à jour contrôlé par archive.
