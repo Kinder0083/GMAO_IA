@@ -2,18 +2,14 @@
 ###############################################################################
 # FSAO Iris v1.12.0 - Installation Proxmox LXC / Debian 12
 #
-# Backup avant refonte :
-# backups/gmao-iris-install.sh.backup-2026-07-14
+# Usage :
+#   ./gmao-iris-install.sh          Installation interactive
+#   ./gmao-iris-install.sh --check  Pré-vérification sans installation
 #
 # Objectif :
-# - créer un conteneur LXC Debian 12 ;
-# - installer les dépendances système ;
-# - installer MongoDB 7 uniquement si le CPU supporte AVX ;
-# - proposer plusieurs méthodes simples d'accès au dépôt privé GitHub ;
-# - préparer une archive applicative sur l'hôte Proxmox ;
-# - transférer cette archive dans le conteneur ;
-# - configurer backend, frontend, Supervisor et Nginx ;
-# - créer les comptes administrateurs demandés ;
+# - rendre l'installation utilisable par un novice ;
+# - préparer la source applicative sur l'hôte Proxmox ;
+# - transférer une archive propre dans le conteneur LXC ;
 # - éviter de stocker une clé SSH ou un token GitHub dans le conteneur.
 ###############################################################################
 
@@ -40,7 +36,6 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
-CYAN='\033[0;36m'
 NC='\033[0m'
 
 msg() { echo -e "${BLUE}▶${NC} $1"; }
@@ -62,8 +57,18 @@ on_error() {
 
 trap cleanup EXIT
 trap 'on_error $LINENO' ERR
-
 exec > >(tee -a "$LOG_FILE") 2>&1
+
+usage() {
+  cat <<EOF
+${APP_NAME} v${APP_VERSION} - Installation Proxmox
+
+Usage :
+  ./gmao-iris-install.sh          lancer l'installation interactive
+  ./gmao-iris-install.sh --check  vérifier les prérequis sans installer
+  ./gmao-iris-install.sh --help   afficher cette aide
+EOF
+}
 
 read_tty() {
   local prompt="$1"
@@ -98,13 +103,80 @@ yes_no() {
 }
 
 banner() {
-  clear
+  clear || true
   echo "╔════════════════════════════════════════════════════════════════╗"
   echo "║        ${APP_NAME} v${APP_VERSION} - Installation Proxmox       ║"
   echo "╚════════════════════════════════════════════════════════════════╝"
   echo ""
   echo "Journal : ${LOG_FILE}"
   echo ""
+}
+
+check_command() {
+  local command_name="$1"
+  local label="${2:-$1}"
+  if command -v "$command_name" >/dev/null 2>&1; then
+    ok "$label détecté"
+    return 0
+  fi
+  warn "$label manquant"
+  return 1
+}
+
+check_mode() {
+  banner
+  echo "Mode pré-vérification : aucune installation ne sera lancée."
+  echo ""
+
+  local failures=0
+
+  [[ "$(id -u)" -eq 0 ]] && ok "Exécution root" || { warn "Le script doit être lancé en root"; failures=$((failures+1)); }
+  check_command pct "Proxmox pct" || failures=$((failures+1))
+  check_command pveversion "Proxmox pveversion" || failures=$((failures+1))
+  check_command pvesm "Proxmox stockage pvesm" || failures=$((failures+1))
+  check_command pveam "Gestion templates pveam" || failures=$((failures+1))
+  check_command git "Git" || warn "Git sera installé si nécessaire"
+  check_command tar "tar" || warn "tar sera installé si nécessaire"
+  check_command curl "curl" || warn "curl sera installé si nécessaire"
+
+  if grep -q avx /proc/cpuinfo 2>/dev/null; then
+    ok "CPU compatible AVX pour MongoDB 7"
+  else
+    warn "CPU sans AVX : installation MongoDB 7 impossible sur cet hôte"
+    failures=$((failures+1))
+  fi
+
+  if ip link show | grep -qE '^[0-9]+: vmbr'; then
+    ok "Bridge Proxmox vmbr détecté"
+  else
+    warn "Aucun bridge vmbr détecté"
+    failures=$((failures+1))
+  fi
+
+  if ls /var/lib/vz/template/cache/*debian-12*.tar.* >/dev/null 2>&1; then
+    ok "Template Debian 12 déjà présent"
+  else
+    warn "Template Debian 12 absent localement ; le script tentera de le télécharger"
+  fi
+
+  if getent hosts github.com >/dev/null 2>&1; then
+    ok "Résolution DNS GitHub OK"
+  else
+    warn "Résolution DNS GitHub impossible"
+    failures=$((failures+1))
+  fi
+
+  echo ""
+  echo "Espace disque indicatif :"
+  df -h / /var/lib/vz 2>/dev/null || df -h /
+
+  echo ""
+  if [[ "$failures" -eq 0 ]]; then
+    ok "Pré-vérification terminée : hôte compatible pour un test d'installation."
+  else
+    warn "Pré-vérification terminée avec $failures point(s) bloquant(s) ou à corriger."
+    exit 1
+  fi
 }
 
 require_proxmox() {
@@ -149,7 +221,6 @@ ensure_github_cli_auth() {
   fi
 
   warn "Connexion GitHub requise. Le script va lancer une connexion guidée."
-  echo ""
   echo "Le terminal affichera un code et une adresse GitHub."
   echo "Ouvrez l'adresse sur votre PC, connectez-vous à GitHub, puis validez le code."
   echo ""
@@ -238,10 +309,10 @@ select_bridge() {
   echo "Bridges disponibles :"
   local i=1
   for br in $BRIDGES; do
-    local state ip
+    local state ipaddr
     state=$(ip link show "$br" 2>/dev/null | grep -o "state [A-Z]*" | awk '{print $2}' || true)
-    ip=$(ip -4 addr show "$br" 2>/dev/null | grep "inet " | awk '{print $2}' | head -1 || true)
-    echo "  $i) $br - ${state:-UNKNOWN} ${ip:+- IP: $ip}"
+    ipaddr=$(ip -4 addr show "$br" 2>/dev/null | grep "inet " | awk '{print $2}' | head -1 || true)
+    echo "  $i) $br - ${state:-UNKNOWN} ${ipaddr:+- IP: $ipaddr}"
     i=$((i + 1))
   done
 
@@ -308,7 +379,6 @@ prepare_source_archive() {
   fi
 
   local repo_dir="$HOST_WORKDIR/repo"
-
   case "$SOURCE_METHOD" in
     1)
       ensure_github_cli
@@ -319,7 +389,7 @@ prepare_source_archive() {
       ;;
     2)
       msg "Clonage via clé SSH déjà configurée..."
-      git ls-remote "$GIT_URL" "$BRANCH" >/dev/null || err "Accès SSH au dépôt impossible. Vérifiez la clé SSH de l'hôte Proxmox."
+      git ls-remote "$GIT_URL" "$BRANCH" >/dev/null || err "Accès SSH au dépôt impossible."
       git clone --depth 1 --branch "$BRANCH" "$GIT_URL" "$repo_dir"
       ;;
     3)
@@ -339,7 +409,6 @@ prepare_source_archive() {
     --exclude='*.pyc' \
     --exclude='__pycache__' \
     -czf "$SOURCE_ARCHIVE" -C "$repo_dir" .
-
   ok "Archive prête : $SOURCE_ARCHIVE"
 }
 
@@ -377,7 +446,7 @@ DNS_EOF
 }
 
 install_system() {
-  msg "Installation système..."
+  msg "Installation système dans le conteneur..."
   pct exec "$CTID" -- bash << 'SYS_EOF'
 set -Eeuo pipefail
 export DEBIAN_FRONTEND=noninteractive
@@ -499,7 +568,6 @@ INSTALL_EMERGENT_INTEGRATIONS=${INSTALL_EMERGENT_INTEGRATIONS}
 CAMERA_ENCRYPTION_KEY=${CAMERA_ENCRYPTION_KEY}
 ENV_EOF
 chmod 600 backend/.env
-
 cat > frontend/.env << FRONT_ENV_EOF
 NODE_ENV=production
 FRONT_ENV_EOF
@@ -513,7 +581,6 @@ pip install "bcrypt<4.0.0"
 if [[ "$INSTALL_EMERGENT_INTEGRATIONS" =~ ^[OoYy]$ ]]; then
   pip install emergentintegrations --extra-index-url https://d33sy5i8bnduwe.cloudfront.net/simple/ || true
 fi
-
 ADMIN_EMAIL="$ADMIN_EMAIL" ADMIN_PASS="$ADMIN_PASS" CREATE_SECONDARY_ADMIN="$CREATE_SECONDARY_ADMIN" SECONDARY_ADMIN_EMAIL="$SECONDARY_ADMIN_EMAIL" SECONDARY_ADMIN_PASS="$SECONDARY_ADMIN_PASS" DB_NAME="$DB_NAME" python3 << 'PYEOF'
 import asyncio, os, bcrypt
 from datetime import datetime, timezone
@@ -560,16 +627,6 @@ CI=false yarn build
 supervisorctl restart gmao-iris-backend || true
 POSTUPDATE
 chmod +x backend/post-update.sh
-
-cat > update.sh << 'UPDATESH'
-#!/bin/bash
-set -Eeuo pipefail
-echo "Cette installation a été déployée par archive sans dossier .git."
-echo "Pour mettre à jour, préparez une nouvelle archive depuis l'hôte Proxmox puis redéployez l'application."
-echo "Après remplacement des fichiers, lancez : bash /opt/gmao-iris/backend/post-update.sh"
-exit 1
-UPDATESH
-chmod +x update.sh
 APP_EOF
 }
 
@@ -598,7 +655,7 @@ server {
     location /api/ssh/ws { proxy_pass http://127.0.0.1:8001; proxy_http_version 1.1; proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection "upgrade"; proxy_set_header Host $host; proxy_set_header X-Real-IP $remote_addr; proxy_read_timeout 3600s; proxy_send_timeout 3600s; proxy_buffering off; }
     location /api { proxy_pass http://127.0.0.1:8001; proxy_http_version 1.1; proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection "upgrade"; proxy_set_header Host $host; proxy_set_header X-Real-IP $remote_addr; proxy_read_timeout 300s; proxy_send_timeout 300s; proxy_buffering off; }
     location /ws/chat/ { proxy_pass http://127.0.0.1:8001; proxy_http_version 1.1; proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection "upgrade"; proxy_set_header Host $host; proxy_set_header X-Real-IP $remote_addr; proxy_read_timeout 86400; proxy_send_timeout 86400; }
-    location /ws/whiteboard/ { proxy_pass http://127.0.0.1:8001; proxy_http_version 1.1; proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection "upgrade"; proxy_set_header Host $host; proxy_read_timeout 86400; proxy_send_timeout 86400; }
+    location /ws/whiteboard/ { proxy_pass http://127.0.0.1:8001; proxy_http_version 1.1; proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection "upgrade"; proxy_set_header Host $host; proxy_set_header X-Real-IP $remote_addr; proxy_read_timeout 86400; proxy_send_timeout 86400; }
 }
 NGINX_EOF
   pct exec "$CTID" -- ln -sf /etc/nginx/sites-available/gmao-iris /etc/nginx/sites-enabled/
@@ -622,14 +679,20 @@ final_summary() {
 }
 
 main() {
+  case "${1:-}" in
+    --help|-h) usage; exit 0 ;;
+    --check) check_mode; exit 0 ;;
+    "") ;;
+    *) usage; err "Option inconnue : $1" ;;
+  esac
+
   banner
   require_proxmox
+  select_source_method
   detect_template
   detect_storage
   select_bridge
   configure_network
-  select_source_method
-  prepare_source_archive
 
   CTID=100
   while pct status "$CTID" >/dev/null 2>&1; do CTID=$((CTID+1)); done
@@ -663,11 +726,11 @@ main() {
   echo "Produit: $APP_NAME $APP_VERSION"
   echo "Conteneur: $CTID - $RAM Mo - $CORES CPU - ${DISK_SIZE} Go"
   echo "Réseau: $IP_CONFIG"
-  echo "Source méthode: $SOURCE_METHOD"
-  echo "Branche/source: $BRANCH"
+  echo "Source: méthode $SOURCE_METHOD - branche $BRANCH"
   echo "Base MongoDB: $DB_NAME"
   yes_no "Confirmer l'installation ?" "n" || err "Installation annulée."
 
+  prepare_source_archive
   create_container
   check_network
   install_system
