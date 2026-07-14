@@ -5,11 +5,14 @@
 # Backup avant refonte :
 # backups/gmao-iris-install.sh.backup-2026-07-14
 #
-# Notes :
-# - Le dépôt est cloné via une URL Git fournie par l'utilisateur.
-# - Aucun token GitHub n'est demandé ni stocké par ce script.
-# - Pour un dépôt privé, utiliser de préférence une URL SSH avec une clé déjà
-#   configurée sur l'hôte Proxmox : git@github.com:Kinder0083/GMAO_IA.git
+# Objectif :
+# - créer un conteneur LXC Debian 12 ;
+# - installer les dépendances système ;
+# - installer MongoDB 7 uniquement si le CPU supporte AVX ;
+# - déployer FSAO Iris depuis une archive préparée sur l'hôte Proxmox ;
+# - configurer backend, frontend, Supervisor et Nginx ;
+# - créer les comptes administrateurs demandés ;
+# - éviter de stocker un token GitHub dans le conteneur.
 ###############################################################################
 
 set -Eeuo pipefail
@@ -22,6 +25,8 @@ DB_NAME="fsao_iris"
 DEFAULT_GIT_URL="git@github.com:Kinder0083/GMAO_IA.git"
 DEFAULT_BRANCH="main"
 LOG_FILE="/tmp/fsao-iris-install-$(date +%Y%m%d_%H%M%S).log"
+HOST_WORKDIR=""
+SOURCE_ARCHIVE=""
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -41,6 +46,13 @@ on_error() {
   echo -e "${RED}✗ Erreur ligne ${line} - code ${code}. Journal : ${LOG_FILE}${NC}" >&2
 }
 trap 'on_error $LINENO' ERR
+
+cleanup_host_workdir() {
+  if [[ -n "${HOST_WORKDIR:-}" && -d "$HOST_WORKDIR" ]]; then
+    rm -rf "$HOST_WORKDIR"
+  fi
+}
+trap cleanup_host_workdir EXIT
 
 exec > >(tee -a "$LOG_FILE") 2>&1
 
@@ -89,6 +101,8 @@ banner() {
 require_proxmox() {
   [[ "$(id -u)" -eq 0 ]] || err "Ce script doit être exécuté en root sur l'hôte Proxmox."
   command -v pct >/dev/null 2>&1 || err "La commande pct est introuvable. Exécuter ce script sur Proxmox."
+  command -v git >/dev/null 2>&1 || err "git est requis sur l'hôte Proxmox. Installez-le puis relancez."
+  command -v tar >/dev/null 2>&1 || err "tar est requis sur l'hôte Proxmox."
 }
 
 detect_template() {
@@ -123,24 +137,26 @@ detect_storage() {
 
 select_bridge() {
   msg "Détection des bridges réseau..."
-  local bridges
-  bridges=$(ip link show | grep -E '^[0-9]+: vmbr' | awk -F': ' '{print $2}' | sed 's/@.*//' || true)
-  [[ -z "$bridges" ]] && err "Aucun bridge vmbr détecté."
+  BRIDGES=$(ip link show | grep -E '^[0-9]+: vmbr' | awk -F': ' '{print $2}' | sed 's/@.*//' || true)
+  [[ -z "$BRIDGES" ]] && err "Aucun bridge vmbr détecté."
 
   echo "Bridges disponibles :"
-  local n=1
-  local br
-  for br in $bridges; do
-    echo "  $n) $br"
-    n=$((n + 1))
+  local i=1
+  for br in $BRIDGES; do
+    local state ip
+    state=$(ip link show "$br" 2>/dev/null | grep -o "state [A-Z]*" | awk '{print $2}' || true)
+    ip=$(ip addr show "$br" 2>/dev/null | grep "inet " | awk '{print $2}' | head -1 || true)
+    echo "  $i) $br - état: ${state:-inconnu} ${ip:+- IP: $ip}"
+    i=$((i + 1))
   done
 
-  if [[ $(echo "$bridges" | wc -l) -eq 1 ]]; then
-    SELECTED_BRIDGE=$(echo "$bridges" | head -1)
+  local count choice
+  count=$(echo "$BRIDGES" | wc -l)
+  if [[ "$count" -eq 1 ]]; then
+    SELECTED_BRIDGE=$(echo "$BRIDGES" | head -1)
   else
-    local choice
     choice=$(read_tty "Numéro du bridge" "1")
-    SELECTED_BRIDGE=$(echo "$bridges" | sed -n "${choice}p")
+    SELECTED_BRIDGE=$(echo "$BRIDGES" | sed -n "${choice}p")
   fi
   [[ -z "$SELECTED_BRIDGE" ]] && err "Bridge invalide."
   ok "Bridge sélectionné : $SELECTED_BRIDGE"
@@ -151,32 +167,49 @@ configure_network() {
   bridge_ip=$(ip addr show "$SELECTED_BRIDGE" | grep "inet " | awk '{print $2}' | cut -d'/' -f1 | head -1 || true)
   bridge_cidr=$(ip addr show "$SELECTED_BRIDGE" | grep "inet " | awk '{print $2}' | cut -d'/' -f2 | head -1 || true)
   bridge_gw=$(ip route | grep "default.*$SELECTED_BRIDGE" | awk '{print $3}' | head -1 || true)
-
-  [[ -z "$bridge_ip" ]] && err "Impossible de détecter l'adresse IP du bridge."
-  [[ -z "$bridge_cidr" ]] && bridge_cidr="24"
   [[ -z "$bridge_gw" ]] && bridge_gw="$bridge_ip"
+  [[ -z "$bridge_ip" || -z "$bridge_cidr" ]] && err "Impossible de détecter l'IP/CIDR du bridge $SELECTED_BRIDGE."
 
-  echo ""
-  echo "Configuration réseau détectée : $bridge_ip/$bridge_cidr via $bridge_gw"
+  prefix=$(echo "$bridge_ip" | cut -d'.' -f1-3)
+  suggested_ip="${prefix}.150"
+
+  echo "Configuration détectée : $bridge_ip/$bridge_cidr - gateway $bridge_gw"
   echo "  1) IP statique"
   echo "  2) DHCP"
-  mode=$(read_tty "Votre choix" "1")
+  mode=$(read_tty "Mode réseau" "1")
 
   if [[ "$mode" == "1" ]]; then
-    prefix=$(echo "$bridge_ip" | cut -d'.' -f1-3)
-    suggested_ip="${prefix}.150"
-    CONTAINER_IP=$(read_tty "IP du conteneur" "$suggested_ip")
+    CONTAINER_IP=$(read_tty "Adresse IP du conteneur" "$suggested_ip")
     CONTAINER_CIDR=$(read_tty "Masque CIDR" "$bridge_cidr")
     CONTAINER_GW=$(read_tty "Gateway" "$bridge_gw")
-    NET_MODE="static"
     IP_CONFIG="${CONTAINER_IP}/${CONTAINER_CIDR}"
+    NET_MODE="static"
   else
     CONTAINER_IP="dhcp"
-    CONTAINER_CIDR=""
-    CONTAINER_GW=""
-    NET_MODE="dhcp"
     IP_CONFIG="dhcp"
+    NET_MODE="dhcp"
   fi
+}
+
+prepare_source_archive() {
+  msg "Préparation de l'archive applicative sur l'hôte Proxmox..."
+  HOST_WORKDIR=$(mktemp -d /tmp/fsao-iris-src.XXXXXX)
+  local repo_dir="$HOST_WORKDIR/repo"
+  SOURCE_ARCHIVE="$HOST_WORKDIR/fsao-iris-source.tar.gz"
+
+  git clone --depth 1 --branch "$BRANCH" "$GIT_URL" "$repo_dir"
+  rm -rf "$repo_dir/.git"
+  tar \
+    --exclude='backend/.env' \
+    --exclude='frontend/.env' \
+    --exclude='node_modules' \
+    --exclude='backend/venv' \
+    --exclude='frontend/build' \
+    --exclude='*.pyc' \
+    --exclude='__pycache__' \
+    -czf "$SOURCE_ARCHIVE" -C "$repo_dir" .
+
+  ok "Archive prête : $SOURCE_ARCHIVE"
 }
 
 create_container() {
@@ -220,15 +253,17 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get upgrade -y
 apt-get install -y locales curl wget git gnupg ca-certificates build-essential supervisor nginx ufw python3 python3-pip python3-venv smbclient mailutils postfix ffmpeg libgl1-mesa-glx libglib2.0-0 libsm6 libxext6 libxrender1 libxml2-dev libxslt1-dev
+
 grep -q "en_US.UTF-8 UTF-8" /etc/locale.gen || echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen
 locale-gen >/dev/null 2>&1
+
 curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
 apt-get install -y nodejs
 npm install -g yarn
 
 if ! grep -q avx /proc/cpuinfo 2>/dev/null; then
   echo "ERREUR : CPU sans AVX. MongoDB 7.x nécessite AVX."
-  echo "Alternative : utiliser un hôte AVX ou déployer MongoDB sur un serveur compatible."
+  echo "Alternative : utiliser un hôte Proxmox compatible AVX ou déployer MongoDB sur un serveur séparé compatible."
   exit 42
 fi
 
@@ -243,6 +278,7 @@ mkdir -p /var/lib/mongodb /var/log/mongodb /run/mongodb
 chown -R mongodb:mongodb /var/lib/mongodb /var/log/mongodb /run/mongodb 2>/dev/null || true
 systemctl enable mongod
 systemctl start mongod
+
 echo "fsao-iris.local" > /etc/mailname
 debconf-set-selections <<< "postfix postfix/mailname string fsao-iris.local"
 debconf-set-selections <<< "postfix postfix/main_mailer_type string Internet Site"
@@ -288,14 +324,23 @@ install_tailscale() {
   fi
 }
 
+push_source_archive() {
+  msg "Transfert de l'archive applicative vers le conteneur..."
+  [[ -f "$SOURCE_ARCHIVE" ]] || err "Archive source introuvable."
+  pct push "$CTID" "$SOURCE_ARCHIVE" "/tmp/fsao-iris-source.tar.gz"
+  ok "Archive transférée."
+}
+
 deploy_app() {
-  msg "Clonage et installation de l'application..."
-  pct exec "$CTID" -- env APP_NAME="$APP_NAME" APP_DIR="$APP_DIR" APP_TECH_SLUG="$APP_TECH_SLUG" DB_NAME="$DB_NAME" GIT_URL="$GIT_URL" BRANCH="$BRANCH" FRONTEND_URL="$FRONTEND_URL" ADMIN_EMAIL="$ADMIN_EMAIL" ADMIN_PASS="$ADMIN_PASS" DOCS_PASS="$DOCS_PASS" CREATE_SECONDARY_ADMIN="$CREATE_SECONDARY_ADMIN" SECONDARY_ADMIN_EMAIL="$SECONDARY_ADMIN_EMAIL" SECONDARY_ADMIN_PASS="$SECONDARY_ADMIN_PASS" INSTALL_EMERGENT_INTEGRATIONS="$INSTALL_EMERGENT_INTEGRATIONS" bash << 'APP_EOF'
+  msg "Déploiement de l'application dans le conteneur..."
+  pct exec "$CTID" -- env APP_NAME="$APP_NAME" APP_DIR="$APP_DIR" APP_TECH_SLUG="$APP_TECH_SLUG" DB_NAME="$DB_NAME" FRONTEND_URL="$FRONTEND_URL" ADMIN_EMAIL="$ADMIN_EMAIL" ADMIN_PASS="$ADMIN_PASS" DOCS_PASS="$DOCS_PASS" CREATE_SECONDARY_ADMIN="$CREATE_SECONDARY_ADMIN" SECONDARY_ADMIN_EMAIL="$SECONDARY_ADMIN_EMAIL" SECONDARY_ADMIN_PASS="$SECONDARY_ADMIN_PASS" INSTALL_EMERGENT_INTEGRATIONS="$INSTALL_EMERGENT_INTEGRATIONS" bash << 'APP_EOF'
 set -Eeuo pipefail
-cd /opt
-rm -rf "$APP_TECH_SLUG" 2>/dev/null || true
-git clone -b "$BRANCH" "$GIT_URL" "$APP_TECH_SLUG"
+rm -rf "$APP_DIR"
+mkdir -p "$APP_DIR"
+tar -xzf /tmp/fsao-iris-source.tar.gz -C "$APP_DIR"
+rm -f /tmp/fsao-iris-source.tar.gz
 cd "$APP_DIR"
+
 SECRET_KEY=$(openssl rand -hex 32)
 CAMERA_ENCRYPTION_KEY=$(python3 -c "import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())")
 cat > backend/.env << ENV_EOF
@@ -326,9 +371,11 @@ INSTALL_EMERGENT_INTEGRATIONS=${INSTALL_EMERGENT_INTEGRATIONS}
 CAMERA_ENCRYPTION_KEY=${CAMERA_ENCRYPTION_KEY}
 ENV_EOF
 chmod 600 backend/.env
+
 cat > frontend/.env << FRONT_ENV_EOF
 NODE_ENV=production
 FRONT_ENV_EOF
+
 cd backend
 python3 -m venv venv
 source venv/bin/activate
@@ -338,6 +385,7 @@ pip install "bcrypt<4.0.0"
 if [[ "$INSTALL_EMERGENT_INTEGRATIONS" =~ ^[OoYy]$ ]]; then
   pip install emergentintegrations --extra-index-url https://d33sy5i8bnduwe.cloudfront.net/simple/ || true
 fi
+
 ADMIN_EMAIL="$ADMIN_EMAIL" ADMIN_PASS="$ADMIN_PASS" CREATE_SECONDARY_ADMIN="$CREATE_SECONDARY_ADMIN" SECONDARY_ADMIN_EMAIL="$SECONDARY_ADMIN_EMAIL" SECONDARY_ADMIN_PASS="$SECONDARY_ADMIN_PASS" DB_NAME="$DB_NAME" python3 << 'PYEOF'
 import asyncio, os, bcrypt
 from datetime import datetime, timezone
@@ -358,11 +406,14 @@ async def main():
     client.close()
 asyncio.run(main())
 PYEOF
+
 if [ -f scripts/ensure_mes_indexes.py ]; then python3 scripts/ensure_mes_indexes.py || true; fi
 deactivate
+
 cd "$APP_DIR/frontend"
 yarn install 2>&1 | tee /var/log/fsao-iris-yarn-install.log
 CI=false yarn build 2>&1 | tee /var/log/fsao-iris-yarn-build.log
+
 cd "$APP_DIR"
 cat > backend/post-update.sh << 'POSTUPDATE'
 #!/bin/bash
@@ -382,13 +433,14 @@ CI=false yarn build
 supervisorctl restart gmao-iris-backend || true
 POSTUPDATE
 chmod +x backend/post-update.sh
+
 cat > update.sh << 'UPDATESH'
 #!/bin/bash
 set -Eeuo pipefail
 cd /opt/gmao-iris
-if [ -n "$(git status --porcelain)" ]; then echo "Modifications locales présentes. Mise à jour annulée."; exit 1; fi
-git pull --ff-only origin main
-bash backend/post-update.sh
+if [ -n "$(git status --porcelain 2>/dev/null || true)" ]; then echo "Modifications locales présentes. Mise à jour annulée."; exit 1; fi
+echo "Cette installation a été déployée depuis une archive. Pour mettre à jour, relancez le script d'installation ou remplacez le dossier applicatif depuis une nouvelle archive contrôlée."
+exit 0
 UPDATESH
 chmod +x update.sh
 APP_EOF
@@ -430,7 +482,7 @@ NGINX_EOF
 
 install_hook_if_requested() {
   if [[ "$INSTALL_POST_MERGE_HOOK" == "o" ]]; then
-    pct exec "$CTID" -- bash -c 'cd /opt/gmao-iris && mkdir -p .git/hooks && printf "#!/bin/bash\n/opt/gmao-iris/backend/post-update.sh\n" > .git/hooks/post-merge && chmod +x .git/hooks/post-merge'
+    warn "Hook post-merge ignoré : cette installation est déployée depuis archive sans dépôt Git dans le conteneur."
   fi
 }
 
@@ -456,7 +508,7 @@ main() {
   select_bridge
   configure_network
 
-  GIT_URL=$(read_tty "URL Git du dépôt" "$DEFAULT_GIT_URL")
+  GIT_URL=$(read_tty "URL Git du dépôt à cloner sur l'hôte Proxmox" "$DEFAULT_GIT_URL")
   BRANCH=$(read_tty "Branche" "$DEFAULT_BRANCH")
 
   CTID=100
@@ -493,10 +545,11 @@ main() {
   echo "Produit: $APP_NAME $APP_VERSION"
   echo "Conteneur: $CTID - $RAM Mo - $CORES CPU - ${DISK_SIZE} Go"
   echo "Réseau: $IP_CONFIG"
-  echo "Git: $GIT_URL ($BRANCH)"
+  echo "Git hôte Proxmox: $GIT_URL ($BRANCH)"
   echo "Base MongoDB: $DB_NAME"
   yes_no "Confirmer l'installation ?" "n" || err "Installation annulée."
 
+  prepare_source_archive
   create_container
   check_network
   install_system
@@ -506,6 +559,7 @@ main() {
   [[ -n "$MANUAL_URL" ]] && FRONTEND_URL="$MANUAL_URL"
   install_tailscale
   [[ -n "${TAILSCALE_IP:-}" && -z "$MANUAL_URL" ]] && FRONTEND_URL="http://${TAILSCALE_IP}"
+  push_source_archive
   deploy_app
   configure_services
   install_hook_if_requested
