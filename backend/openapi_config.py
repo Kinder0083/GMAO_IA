@@ -1,29 +1,29 @@
 """
-Configuration OpenAPI/Swagger enrichie pour FSAO Atlas
+Configuration OpenAPI/Swagger enrichie pour FSAO Iris
 """
 
 # Description principale de l'API
 API_DESCRIPTION = """
-# FSAO Atlas - API de Fonctionnement des Services Assistee par Ordinateur
+# FSAO Iris - API de Fonctionnement des Services Assistée par Ordinateur
 
-Systeme complet de gestion de maintenance industrielle avec module **M.E.S.** (Manufacturing Execution System).
+Système complet de gestion de maintenance industrielle avec module **M.E.S.** (Manufacturing Execution System).
 
 ## Modules principaux
 
 | Module | Description |
 |--------|-------------|
 | **Authentification** | Connexion, inscription, gestion des tokens JWT |
-| **Ordres de Travail** | CRUD, pieces jointes, suivi du temps |
-| **Equipements** | Hierarchie d'actifs, statuts, historique |
-| **Maintenance Preventive** | Planification, frequences, execution automatique |
-| **M.E.S.** | Suivi de production en temps reel, TRS, rebuts, alertes |
-| **Inventaire** | Gestion des pieces de rechange, seuils d'alerte |
-| **MQTT** | Communication temps reel avec les capteurs |
-| **Rapports** | Generation PDF/Excel, planification d'envoi automatique |
+| **Ordres de Travail** | CRUD, pièces jointes, suivi du temps |
+| **Équipements** | Hiérarchie d'actifs, statuts, historique |
+| **Maintenance Préventive** | Planification, fréquences, exécution automatique |
+| **M.E.S.** | Suivi de production en temps réel, TRS, rebuts, alertes |
+| **Inventaire** | Gestion des pièces de rechange, seuils d'alerte |
+| **MQTT** | Communication temps réel avec les capteurs |
+| **Rapports** | Génération PDF/Excel, planification d'envoi automatique |
 
 ## Authentification
 
-Toutes les routes protegees necessitent un token JWT dans le header :
+Toutes les routes protégées nécessitent un token JWT dans le header :
 
 ```
 Authorization: Bearer <token>
@@ -31,15 +31,15 @@ Authorization: Bearer <token>
 
 Le token est obtenu via `POST /api/auth/login`.
 
-## Roles
+## Rôles
 
-- **ADMIN** : Acces complet a toutes les fonctionnalites
+- **ADMIN** : Accès complet à toutes les fonctionnalités
 - **RESPONSABLE_SERVICE** : Gestion de son service
-- **TECHNICIEN** : Operations de maintenance
+- **TECHNICIEN** : Opérations de maintenance
 - **OPERATEUR** : Consultation et saisie basique
 """
 
-# Tags ordonnes avec descriptions
+# Tags ordonnés avec descriptions
 OPENAPI_TAGS = [
     {
         "name": "Authentification",
@@ -47,59 +47,59 @@ OPENAPI_TAGS = [
     },
     {
         "name": "Utilisateurs",
-        "description": "Gestion des utilisateurs, permissions, mots de passe et roles"
+        "description": "Gestion des utilisateurs, permissions, mots de passe et rôles"
     },
     {
         "name": "Ordres de Travail",
-        "description": "Creation, suivi et cloture des ordres de travail (correctifs et preventifs)"
+        "description": "Création, suivi et clôture des ordres de travail (correctifs et préventifs)"
     },
     {
-        "name": "Equipements",
-        "description": "Gestion hierarchique des actifs industriels, statuts et historique"
+        "name": "Équipements",
+        "description": "Gestion hiérarchique des actifs industriels, statuts et historique"
     },
     {
-        "name": "Maintenance Preventive",
-        "description": "Planification des maintenances, frequences, pieces jointes et execution automatique"
+        "name": "Maintenance Préventive",
+        "description": "Planification des maintenances, fréquences, pièces jointes et exécution automatique"
     },
     {
         "name": "Checklists",
-        "description": "Modeles de checklists et historique d'execution"
+        "description": "Modèles de checklists et historique d'exécution"
     },
     {
         "name": "MES",
-        "description": "Manufacturing Execution System - Suivi de production, TRS (Disponibilite x Performance x Qualite), machines, rebuts, alertes, references produit et rapports"
+        "description": "Manufacturing Execution System - Suivi de production, TRS (Disponibilité x Performance x Qualité), machines, rebuts, alertes, références produit et rapports"
     },
     {
         "name": "Inventaire",
-        "description": "Gestion des pieces de rechange, quantites, seuils de reapprovisionnement et surveillance des stocks"
+        "description": "Gestion des pièces de rechange, quantités, seuils de réapprovisionnement et surveillance des stocks"
     },
     {
         "name": "Emplacements",
-        "description": "Gestion des localisations physiques des equipements et stocks"
+        "description": "Gestion des localisations physiques des équipements et stocks"
     },
     {
         "name": "mqtt",
-        "description": "Configuration et gestion des connexions MQTT pour la communication temps reel avec les capteurs"
+        "description": "Configuration et gestion des connexions MQTT pour la communication temps réel avec les capteurs"
     },
     {
         "name": "mqtt-logs",
-        "description": "Consultation et gestion des logs de messages MQTT recus"
+        "description": "Consultation et gestion des logs de messages MQTT reçus"
     },
     {
         "name": "sensors",
-        "description": "Configuration des capteurs IoT, lectures et historique des donnees"
+        "description": "Configuration des capteurs IoT, lectures et historique des données"
     },
     {
         "name": "alerts",
-        "description": "Systeme d'alertes configurables pour equipements et capteurs"
+        "description": "Système d'alertes configurables pour équipements et capteurs"
     },
     {
         "name": "cameras",
-        "description": "Gestion des cameras de surveillance industrielle"
+        "description": "Gestion des caméras de surveillance industrielle"
     },
     {
         "name": "frigate",
-        "description": "Integration Frigate NVR pour la detection d'objets et la surveillance video"
+        "description": "Intégration Frigate NVR pour la détection d'objets et la surveillance vidéo"
     },
     {
         "name": "Fournisseurs",
@@ -107,35 +107,35 @@ OPENAPI_TAGS = [
     },
     {
         "name": "Compteurs",
-        "description": "Suivi des compteurs d'equipements (heures de fonctionnement, cycles, etc.)"
+        "description": "Suivi des compteurs d'équipements (heures de fonctionnement, cycles, etc.)"
     },
     {
         "name": "purchase-requests",
-        "description": "Demandes d'achat de pieces et materiaux avec workflow de validation"
+        "description": "Demandes d'achat de pièces et matériaux avec workflow de validation"
     },
     {
         "name": "Historique Achats",
-        "description": "Historique des achats et consommation des pieces"
+        "description": "Historique des achats et consommation des pièces"
     },
     {
         "name": "demandes-arret",
-        "description": "Gestion des demandes d'arret de production (planification, suivi, approbation)"
+        "description": "Gestion des demandes d'arrêt de production (planification, suivi, approbation)"
     },
     {
         "name": "demandes-arret-attachments",
-        "description": "Pieces jointes associees aux demandes d'arret"
+        "description": "Pièces jointes associées aux demandes d'arrêt"
     },
     {
         "name": "demandes-arret-reports",
-        "description": "Rapports et statistiques des demandes d'arret"
+        "description": "Rapports et statistiques des demandes d'arrêt"
     },
     {
         "name": "documentations",
-        "description": "Gestion documentaire : poles de service, documents techniques, bons de travail et formulaires personnalises"
+        "description": "Gestion documentaire : pôles de service, documents techniques, bons de travail et formulaires personnalisés"
     },
     {
         "name": "surveillance",
-        "description": "Plan de surveillance : items de controle, inspections et suivi des non-conformites"
+        "description": "Plan de surveillance : items de contrôle, inspections et suivi des non-conformités"
     },
     {
         "name": "Surveillance History",
@@ -143,43 +143,43 @@ OPENAPI_TAGS = [
     },
     {
         "name": "presqu-accident",
-        "description": "Declaration et suivi des presqu'accidents et incidents de securite"
+        "description": "Déclaration et suivi des presqu'accidents et incidents de sécurité"
     },
     {
         "name": "autorisations",
-        "description": "Autorisations particulieres de travaux (permis de feu, ATEX, etc.)"
+        "description": "Autorisations particulières de travaux (permis de feu, ATEX, etc.)"
     },
     {
         "name": "Demandes Intervention",
-        "description": "Demandes d'intervention technique soumises par les operateurs"
+        "description": "Demandes d'intervention technique soumises par les opérateurs"
     },
     {
-        "name": "Demandes Amelioration",
-        "description": "Propositions d'amelioration continue"
+        "name": "Demandes Amélioration",
+        "description": "Propositions d'amélioration continue"
     },
     {
-        "name": "Ameliorations",
-        "description": "Suivi des projets d'amelioration en cours"
+        "name": "Améliorations",
+        "description": "Suivi des projets d'amélioration en cours"
     },
     {
         "name": "chat",
-        "description": "Messagerie instantanee en temps reel entre les membres de l'equipe"
+        "description": "Messagerie instantanée en temps réel entre les membres de l'équipe"
     },
     {
         "name": "Consignes",
-        "description": "Consignes de service transmises entre les equipes"
+        "description": "Consignes de service transmises entre les équipes"
     },
     {
         "name": "Notifications",
-        "description": "Systeme de notifications en temps reel"
+        "description": "Système de notifications en temps réel"
     },
     {
         "name": "Roles",
-        "description": "Gestion des roles personnalises et des responsables de service"
+        "description": "Gestion des rôles personnalisés et des responsables de service"
     },
     {
         "name": "Team Management",
-        "description": "Gestion des equipes, competences et affectations"
+        "description": "Gestion des équipes, compétences et affectations"
     },
     {
         "name": "Time Tracking",
@@ -187,15 +187,15 @@ OPENAPI_TAGS = [
     },
     {
         "name": "Weekly Reports",
-        "description": "Rapports hebdomadaires automatises avec modeles personnalisables"
+        "description": "Rapports hebdomadaires automatisés avec modèles personnalisables"
     },
     {
         "name": "Analytics Checklists",
-        "description": "Tableaux de bord et analyses des checklists executees"
+        "description": "Tableaux de bord et analyses des checklists exécutées"
     },
     {
         "name": "work-order-templates",
-        "description": "Ordres type : modeles reutilisables pour la creation rapide d'ordres de travail"
+        "description": "Ordres type : modèles réutilisables pour la création rapide d'ordres de travail"
     },
     {
         "name": "Custom Widgets",
@@ -203,7 +203,7 @@ OPENAPI_TAGS = [
     },
     {
         "name": "Whiteboard",
-        "description": "Tableau blanc collaboratif pour les reunions d'equipe"
+        "description": "Tableau blanc collaboratif pour les réunions d'équipe"
     },
     {
         "name": "Whiteboard Objects",
@@ -211,7 +211,7 @@ OPENAPI_TAGS = [
     },
     {
         "name": "User Preferences",
-        "description": "Preferences utilisateur (theme, langue, notifications, disposition du dashboard)"
+        "description": "Préférences utilisateur (thème, langue, notifications, disposition du dashboard)"
     },
     {
         "name": "Timezone",
@@ -219,11 +219,11 @@ OPENAPI_TAGS = [
     },
     {
         "name": "Import/Export",
-        "description": "Import et export de donnees en masse (Excel)"
+        "description": "Import et export de données en masse (Excel)"
     },
     {
         "name": "ai",
-        "description": "Assistant IA integre pour l'aide a la maintenance et l'analyse"
+        "description": "Assistant IA intégré pour l'aide à la maintenance et l'analyse"
     },
     {
         "name": "manual",
@@ -231,15 +231,15 @@ OPENAPI_TAGS = [
     },
     {
         "name": "SSH Terminal",
-        "description": "Terminal SSH distant pour l'acces aux equipements connectes"
+        "description": "Terminal SSH distant pour l'accès aux équipements connectés"
     },
     {
         "name": "tailscale",
-        "description": "Integration Tailscale VPN pour l'acces reseau securise"
+        "description": "Intégration Tailscale VPN pour l'accès réseau sécurisé"
     },
     {
-        "name": "Parametres",
-        "description": "Configuration globale du systeme et parametres SMTP"
+        "name": "Paramètres",
+        "description": "Configuration globale du système et paramètres SMTP"
     },
     {
         "name": "Support",
@@ -251,25 +251,25 @@ OPENAPI_TAGS = [
     },
     {
         "name": "Administration",
-        "description": "Outils d'administration : reinitialisation des donnees et gestion avancee"
+        "description": "Outils d'administration : réinitialisation des données et gestion avancée"
     },
     {
         "name": "Service Manager",
-        "description": "Tableau de bord responsable de service : statut, equipe et statistiques"
+        "description": "Tableau de bord responsable de service : statut, équipe et statistiques"
     },
     {
-        "name": "Systeme",
-        "description": "Informations systeme et version de l'application"
+        "name": "Système",
+        "description": "Informations système et version de l'application"
     },
 ]
 
-# Exemples de reponses d'erreur reutilisables
+# Exemples de réponses d'erreur réutilisables
 ERROR_401 = {
     401: {
-        "description": "Non authentifie - Token JWT manquant ou invalide",
+        "description": "Non authentifié - Token JWT manquant ou invalide",
         "content": {
             "application/json": {
-                "example": {"detail": "Token invalide ou expire"}
+                "example": {"detail": "Token invalide ou expiré"}
             }
         }
     }
@@ -277,10 +277,10 @@ ERROR_401 = {
 
 ERROR_403 = {
     403: {
-        "description": "Acces refuse - Permissions insuffisantes",
+        "description": "Accès refusé - Permissions insuffisantes",
         "content": {
             "application/json": {
-                "example": {"detail": "Acces refuse. Permissions insuffisantes."}
+                "example": {"detail": "Accès refusé. Permissions insuffisantes."}
             }
         }
     }
@@ -288,10 +288,10 @@ ERROR_403 = {
 
 ERROR_404 = {
     404: {
-        "description": "Ressource non trouvee",
+        "description": "Ressource non trouvée",
         "content": {
             "application/json": {
-                "example": {"detail": "Element non trouve"}
+                "example": {"detail": "Élément non trouvé"}
             }
         }
     }
@@ -299,7 +299,7 @@ ERROR_404 = {
 
 ERROR_422 = {
     422: {
-        "description": "Erreur de validation des donnees",
+        "description": "Erreur de validation des données",
         "content": {
             "application/json": {
                 "example": {"detail": [{"loc": ["body", "field"], "msg": "field required", "type": "value_error.missing"}]}
