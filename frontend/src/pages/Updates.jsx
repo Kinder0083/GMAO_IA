@@ -9,6 +9,7 @@ import {
   Clock,
   Download,
   FileText,
+  Key,
   Package,
   RefreshCw,
   RotateCcw,
@@ -34,11 +35,18 @@ const StatusBadge = ({ type = 'neutral', children }) => {
   return <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${classes[type]}`}>{children}</span>;
 };
 
-const LogBox = ({ content }) => (
-  <pre className="max-h-96 overflow-y-auto rounded-lg bg-gray-900 p-4 text-xs leading-relaxed text-green-300 whitespace-pre-wrap">
-    {content || 'Aucun contenu.'}
-  </pre>
-);
+const AccessBadge = ({ label, status, detail }) => {
+  const type = status === true ? 'ok' : status === false ? 'error' : 'warning';
+  return (
+    <div className="rounded-lg border bg-white p-4">
+      <div className="flex items-center justify-between gap-3">
+        <p className="font-medium text-gray-900">{label}</p>
+        <StatusBadge type={type}>{status === true ? 'OK' : status === false ? 'Erreur' : 'Non testé'}</StatusBadge>
+      </div>
+      {detail && <p className="mt-2 text-sm text-gray-600 break-words">{detail}</p>}
+    </div>
+  );
+};
 
 const InputField = ({ label, value, onChange, placeholder, help }) => (
   <div className="space-y-1">
@@ -53,29 +61,29 @@ const InputField = ({ label, value, onChange, placeholder, help }) => (
   </div>
 );
 
-const AccessBadge = ({ label, status, detail }) => (
-  <div className="rounded-lg border bg-gray-50 p-3">
-    <div className="flex items-center justify-between gap-3">
-      <div>
-        <p className="text-sm font-medium text-gray-900">{label}</p>
-        {detail && <p className="mt-1 text-xs text-gray-500">{detail}</p>}
-      </div>
-      <StatusBadge type={status === true ? 'ok' : status === false ? 'error' : 'neutral'}>
-        {status === true ? 'OK' : status === false ? 'Erreur' : 'Non testé'}
-      </StatusBadge>
-    </div>
-  </div>
+const LogBox = ({ content }) => (
+  <pre className="max-h-96 overflow-y-auto rounded-lg bg-gray-900 p-4 text-xs leading-relaxed text-green-300 whitespace-pre-wrap">
+    {content || 'Aucun contenu.'}
+  </pre>
 );
+
+const formatBytes = (size) => {
+  if (!size) return '';
+  if (size > 1024 * 1024) return `${Math.round(size / 1024 / 1024)} Mo`;
+  if (size > 1024) return `${Math.round(size / 1024)} Ko`;
+  return `${size} o`;
+};
 
 const Updates = () => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [checking, setChecking] = useState(false);
+  const [accessChecking, setAccessChecking] = useState(false);
   const [prechecking, setPrechecking] = useState(false);
   const [updating, setUpdating] = useState(false);
   const [repoSaving, setRepoSaving] = useState(false);
   const [repoTesting, setRepoTesting] = useState(false);
-  const [accessChecking, setAccessChecking] = useState(false);
+  const [rollbacking, setRollbacking] = useState(false);
 
   const [currentVersion, setCurrentVersion] = useState('');
   const [latestVersion, setLatestVersion] = useState(null);
@@ -93,14 +101,14 @@ const Updates = () => {
   const [serverLog, setServerLog] = useState('');
   const [serverLogInfo, setServerLogInfo] = useState(null);
   const [serverLogLoading, setServerLogLoading] = useState(false);
-
-  const [expandedServerLog, setExpandedServerLog] = useState(true);
-  const [expandedChangelog, setExpandedChangelog] = useState(false);
-  const [expandedHistory, setExpandedHistory] = useState(false);
-  const [expandedBackups, setExpandedBackups] = useState(false);
-  const [expandedRepoSettings, setExpandedRepoSettings] = useState(false);
   const [precheckResult, setPrecheckResult] = useState(null);
   const [updateLogs, setUpdateLogs] = useState([]);
+
+  const [expandedServerLog, setExpandedServerLog] = useState(true);
+  const [expandedBackups, setExpandedBackups] = useState(true);
+  const [expandedChangelog, setExpandedChangelog] = useState(false);
+  const [expandedHistory, setExpandedHistory] = useState(false);
+  const [expandedRepoSettings, setExpandedRepoSettings] = useState(false);
 
   useEffect(() => {
     loadUpdateInfo();
@@ -128,10 +136,7 @@ const Updates = () => {
   const loadServerLog = async (showToast = true) => {
     try {
       setServerLogLoading(true);
-      const response = await axios.get(`${BACKEND_URL}/api/updates/log`, {
-        headers: authHeaders(),
-        timeout: 15000,
-      });
+      const response = await axios.get(`${BACKEND_URL}/api/updates/log`, { headers: authHeaders(), timeout: 15000 });
       if (response.data.found) {
         setServerLog(response.data.content || '');
         setServerLogInfo({
@@ -166,7 +171,7 @@ const Updates = () => {
       if (showToast) {
         toast({
           title: response.data.success ? 'Accès dépôt validé' : 'Accès dépôt incomplet',
-          description: response.data.success ? 'API GitHub et git fetch sont opérationnels.' : 'Consultez le détail API/Git fetch.',
+          description: response.data.success ? 'API GitHub et git fetch sont opérationnels.' : 'Consultez les détails API/Git fetch.',
           variant: response.data.success ? 'default' : 'destructive',
         });
       }
@@ -402,6 +407,32 @@ const Updates = () => {
     }
   };
 
+  const handleAppRollback = async (backup) => {
+    const confirmed = window.confirm(
+      `Restaurer la sauvegarde applicative suivante ?\n\n${backup.name}\n\n` +
+      'Cette action restaure les fichiers applicatifs et redémarre les services si nécessaire.\n' +
+      'Elle ne restaure pas automatiquement MongoDB. Continuer ?'
+    );
+    if (!confirmed) return;
+
+    try {
+      setRollbacking(true);
+      setUpdateLogs([`↩️ Rollback applicatif demandé : ${backup.name}`]);
+      const response = await axios.post(`${BACKEND_URL}/api/updates/app-rollback`, { backup_path: backup.path }, {
+        headers: authHeaders(),
+        timeout: 20000,
+      });
+      setUpdateLogs(prev => [...prev, response.data.message || 'Rollback lancé.']);
+      toast({ title: 'Rollback lancé', description: 'La restauration applicative est en cours dans le LXC.' });
+      await waitForBackendReady(currentVersion);
+    } catch (error) {
+      setUpdateLogs(prev => [...prev, `❌ ${error.response?.data?.detail || error.message || 'Erreur inconnue'}`]);
+      toast({ title: 'Erreur rollback', description: error.response?.data?.detail || 'Impossible de lancer le rollback.', variant: 'destructive' });
+    } finally {
+      setRollbacking(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex h-96 items-center justify-center">
@@ -421,15 +452,19 @@ const Updates = () => {
           <p className="mt-1 text-gray-600">Mise à jour graphique exécutée directement dans le conteneur LXC.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={handleRefresh} disabled={checking || updating}>
+          <Button variant="outline" onClick={handleRefresh} disabled={checking || updating || rollbacking}>
             <RefreshCw size={18} className={`mr-2 ${checking ? 'animate-spin' : ''}`} />
             Vérifier
           </Button>
-          <Button variant="outline" onClick={runPrecheck} disabled={prechecking || updating}>
+          <Button variant="outline" onClick={() => runRepositoryAccessCheck(null, true)} disabled={accessChecking || updating || rollbacking}>
+            <ShieldCheck size={18} className={`mr-2 ${accessChecking ? 'animate-spin' : ''}`} />
+            Tester accès
+          </Button>
+          <Button variant="outline" onClick={runPrecheck} disabled={prechecking || updating || rollbacking}>
             <ShieldCheck size={18} className={`mr-2 ${prechecking ? 'animate-spin' : ''}`} />
             Pré-vérifier
           </Button>
-          <Button onClick={handleApplyUpdate} disabled={updating} className="bg-blue-600 hover:bg-blue-700 text-white">
+          <Button onClick={handleApplyUpdate} disabled={updating || rollbacking} className="bg-blue-600 hover:bg-blue-700 text-white">
             <Download size={18} className={`mr-2 ${updating ? 'animate-spin' : ''}`} />
             {updating ? 'Mise à jour en cours...' : 'Mettre à jour maintenant'}
           </Button>
@@ -455,7 +490,7 @@ const Updates = () => {
             </div>
             <div>
               <div className="mb-2 flex items-center gap-3"><Settings size={24} className="text-gray-600" /><h3 className="text-lg font-semibold text-gray-900">Dépôt actif</h3></div>
-              <p className="text-lg font-semibold text-gray-900">{repositoryConfig?.full_name || `${repoForm.github_user}/${repoForm.github_repo}`}</p>
+              <p className="text-lg font-semibold text-gray-900 break-words">{repositoryConfig?.full_name || `${repoForm.github_user}/${repoForm.github_repo}`}</p>
               <p className="mt-1 text-sm text-gray-500">Branche {repositoryConfig?.github_branch || repoForm.github_branch || 'main'}</p>
               {remoteCommit() && <p className="mt-1 text-xs text-gray-500">Commit distant {remoteCommit()}</p>}
             </div>
@@ -467,7 +502,7 @@ const Updates = () => {
         <CardHeader>
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <CardTitle className="flex items-center gap-2"><ShieldCheck size={20} />Accès au dépôt sélectionné</CardTitle>
-            <Button variant="outline" size="sm" onClick={() => runRepositoryAccessCheck(null, true)} disabled={accessChecking || updating}>
+            <Button variant="outline" size="sm" onClick={() => runRepositoryAccessCheck(null, true)} disabled={accessChecking || updating || rollbacking}>
               <RefreshCw size={14} className={`mr-2 ${accessChecking ? 'animate-spin' : ''}`} />
               Tester les accès
             </Button>
@@ -502,9 +537,9 @@ const Updates = () => {
         </Card>
       )}
 
-      {updating && updateLogs.length > 0 && (
+      {(updating || rollbacking || updateLogs.length > 0) && (
         <Card className="bg-gray-900 text-white">
-          <CardHeader><CardTitle className="text-white">Suivi de la mise à jour</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-white">Suivi des actions</CardTitle></CardHeader>
           <CardContent><div className="max-h-64 overflow-y-auto space-y-1 font-mono text-sm">{updateLogs.map((line, index) => <div key={index}>{line}</div>)}</div></CardContent>
         </Card>
       )}
@@ -526,21 +561,33 @@ const Updates = () => {
         {expandedBackups && (
           <CardContent>
             <p className="mb-4 text-sm text-gray-600">Dossier : <code>{backupRoot || '/opt/gmao-iris/backups'}</code></p>
-            {backups.length === 0 ? <p className="py-4 text-center text-gray-500">Aucune sauvegarde détectée.</p> : <div className="space-y-2">{backups.map((backup) => <div key={backup.path} className="rounded-lg border bg-gray-50 p-3"><div className="flex items-center justify-between gap-3"><div><p className="font-medium text-gray-900">{backup.name}</p><p className="text-xs text-gray-500">{backup.path}</p><p className="text-xs text-gray-500">{backup.type === 'mongodb' ? 'Sauvegarde MongoDB' : 'Sauvegarde applicative'}</p></div><StatusBadge type={backup.type === 'mongodb' ? 'info' : 'ok'}>{backup.type}</StatusBadge></div></div>)}</div>}
+            {backups.length === 0 ? <p className="py-4 text-center text-gray-500">Aucune sauvegarde détectée.</p> : (
+              <div className="space-y-2">
+                {backups.map((backup) => (
+                  <div key={backup.path} className="rounded-lg border bg-gray-50 p-3">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                      <div>
+                        <p className="font-medium text-gray-900">{backup.name}</p>
+                        <p className="text-xs text-gray-500 break-all">{backup.path}</p>
+                        <p className="text-xs text-gray-500">{backup.type === 'mongodb' ? 'Sauvegarde MongoDB' : 'Sauvegarde applicative'} {backup.size_bytes ? `• ${formatBytes(backup.size_bytes)}` : ''}</p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <StatusBadge type={backup.type === 'mongodb' ? 'info' : 'ok'}>{backup.type}</StatusBadge>
+                        {backup.type === 'application' && (
+                          <Button size="sm" variant="outline" onClick={() => handleAppRollback(backup)} disabled={updating || rollbacking}>
+                            <RotateCcw size={14} className="mr-2" />
+                            Restaurer cette sauvegarde
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <p className="mt-4 text-xs text-amber-700">Le rollback applicatif restaure les fichiers de l’application. La base MongoDB reste indépendante.</p>
           </CardContent>
         )}
-      </Card>
-
-      {changelog.length > 0 && (
-        <Card>
-          <CardHeader className="cursor-pointer hover:bg-gray-50" onClick={() => setExpandedChangelog(!expandedChangelog)}><div className="flex items-center justify-between"><CardTitle>📝 Nouveautés</CardTitle>{expandedChangelog ? <ChevronDown size={20} /> : <ChevronRight size={20} />}</div></CardHeader>
-          {expandedChangelog && <CardContent><div className="space-y-4">{changelog.map((log, index) => <div key={`${log.version || index}-${index}`}><h4 className="mb-2 font-semibold text-gray-900">Version {log.version || 'non précisée'}</h4><ul className="space-y-1 text-sm text-gray-700">{(log.changes || []).map((change, idx) => <li key={idx}>• {change}</li>)}</ul></div>)}</div></CardContent>}
-        </Card>
-      )}
-
-      <Card>
-        <CardHeader className="cursor-pointer hover:bg-gray-50" onClick={() => setExpandedHistory(!expandedHistory)}><div className="flex items-center justify-between"><CardTitle className="flex items-center gap-2"><Clock size={20} />Historique des mises à jour</CardTitle>{expandedHistory ? <ChevronDown size={20} /> : <ChevronRight size={20} />}</div></CardHeader>
-        {expandedHistory && <CardContent>{history.length === 0 ? <p className="py-4 text-center text-gray-500">Aucune mise à jour enregistrée.</p> : <div className="space-y-3">{history.map((item, index) => <div key={item.id || index} className="rounded-lg bg-gray-50 p-3"><div className="flex items-start gap-3">{item.success ? <CheckCircle size={20} className="text-green-600" /> : <AlertCircle size={20} className="text-red-600" />}<div><p className="font-medium text-gray-900">{item.version_before || '?'} → {item.version_after || '?'}</p><p className="text-sm text-gray-600">{item.started_at ? new Date(item.started_at).toLocaleString('fr-FR') : 'Date inconnue'}</p>{item.duration_seconds && <p className="text-xs text-gray-500">Durée : {Math.floor(item.duration_seconds / 60)}m {Math.floor(item.duration_seconds % 60)}s</p>}{item.summary?.errors?.length > 0 && <div className="mt-2 text-xs text-red-600">{item.summary.errors.map((err, i) => <p key={i}>❌ {err}</p>)}</div>}</div></div></div>)}</div>}</CardContent>}
       </Card>
 
       <Card className="border-gray-200">
@@ -554,20 +601,20 @@ const Updates = () => {
           <CardContent className="space-y-4">
             <div className="rounded-lg bg-blue-50 border border-blue-100 p-4 text-sm text-blue-900">
               <p className="font-medium">Cette configuration est utilisée pour détecter les mises à jour GitHub et lancer MAJ_FSAO.sh depuis le LXC.</p>
-              <p className="mt-1">Elle permet de basculer vers un autre dépôt ou une autre branche sans modifier le code.</p>
+              <p className="mt-1">Changer la branche ici change aussi la branche réellement installée au clic sur “Mettre à jour maintenant”.</p>
             </div>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               <InputField label="Utilisateur / organisation GitHub" value={repoForm.github_user} onChange={(v) => setRepoForm(prev => ({ ...prev, github_user: v }))} placeholder="Kinder0083" />
               <InputField label="Nom du dépôt" value={repoForm.github_repo} onChange={(v) => setRepoForm(prev => ({ ...prev, github_repo: v }))} placeholder="GMAO_IA" />
               <InputField label="Branche" value={repoForm.github_branch} onChange={(v) => setRepoForm(prev => ({ ...prev, github_branch: v }))} placeholder="main" />
             </div>
-            <InputField label="URL Git optionnelle" value={repoForm.github_url} onChange={(v) => setRepoForm(prev => ({ ...prev, github_url: v }))} placeholder="https://github.com/Kinder0083/GMAO_IA.git" help="Laissez vide pour reconstruire automatiquement l’URL depuis l’utilisateur et le dépôt. Pour un dépôt privé, le LXC doit avoir un accès GitHub valide." />
+            <InputField label="URL Git optionnelle" value={repoForm.github_url} onChange={(v) => setRepoForm(prev => ({ ...prev, github_url: v }))} placeholder="https://github.com/Kinder0083/GMAO_IA.git" help="Laissez vide pour reconstruire automatiquement l’URL depuis l’utilisateur et le dépôt. Pour une clé SSH/deploy key : git@github.com:Kinder0083/GMAO_IA.git" />
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline" onClick={testRepositoryConfig} disabled={repoTesting || repoSaving || updating}>
+              <Button variant="outline" onClick={testRepositoryConfig} disabled={repoTesting || repoSaving || updating || rollbacking}>
                 <RefreshCw size={16} className={`mr-2 ${repoTesting ? 'animate-spin' : ''}`} />
                 Tester API + git fetch
               </Button>
-              <Button onClick={saveRepositoryConfig} disabled={repoTesting || repoSaving || updating} className="bg-gray-900 hover:bg-gray-800 text-white">
+              <Button onClick={saveRepositoryConfig} disabled={repoTesting || repoSaving || updating || rollbacking} className="bg-gray-900 hover:bg-gray-800 text-white">
                 <Settings size={16} className={`mr-2 ${repoSaving ? 'animate-spin' : ''}`} />
                 Enregistrer le dépôt
               </Button>
@@ -576,15 +623,30 @@ const Updates = () => {
             {repoTestResult && (
               <div className={`rounded-lg border p-3 text-sm ${repoTestResult.success ? 'border-green-200 bg-green-50 text-green-800' : 'border-red-200 bg-red-50 text-red-800'}`}>
                 <p className="font-medium">{repoTestResult.success ? 'Test réussi' : 'Test incomplet'}</p>
-                <p>API GitHub : {repoTestResult.api_access?.ok ? 'OK' : repoTestResult.api_access?.message || 'Erreur'}</p>
-                <p>Git fetch : {repoTestResult.git_access?.ok ? `OK (${repoTestResult.git_access.method || 'git'})` : repoTestResult.git_access?.message || 'Erreur'}</p>
-                {repoTestResult.api_access?.commit && <p>Commit API : {repoTestResult.api_access.commit}</p>}
-                {repoTestResult.git_access?.remote_commit && <p>Commit Git : {repoTestResult.git_access.remote_commit}</p>}
+                <p>API GitHub : {repoTestResult.api_access?.ok ? 'OK' : 'Erreur ou non testée'}</p>
+                <p>Git fetch : {repoTestResult.git_access?.ok ? 'OK' : 'Erreur ou non testé'}</p>
                 {repoTestResult.detail && <p>{repoTestResult.detail}</p>}
               </div>
             )}
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+              <div className="mb-2 flex items-center gap-2 font-medium"><Key size={16} />Dépôt privé : accès recommandé</div>
+              <p>Pour un dépôt privé, le LXC doit posséder un accès GitHub. Le plus simple est un <code>GITHUB_TOKEN</code> dans <code>backend/.env</code>. Pour une installation plus propre côté serveur, utilisez une deploy key SSH en lecture seule et une URL Git SSH.</p>
+              <p className="mt-2">L’interface n’affiche jamais le token : elle indique seulement s’il est présent et si l’accès fonctionne.</p>
+            </div>
           </CardContent>
         )}
+      </Card>
+
+      {changelog.length > 0 && (
+        <Card>
+          <CardHeader className="cursor-pointer hover:bg-gray-50" onClick={() => setExpandedChangelog(!expandedChangelog)}><div className="flex items-center justify-between"><CardTitle>📝 Nouveautés</CardTitle>{expandedChangelog ? <ChevronDown size={20} /> : <ChevronRight size={20} />}</div></CardHeader>
+          {expandedChangelog && <CardContent><div className="space-y-4">{changelog.map((log, index) => <div key={`${log.version || index}-${index}`}><h4 className="mb-2 font-semibold text-gray-900">Version {log.version || 'non précisée'}</h4><ul className="space-y-1 text-sm text-gray-700">{(log.changes || []).map((change, idx) => <li key={idx}>• {change}</li>)}</ul></div>)}</div></CardContent>}
+        </Card>
+      )}
+
+      <Card>
+        <CardHeader className="cursor-pointer hover:bg-gray-50" onClick={() => setExpandedHistory(!expandedHistory)}><div className="flex items-center justify-between"><CardTitle className="flex items-center gap-2"><Clock size={20} />Historique des mises à jour</CardTitle>{expandedHistory ? <ChevronDown size={20} /> : <ChevronRight size={20} />}</div></CardHeader>
+        {expandedHistory && <CardContent>{history.length === 0 ? <p className="py-4 text-center text-gray-500">Aucune mise à jour enregistrée.</p> : <div className="space-y-3">{history.map((item, index) => <div key={item.id || index} className="rounded-lg bg-gray-50 p-3"><div className="flex items-start gap-3">{item.success !== false ? <CheckCircle size={20} className="text-green-600" /> : <AlertCircle size={20} className="text-red-600" />}<div><p className="font-medium text-gray-900">{item.type === 'application_rollback' ? 'Rollback applicatif' : `${item.version_before || '?'} → ${item.version_after || '?'}`}</p><p className="text-sm text-gray-600">{item.started_at ? new Date(item.started_at).toLocaleString('fr-FR') : 'Date inconnue'}</p>{item.backup_path && <p className="text-xs text-gray-500 break-all">{item.backup_path}</p>}{item.duration_seconds && <p className="text-xs text-gray-500">Durée : {Math.floor(item.duration_seconds / 60)}m {Math.floor(item.duration_seconds % 60)}s</p>}</div></div></div>)}</div>}</CardContent>}
       </Card>
     </div>
   );
