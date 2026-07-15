@@ -1,183 +1,167 @@
 # Audit de la section Mise à jour - FSAO Iris
 
-## 1. Constat
+## 1. Correction importante
 
-La section **Mise à jour** de l'application existait déjà avant la refonte des scripts de déploiement.
+La stratégie retenue pour la mise à jour applicative est désormais clarifiée :
 
-Elle reposait principalement sur trois blocs :
+> **La mise à jour doit rester pilotable depuis l'interface graphique de FSAO Iris et s'exécuter dans le conteneur LXC applicatif.**
+
+Aucune action normale de mise à jour applicative ne doit nécessiter une intervention sur l'hôte Proxmox.
+
+Les scripts de création ou d'administration Proxmox peuvent rester utiles pour une installation neuve ou une maintenance avancée, mais ils ne doivent pas remplacer le bouton de mise à jour graphique de l'application.
+
+## 2. Ancienne situation
+
+La section **Mise à jour** existait déjà avant la refonte.
+
+Elle reposait principalement sur :
 
 - `backend/update_service.py` ;
 - `backend/update_manager.py` ;
-- `backend/routes/update_management.py` et `backend/routes/update_routes.py` ;
-- `frontend/src/pages/Updates.jsx`.
+- `backend/routes/update_management.py` ;
+- `backend/routes/update_routes.py` ;
+- `frontend/src/pages/Updates.jsx` ;
+- le script racine `MAJ_FSAO.sh`.
 
-L'ancienne philosophie était orientée :
+L'ancien fonctionnement était orienté interface graphique, mais plusieurs points étaient à améliorer :
 
-- dépôt Git local dans `/opt/gmao-iris` ;
-- détection de conflits Git ;
-- `git pull` ou rollback Git ;
-- lancement d'un ancien script `MAJ_FSAO.sh` ;
-- logs de mise à jour relus après redémarrage.
+- dépôt Git encore pointé vers `GMAO` au lieu de `GMAO_IA` ;
+- base MongoDB encore parfois codée en dur `gmao_iris` ;
+- sauvegardes applicatives insuffisamment explicites ;
+- pré-vérification absente ou incomplète ;
+- restauration `.env` fragile ;
+- chemin venv parfois incohérent ;
+- confusion entre rollback applicatif, rollback MongoDB et rollback Git ;
+- messages utilisateur insuffisamment clairs.
 
-Cette logique n'est plus cohérente avec la nouvelle stratégie retenue.
+## 3. Stratégie officielle retenue
 
-## 2. Nouvelle stratégie officielle
+La stratégie officielle de mise à jour est :
 
-Depuis la refonte, la stratégie officielle est :
+1. l'administrateur ouvre la page **Mise à jour** dans l'application ;
+2. il clique sur **Vérifier** ;
+3. il clique sur **Pré-vérifier** pour valider les prérequis du LXC ;
+4. il clique sur **Mettre à jour maintenant** ;
+5. le backend lance `MAJ_FSAO.sh` dans le conteneur LXC ;
+6. le script prévient les utilisateurs, active la maintenance, sauvegarde MongoDB, sauvegarde l'application, récupère le code depuis GitHub, restaure les `.env`, reconstruit backend/frontend, redémarre les services ;
+7. l'interface suit les logs et relit le résultat.
 
-1. lancer les actions lourdes depuis l'hôte Proxmox ;
-2. récupérer la source depuis GitHub ou une archive locale ;
-3. créer une archive propre sans `.git` ;
-4. transférer l'archive dans le conteneur LXC ;
-5. préserver les fichiers `.env` ;
-6. préparer la nouvelle version en staging ;
-7. sauvegarder l'ancienne application ;
-8. basculer uniquement après build réussi ;
-9. utiliser `gmao-iris-rollback.sh` pour revenir en arrière.
+Flux attendu :
 
-Scripts associés :
-
-```bash
-./gmao-iris-install.sh --check
-./gmao-iris-install.sh
-./gmao-iris-update.sh --check
-./gmao-iris-update.sh
-./gmao-iris-rollback.sh
+```text
+Interface FSAO Iris
+        ↓
+Backend FastAPI dans le LXC
+        ↓
+MAJ_FSAO.sh dans le LXC
+        ↓
+GitHub + build + supervisor/nginx
 ```
 
-## 3. Point important : limite technique de l'application
+## 4. Actions appliquées côté script
 
-L'application tourne normalement **dans le conteneur LXC**.
+`MAJ_FSAO.sh` a été rétabli comme script central de mise à jour applicative dans le LXC.
 
-Or les scripts `gmao-iris-install.sh`, `gmao-iris-update.sh` et `gmao-iris-rollback.sh` pilotent Proxmox avec `pct`.
+Améliorations appliquées :
 
-Donc, sauf cas particulier où l'API tournerait directement sur l'hôte Proxmox, l'application ne doit pas tenter d'exécuter elle-même ces scripts.
+- ajout du mode `--check` ;
+- dépôt par défaut corrigé vers `Kinder0083/GMAO_IA` ;
+- lecture de `DB_NAME` depuis `backend/.env`, avec fallback `fsao_iris` ;
+- support d'un accès GitHub via `GITHUB_TOKEN`, `gh auth` ou URL Git déjà configurée ;
+- sauvegarde MongoDB locale ;
+- sauvegarde applicative locale dans `backend/../backups` ;
+- sauvegarde et restauration des fichiers `.env` ;
+- build frontend avec restauration de l'ancien build en cas d'échec ;
+- redémarrage applicatif via `supervisorctl` et rechargement NGINX ;
+- écriture du résultat dans `/var/log/gmao-iris-update-result.json` ;
+- aucune commande `pct` ;
+- aucune action sur l'hôte Proxmox.
 
-Elle doit plutôt :
+## 5. Actions appliquées côté backend
 
-- afficher la stratégie de mise à jour ;
-- expliquer que l'action se lance depuis l'hôte Proxmox ;
-- fournir les commandes exactes ;
-- afficher les sauvegardes applicatives disponibles ;
-- distinguer rollback applicatif et rollback MongoDB.
+`backend/routes/update_routes.py` a été réaligné sur le modèle LXC.
 
-## 4. Actions appliquées côté backend
-
-Le fichier `backend/routes/update_routes.py` a été complété avec une passerelle vers le workflow archive Proxmox.
-
-Nouveaux apports :
+Endpoints utiles :
 
 ### `GET /api/updates/deployment-workflow`
 
-Retourne :
+Retourne le workflow courant :
 
-- le mode de déploiement courant : `archive_proxmox` ;
-- les chemins techniques ;
-- les scripts attendus ;
-- les commandes recommandées ;
-- l'information `can_execute_from_app` ;
-- l'information `requires_proxmox_host`.
+- mode `lxc_in_app` ;
+- exécution depuis l'interface graphique ;
+- chemin du script `MAJ_FSAO.sh` ;
+- notes sur l'accès GitHub requis dans le conteneur.
 
-### `POST /api/updates/archive-precheck`
+### `POST /api/updates/precheck`
 
-Si l'API a accès à `pct`, le endpoint peut lancer :
+Lance :
 
 ```bash
-./gmao-iris-update.sh --check
+bash MAJ_FSAO.sh --check
 ```
 
-Sinon, il retourne clairement que la pré-vérification doit être exécutée depuis l'hôte Proxmox.
+directement dans le LXC.
 
-### `GET /api/updates/archive-backups`
+### `GET /api/updates/app-backups`
 
-Liste les sauvegardes applicatives créées par :
+Liste les sauvegardes locales créées dans :
 
 ```bash
-./gmao-iris-update.sh
+/opt/gmao-iris/backups
 ```
 
-Chemin recherché :
+### `POST /api/updates/apply`
+
+Déjà fourni par `backend/routes/update_management.py`, il reste le point d'entrée principal appelé par l'interface.
+
+Il déclenche :
 
 ```bash
-/opt/gmao-iris-backups/<timestamp>/app
+bash MAJ_FSAO.sh <version> <update_id>
 ```
 
-### Adaptation de `GET /api/updates/check`
+via `backend/update_service.py`.
 
-La réponse inclut maintenant `deployment_workflow`, ce qui permet au frontend d'afficher la stratégie officielle de mise à jour.
+## 6. Actions appliquées côté frontend
 
-### Adaptation de `GET /api/updates/git-history`
+`frontend/src/pages/Updates.jsx` a été corrigé pour redevenir une interface graphique de mise à jour.
 
-Si aucun dépôt Git local n'est présent, le endpoint indique explicitement qu'il s'agit probablement d'un déploiement par archive.
+L'interface affiche maintenant :
 
-### Adaptation de `POST /api/updates/git-rollback`
+- version actuelle ;
+- dernière version détectée ;
+- mode `lxc_in_app` ;
+- bouton **Vérifier** ;
+- bouton **Pré-vérifier** ;
+- bouton **Mettre à jour maintenant** ;
+- suivi de lancement ;
+- logs serveur ;
+- sauvegardes locales ;
+- nouveautés ;
+- historique des mises à jour.
 
-Si `.git` est absent, le endpoint ne tente plus un rollback Git et renvoie la commande correcte :
+Les commandes Proxmox affichées précédemment ont été retirées du flux principal.
 
-```bash
-chmod +x gmao-iris-rollback.sh && ./gmao-iris-rollback.sh
-```
+## 7. Point de vigilance restant
 
-## 5. Actions appliquées côté frontend
+Le dépôt étant privé, le conteneur LXC doit avoir un accès GitHub valide.
 
-Le fichier `frontend/src/pages/Updates.jsx` a été adapté au nouveau workflow.
+Solutions compatibles :
 
-L'interface affiche désormais :
+- variable `GITHUB_TOKEN` dans `backend/.env` ;
+- GitHub CLI déjà authentifié dans le LXC ;
+- URL SSH avec clé configurée dans le LXC ;
+- URL Git personnalisée via `GITHUB_URL`.
 
-- la version actuelle ;
-- la dernière version détectée ;
-- le mode de déploiement `archive_proxmox` ;
-- un message clair indiquant si l'action doit être lancée depuis l'hôte Proxmox ;
-- les commandes copiables pour l'installation, la mise à jour et le rollback applicatif ;
-- un bouton de pré-vérification qui appelle `POST /api/updates/archive-precheck` ;
-- la sortie du pré-check quand elle est disponible ;
-- les sauvegardes applicatives via `GET /api/updates/archive-backups` ;
-- les logs serveur ;
-- les nouveautés et l'historique de mise à jour.
+Pour un utilisateur novice, la suite logique sera d'ajouter dans l'interface une page de configuration guidée de l'accès GitHub, avec test d'accès et stockage contrôlé des paramètres nécessaires.
 
-Les éléments suivants ont été retirés de l'interface principale :
+## 8. Recommandation
 
-- bouton magique `Mettre à jour maintenant` ;
-- dialogue de résolution de conflits Git ;
-- historique Git comme chemin principal ;
-- rollback Git comme action principale ;
-- attente automatique de redémarrage backend après mise à jour.
+La page **Mise à jour** doit rester un bouton d'exploitation simple, mais elle doit être accompagnée de contrôles robustes :
 
-## 6. Risques identifiés
-
-### Ancien script `MAJ_FSAO.sh`
-
-`backend/update_service.py` cherche encore un script `MAJ_FSAO.sh` pour appliquer une mise à jour.
-
-Cette logique est obsolète avec le workflow archive Proxmox.
-
-Elle doit être remplacée ou neutralisée dans une prochaine passe.
-
-### Dépôt Git local absent
-
-Avec le déploiement par archive, `/opt/gmao-iris/.git` est absent.
-
-Les fonctions de conflit Git, historique Git et rollback Git doivent donc être considérées comme compatibles uniquement avec les anciennes installations.
-
-### Rollback MongoDB vs rollback applicatif
-
-L'ancien endpoint `/api/updates/rollback` restaure MongoDB.
-
-Le nouveau `gmao-iris-rollback.sh` restaure uniquement les fichiers applicatifs.
-
-L'interface distingue maintenant le rollback applicatif, mais l'ancien rollback MongoDB reste présent côté backend pour compatibilité historique.
-
-## 7. Recommandation
-
-La section Mise à jour doit rester un tableau de bord de pilotage et d'assistance, pas un bouton magique qui lance des commandes Proxmox depuis le conteneur.
-
-Pour une installation novice et fiable, le bon flux est :
-
-1. l'application indique qu'une version est disponible ;
-2. elle affiche les commandes Proxmox exactes ;
-3. l'utilisateur lance la mise à jour depuis l'hôte Proxmox ;
-4. l'application relit ensuite l'état, la version et les logs disponibles.
-
-## 8. Prochaine passe conseillée
-
-Neutraliser ou remplacer proprement l'ancienne méthode `UpdateService.apply_update()` qui cherche `MAJ_FSAO.sh`, pour éviter qu'un ancien endpoint ou appel futur puisse relancer la mauvaise logique.
+1. pré-check obligatoire ou fortement conseillé ;
+2. message clair si l'accès GitHub est absent ;
+3. logs lisibles ;
+4. sauvegardes visibles ;
+5. distinction entre sauvegarde applicative et sauvegarde MongoDB ;
+6. possibilité future de configurer GitHub directement depuis l'interface.
