@@ -11,6 +11,7 @@ from pathlib import Path
 import logging
 import os
 import subprocess
+import aiohttp
 
 from dependencies import get_current_admin_user
 from routes.shared import db
@@ -78,6 +79,13 @@ async def _load_repository_config() -> dict:
     return config
 
 
+def _github_headers() -> dict:
+    token = os.environ.get("GITHUB_TOKEN", "").strip()
+    if token:
+        return {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"}
+    return {"Accept": "application/vnd.github+json"}
+
+
 @router.get("/updates/current")
 async def get_current_version(current_user: dict = Depends(get_current_admin_user)):
     """Récupère la version actuelle (admin uniquement)."""
@@ -122,22 +130,29 @@ async def test_repository_config(
         current = await get_update_repository_config(db)
         config = normalize_update_repository_config(payload, current)
         validate_update_repository_config(config)
-        previous = {
-            "github_user": update_manager.github_user,
-            "github_repo": update_manager.github_repo,
-            "github_branch": update_manager.github_branch,
-            "github_url": getattr(update_manager, "github_url", ""),
-        }
-        update_manager.github_user = config["github_user"]
-        update_manager.github_repo = config["github_repo"]
-        update_manager.github_branch = config["github_branch"]
-        update_manager.github_url = config["github_url"]
-        result = await update_manager.check_github_version()
-        update_manager.github_user = previous["github_user"]
-        update_manager.github_repo = previous["github_repo"]
-        update_manager.github_branch = previous["github_branch"]
-        update_manager.github_url = previous["github_url"]
-        return {"success": bool(result and not result.get("error")), "config": config, "result": result}
+        commit_url = f"https://api.github.com/repos/{config['github_user']}/{config['github_repo']}/commits/{config['github_branch']}"
+        async with aiohttp.ClientSession(headers=_github_headers()) as session:
+            async with session.get(commit_url, timeout=aiohttp.ClientTimeout(total=12)) as response:
+                if response.status != 200:
+                    detail = await response.text()
+                    return {
+                        "success": False,
+                        "config": {**config, "full_name": f"{config['github_user']}/{config['github_repo']}"},
+                        "result": {
+                            "error": f"GitHub HTTP {response.status}",
+                            "details": detail[:500],
+                        },
+                    }
+                data = await response.json()
+                return {
+                    "success": True,
+                    "config": {**config, "full_name": f"{config['github_user']}/{config['github_repo']}"},
+                    "result": {
+                        "commit": data.get("sha", "")[:7],
+                        "message": data.get("commit", {}).get("message", "").split("\n")[0],
+                        "branch": config["github_branch"],
+                    },
+                }
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -172,13 +187,7 @@ async def run_update_precheck(current_user: dict = Depends(get_current_admin_use
     """Lance le pre-check de mise a jour dans le conteneur LXC."""
     config = await _load_repository_config()
     if not UPDATE_SCRIPT.exists():
-        return {
-            "success": False,
-            "can_execute": False,
-            "message": f"Script de mise a jour introuvable : {UPDATE_SCRIPT}",
-            "workflow": _workflow_payload(config),
-        }
-
+        return {"success": False, "can_execute": False, "message": f"Script de mise a jour introuvable : {UPDATE_SCRIPT}", "workflow": _workflow_payload(config)}
     try:
         env = apply_update_repository_env(config, os.environ.copy())
         result = subprocess.run(
@@ -205,41 +214,22 @@ async def run_update_precheck(current_user: dict = Depends(get_current_admin_use
 
 @router.post("/updates/archive-precheck")
 async def run_archive_precheck_compat(current_user: dict = Depends(get_current_admin_user)):
-    """Compatibilite avec l'ancienne route temporaire : lance le pre-check LXC."""
     return await run_update_precheck(current_user)
 
 
 @router.get("/updates/app-backups")
 async def list_app_backups(current_user: dict = Depends(get_current_admin_user)):
-    """Liste les sauvegardes applicatives et MongoDB locales du LXC."""
     backups = []
     try:
         if BACKUP_ROOT.exists():
             for path in sorted(BACKUP_ROOT.glob("app_*.tar.gz"), reverse=True):
                 stat = path.stat()
-                backups.append({
-                    "type": "application",
-                    "path": str(path),
-                    "name": path.name,
-                    "modified_at": datetime.fromtimestamp(stat.st_mtime).isoformat(),
-                    "size_bytes": stat.st_size,
-                })
+                backups.append({"type": "application", "path": str(path), "name": path.name, "modified_at": datetime.fromtimestamp(stat.st_mtime).isoformat(), "size_bytes": stat.st_size})
             for path in sorted(BACKUP_ROOT.glob("backup_*"), reverse=True):
                 if path.is_dir():
                     stat = path.stat()
-                    backups.append({
-                        "type": "mongodb",
-                        "path": str(path),
-                        "name": path.name,
-                        "modified_at": datetime.fromtimestamp(stat.st_mtime).isoformat(),
-                    })
-        return {
-            "success": True,
-            "backup_root": str(BACKUP_ROOT),
-            "count": len(backups),
-            "backups": backups,
-            "note": "Ces sauvegardes sont stockees dans le conteneur LXC applicatif.",
-        }
+                    backups.append({"type": "mongodb", "path": str(path), "name": path.name, "modified_at": datetime.fromtimestamp(stat.st_mtime).isoformat()})
+        return {"success": True, "backup_root": str(BACKUP_ROOT), "count": len(backups), "backups": backups, "note": "Ces sauvegardes sont stockees dans le conteneur LXC applicatif."}
     except Exception as e:
         logger.error(f"Erreur liste backups mise a jour: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -247,16 +237,11 @@ async def list_app_backups(current_user: dict = Depends(get_current_admin_user))
 
 @router.get("/updates/archive-backups")
 async def list_archive_backups_compat(current_user: dict = Depends(get_current_admin_user)):
-    """Compatibilite avec l'ancienne route temporaire."""
     return await list_app_backups(current_user)
 
 
 @router.get("/updates/changelog")
-async def get_changelog(
-    from_version: Optional[str] = None,
-    current_user: dict = Depends(get_current_admin_user),
-):
-    """Récupère le changelog (admin uniquement)."""
+async def get_changelog(from_version: Optional[str] = None, current_user: dict = Depends(get_current_admin_user)):
     await _load_repository_config()
     changelog = await update_manager.get_changelog(from_version)
     return {"changelog": changelog}
@@ -264,7 +249,6 @@ async def get_changelog(
 
 @router.get("/updates/history")
 async def get_update_history(current_user: dict = Depends(get_current_admin_user)):
-    """Récupère l'historique des mises à jour depuis la BDD."""
     try:
         history = await db.system_update_history.find({}, {"_id": 0}).sort("started_at", -1).limit(50).to_list(50)
         return {"history": history}
@@ -276,14 +260,12 @@ async def get_update_history(current_user: dict = Depends(get_current_admin_user
 
 @router.get("/updates/history-list")
 async def get_update_history_list_compat(current_user: dict = Depends(get_current_admin_user)):
-    """Compatibilite avec d'anciennes versions du frontend."""
     data = await get_update_history(current_user)
     return {"data": data.get("history", [])}
 
 
 @router.post("/updates/backup")
 async def create_backup(current_user: dict = Depends(get_current_admin_user)):
-    """Crée un backup MongoDB manuel (admin uniquement)."""
     result = await update_manager.create_backup()
     if not result["success"]:
         raise HTTPException(status_code=500, detail=result.get("error", "Erreur lors de la création du backup"))
@@ -291,11 +273,7 @@ async def create_backup(current_user: dict = Depends(get_current_admin_user)):
 
 
 @router.post("/updates/rollback")
-async def rollback_update(
-    backup_path: str,
-    current_user: dict = Depends(get_current_admin_user),
-):
-    """Restaure une sauvegarde MongoDB historique (admin uniquement)."""
+async def rollback_update(backup_path: str, current_user: dict = Depends(get_current_admin_user)):
     result = await update_manager.rollback_to_version(backup_path)
     if not result["success"]:
         raise HTTPException(status_code=500, detail=result.get("message", "Erreur lors du rollback"))
@@ -303,30 +281,17 @@ async def rollback_update(
 
 
 @router.get("/updates/git-history")
-async def get_git_history(
-    limit: int = 20,
-    current_user: dict = Depends(get_current_admin_user),
-):
-    """Historique Git local, conservé pour diagnostic."""
+async def get_git_history(limit: int = 20, current_user: dict = Depends(get_current_admin_user)):
     try:
         commits = await update_manager.get_git_history(limit)
-        return {
-            "success": True,
-            "commits": commits,
-            "total": len(commits),
-            "message": "Historique Git local disponible." if commits else "Aucun historique Git local disponible.",
-        }
+        return {"success": True, "commits": commits, "total": len(commits), "message": "Historique Git local disponible." if commits else "Aucun historique Git local disponible."}
     except Exception as e:
         logger.error(f"Erreur historique Git: {e}")
         return {"success": False, "commits": [], "error": str(e)}
 
 
 @router.post("/updates/git-rollback")
-async def rollback_to_git_commit(
-    commit_hash: str,
-    current_user: dict = Depends(get_current_admin_user),
-):
-    """Rollback Git legacy, conservé mais non recommandé comme flux principal."""
+async def rollback_to_git_commit(commit_hash: str, current_user: dict = Depends(get_current_admin_user)):
     try:
         result = await update_manager.rollback_to_commit(commit_hash)
         if not result["success"]:
