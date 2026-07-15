@@ -10,6 +10,7 @@ from typing import Optional, Dict, Any
 from pathlib import Path
 import logging
 import os
+import shlex
 import subprocess
 import aiohttp
 
@@ -22,17 +23,17 @@ from update_repository_config import (
     validate_update_repository_config,
     normalize_update_repository_config,
 )
+from update_manager import UpdateManager
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Mises a jour"])
-
-from update_manager import UpdateManager
 
 update_manager = UpdateManager(db)
 
 APP_ROOT = Path(__file__).resolve().parents[2]
 UPDATE_SCRIPT = APP_ROOT / "MAJ_FSAO.sh"
 BACKUP_ROOT = APP_ROOT / "backups"
+ROLLBACK_LOG = Path("/var/log/gmao-iris-rollback.log")
 
 
 def _script_metadata() -> dict:
@@ -58,11 +59,11 @@ def _workflow_payload(repository_config: dict) -> dict:
         "repository": repository_config,
         "script": _script_metadata(),
         "recommended_flow": [
-            "Cliquer sur Verifier pour rechercher une version disponible.",
-            "Verifier les acces API GitHub et git fetch.",
+            "Choisir ou verifier le depot et la branche dans la section Parametrage du depot.",
+            "Cliquer sur Tester les acces pour valider API GitHub et git fetch.",
             "Cliquer sur Pre-verifier pour controler les prerequis dans le LXC.",
             "Cliquer sur Mettre a jour maintenant pour lancer MAJ_FSAO.sh depuis l'interface.",
-            "Suivre les logs dans l'interface puis verifier le resultat apres redemarrage des services.",
+            "Suivre les logs, puis utiliser Restaurer cette sauvegarde si un retour arriere applicatif est necessaire.",
         ],
         "notes": [
             "Aucune action ne doit etre lancee depuis l'hote Proxmox pour une mise a jour applicative normale.",
@@ -183,6 +184,20 @@ def _check_git_access(config: dict) -> dict:
         "message": "git ls-remote impossible",
         "details": gh_note or last_error,
     }
+
+
+def _safe_app_backup_path(raw_path: str) -> Path:
+    if not raw_path:
+        raise HTTPException(status_code=400, detail="Aucune sauvegarde selectionnee.")
+    candidate = Path(raw_path).expanduser().resolve()
+    backup_root = BACKUP_ROOT.resolve()
+    try:
+        candidate.relative_to(backup_root)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Chemin de sauvegarde non autorise.")
+    if not candidate.exists() or not candidate.is_file() or not candidate.name.startswith("app_") or candidate.suffixes[-2:] != [".tar", ".gz"]:
+        raise HTTPException(status_code=404, detail="Sauvegarde applicative introuvable ou invalide.")
+    return candidate
 
 
 @router.get("/updates/current")
@@ -334,12 +349,31 @@ async def list_app_backups(current_user: dict = Depends(get_current_admin_user))
         if BACKUP_ROOT.exists():
             for path in sorted(BACKUP_ROOT.glob("app_*.tar.gz"), reverse=True):
                 stat = path.stat()
-                backups.append({"type": "application", "path": str(path), "name": path.name, "modified_at": datetime.fromtimestamp(stat.st_mtime).isoformat(), "size_bytes": stat.st_size})
+                backups.append({
+                    "type": "application",
+                    "path": str(path),
+                    "name": path.name,
+                    "modified_at": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                    "size_bytes": stat.st_size,
+                    "can_restore": True,
+                })
             for path in sorted(BACKUP_ROOT.glob("backup_*"), reverse=True):
                 if path.is_dir():
                     stat = path.stat()
-                    backups.append({"type": "mongodb", "path": str(path), "name": path.name, "modified_at": datetime.fromtimestamp(stat.st_mtime).isoformat()})
-        return {"success": True, "backup_root": str(BACKUP_ROOT), "count": len(backups), "backups": backups, "note": "Ces sauvegardes sont stockees dans le conteneur LXC applicatif."}
+                    backups.append({
+                        "type": "mongodb",
+                        "path": str(path),
+                        "name": path.name,
+                        "modified_at": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                        "can_restore": False,
+                    })
+        return {
+            "success": True,
+            "backup_root": str(BACKUP_ROOT),
+            "count": len(backups),
+            "backups": backups,
+            "note": "Ces sauvegardes sont stockees dans le conteneur LXC applicatif.",
+        }
     except Exception as e:
         logger.error(f"Erreur liste backups mise a jour: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -348,6 +382,66 @@ async def list_app_backups(current_user: dict = Depends(get_current_admin_user))
 @router.get("/updates/archive-backups")
 async def list_archive_backups_compat(current_user: dict = Depends(get_current_admin_user)):
     return await list_app_backups(current_user)
+
+
+@router.post("/updates/app-rollback")
+async def rollback_application_backup(
+    payload: Dict[str, Any] = Body(...),
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Restaure une sauvegarde applicative locale depuis l'interface.
+
+    La restauration est lancée en tâche shell détachée pour laisser l'API répondre
+    avant redémarrage éventuel du backend.
+    """
+    backup_path = _safe_app_backup_path(str(payload.get("backup_path", "")))
+    update_id = datetime.now().strftime("rollback_%Y%m%d_%H%M%S")
+    safety_backup = BACKUP_ROOT / f"app_before_{update_id}.tar.gz"
+    BACKUP_ROOT.mkdir(parents=True, exist_ok=True)
+
+    script = f"""
+set -e
+LOG={shlex.quote(str(ROLLBACK_LOG))}
+APP={shlex.quote(str(APP_ROOT))}
+BACKUP={shlex.quote(str(backup_path))}
+SAFETY={shlex.quote(str(safety_backup))}
+echo "==== Rollback FSAO Iris {update_id} ====" >> "$LOG"
+echo "Sauvegarde source: $BACKUP" >> "$LOG"
+echo "Sauvegarde de securite avant rollback: $SAFETY" >> "$LOG"
+tar --exclude='./backups' --exclude='./backend/venv' --exclude='./frontend/node_modules' -czf "$SAFETY" -C "$APP" . >> "$LOG" 2>&1 || true
+tar -xzf "$BACKUP" -C "$APP" >> "$LOG" 2>&1
+echo "Extraction terminee" >> "$LOG"
+if command -v supervisorctl >/dev/null 2>&1; then
+  supervisorctl restart gmao-iris-backend >> "$LOG" 2>&1 || supervisorctl restart fsao-iris-backend >> "$LOG" 2>&1 || true
+fi
+if command -v nginx >/dev/null 2>&1; then
+  nginx -t >> "$LOG" 2>&1 && nginx -s reload >> "$LOG" 2>&1 || true
+fi
+echo "Rollback termine" >> "$LOG"
+""".strip()
+
+    try:
+        subprocess.Popen(["bash", "-lc", script], cwd=str(APP_ROOT), start_new_session=True)
+        await db.system_update_history.insert_one({
+            "type": "application_rollback",
+            "success": True,
+            "started_at": datetime.now().isoformat(),
+            "backup_path": str(backup_path),
+            "safety_backup": str(safety_backup),
+            "requested_by": current_user.get("email"),
+            "summary": {"message": "Rollback applicatif lance depuis l'interface."},
+        })
+        return {
+            "accepted": True,
+            "success": True,
+            "message": "Rollback applicatif lance. Les services vont redemarrer si necessaire.",
+            "backup_path": str(backup_path),
+            "safety_backup": str(safety_backup),
+            "log_path": str(ROLLBACK_LOG),
+        }
+    except Exception as e:
+        logger.error(f"Erreur rollback applicatif: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/updates/changelog")
@@ -394,7 +488,12 @@ async def rollback_update(backup_path: str, current_user: dict = Depends(get_cur
 async def get_git_history(limit: int = 20, current_user: dict = Depends(get_current_admin_user)):
     try:
         commits = await update_manager.get_git_history(limit)
-        return {"success": True, "commits": commits, "total": len(commits), "message": "Historique Git local disponible." if commits else "Aucun historique Git local disponible."}
+        return {
+            "success": True,
+            "commits": commits,
+            "total": len(commits),
+            "message": "Historique Git local disponible." if commits else "Aucun historique Git local disponible.",
+        }
     except Exception as e:
         logger.error(f"Erreur historique Git: {e}")
         return {"success": False, "commits": [], "error": str(e)}
