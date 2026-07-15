@@ -1,8 +1,8 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # ================================================================
 # MAJ_FSAO.sh - Mise à jour FSAO Iris depuis le conteneur LXC
 # ================================================================
-# Appelé par l'interface graphique via backend/update_service.py.
+# Appelé par l'interface graphique.
 # Usage:
 #   MAJ_FSAO.sh --check
 #   MAJ_FSAO.sh <version> <update_id>
@@ -37,23 +37,40 @@ MFLAG="$APP_ROOT/maintenance.flag"
 EXTRA_INDEX="${EXTRA_INDEX:-https://d33sy5i8bnduwe.cloudfront.net/simple/}"
 DB_NAME="${DB_NAME:-fsao_iris}"
 INSTALL_EMERGENT_INTEGRATIONS="${INSTALL_EMERGENT_INTEGRATIONS:-n}"
-
-if [[ -f "$ENV_FILE" ]]; then
-  DB_FROM_ENV="$(grep -E '^DB_NAME=' "$ENV_FILE" | tail -1 | cut -d= -f2- || true)"
-  [[ -n "$DB_FROM_ENV" ]] && DB_NAME="$DB_FROM_ENV"
-  EMERGENT_FROM_ENV="$(grep -E '^INSTALL_EMERGENT_INTEGRATIONS=' "$ENV_FILE" | tail -1 | cut -d= -f2- || true)"
-  [[ -n "$EMERGENT_FROM_ENV" ]] && INSTALL_EMERGENT_INTEGRATIONS="$EMERGENT_FROM_ENV"
-fi
-
+APP_BACKUP_PATH=""
+VERSION_BEFORE="?"
+CODE_UPDATED="false"
+STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 ERRORS=""
 WARNINGS=""
 STEPS_OK=0
 STEPS_WARN=0
 STEPS_ERR=0
-CODE_UPDATED="false"
-STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-APP_BACKUP_PATH=""
-VERSION_BEFORE="?"
+
+read_env_value() {
+  local key="$1"
+  [[ -f "$ENV_FILE" ]] || return 0
+  grep -E "^${key}=" "$ENV_FILE" | tail -1 | cut -d= -f2- | sed 's/^"//;s/"$//' || true
+}
+
+if [[ -f "$ENV_FILE" ]]; then
+  for key in DB_NAME GITHUB_USER GITHUB_REPO GITHUB_BRANCH GITHUB_URL GITHUB_TOKEN INSTALL_EMERGENT_INTEGRATIONS; do
+    val="$(read_env_value "$key")"
+    if [[ -n "$val" && -z "${!key:-}" ]]; then
+      export "$key=$val"
+    fi
+  done
+  DB_FROM_ENV="$(read_env_value DB_NAME)"
+  [[ -n "$DB_FROM_ENV" ]] && DB_NAME="$DB_FROM_ENV"
+  GITHUB_USER_FROM_ENV="$(read_env_value GITHUB_USER)"
+  [[ -n "$GITHUB_USER_FROM_ENV" ]] && GITHUB_USER="$GITHUB_USER_FROM_ENV"
+  GITHUB_REPO_FROM_ENV="$(read_env_value GITHUB_REPO)"
+  [[ -n "$GITHUB_REPO_FROM_ENV" ]] && GITHUB_REPO="$GITHUB_REPO_FROM_ENV"
+  GITHUB_BRANCH_FROM_ENV="$(read_env_value GITHUB_BRANCH)"
+  [[ -n "$GITHUB_BRANCH_FROM_ENV" ]] && GITHUB_BRANCH="$GITHUB_BRANCH_FROM_ENV"
+  GITHUB_URL_FROM_ENV="$(read_env_value GITHUB_URL)"
+  [[ -n "$GITHUB_URL_FROM_ENV" ]] && GITHUB_URL="$GITHUB_URL_FROM_ENV"
+fi
 
 mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || LOG_FILE="/tmp/gmao-iris-update.log"
 : > "$LOG_FILE" 2>/dev/null || LOG_FILE="/tmp/gmao-iris-update.log"
@@ -86,13 +103,7 @@ run_git() {
 }
 
 check_git_access() {
-  if [[ -n "${GITHUB_TOKEN:-}" ]]; then
-    git -c http.extraHeader="AUTHORIZATION: bearer ${GITHUB_TOKEN}" ls-remote "$GITHUB_URL" "$GITHUB_BRANCH" >/dev/null 2>&1
-  elif command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
-    gh repo view "${GITHUB_USER}/${GITHUB_REPO}" >/dev/null 2>&1
-  else
-    git ls-remote "$GITHUB_URL" "$GITHUB_BRANCH" >/dev/null 2>&1
-  fi
+  run_git ls-remote "$GITHUB_URL" "$GITHUB_BRANCH" >/dev/null 2>&1
 }
 
 write_result() {
@@ -113,6 +124,8 @@ write_result() {
   "version_after": "$VERSION_CIBLE",
   "started_at": "$STARTED_AT",
   "completed_at": "$completed_at",
+  "repository": "${GITHUB_USER}/${GITHUB_REPO}",
+  "branch": "$GITHUB_BRANCH",
   "steps_ok": $STEPS_OK,
   "steps_warn": $STEPS_WARN,
   "steps_err": $STEPS_ERR,
@@ -131,34 +144,64 @@ find_nginx_conf() {
   done
 }
 
+validate_remote_tree() {
+  local ref="origin/$GITHUB_BRANCH"
+  local required=("updates/version.json" "backend" "frontend" "MAJ_FSAO.sh")
+  if ! git cat-file -e "${ref}^{commit}" 2>/dev/null; then
+    step_fail "Branche distante introuvable après fetch: $ref"
+    return 1
+  fi
+  for item in "${required[@]}"; do
+    if ! git cat-file -e "${ref}:${item}" 2>/dev/null; then
+      step_fail "Branche non compatible: élément manquant '${item}' dans ${GITHUB_USER}/${GITHUB_REPO}:${GITHUB_BRANCH}"
+      return 1
+    fi
+  done
+  step_ok "Branche distante compatible: ${GITHUB_USER}/${GITHUB_REPO}:${GITHUB_BRANCH}"
+  return 0
+}
+
 precheck() {
-  echo "========================================================"
-  echo "  PRE-CHECK MISE À JOUR $APP_NAME - LXC"
-  echo "========================================================"
-  echo "Application : $APP_ROOT"
-  echo "Dépôt       : ${GITHUB_USER}/${GITHUB_REPO} ($GITHUB_BRANCH)"
-  echo "URL Git     : $GITHUB_URL"
-  echo "Base Mongo  : $DB_NAME"
-  echo ""
-  [[ -d "$APP_ROOT" ]] && step_ok "Dossier application présent" || step_fail "Dossier application absent: $APP_ROOT"
-  [[ -w "$APP_ROOT" ]] && step_ok "Dossier application modifiable" || step_fail "Dossier application non modifiable"
-  [[ -f "$ENV_FILE" ]] && step_ok "backend/.env présent" || step_fail "backend/.env absent"
+  echo "=============================================================="
+  echo "Pré-vérification mise à jour $APP_NAME"
+  echo "Dépôt : ${GITHUB_USER}/${GITHUB_REPO}"
+  echo "Branche : ${GITHUB_BRANCH}"
+  echo "URL Git : ${GITHUB_URL}"
+  echo "APP_ROOT : ${APP_ROOT}"
+  echo "=============================================================="
+
+  [[ -d "$APP_ROOT" ]] && step_ok "Répertoire applicatif trouvé" || step_fail "Répertoire applicatif introuvable: $APP_ROOT"
+  [[ -f "$ENV_FILE" ]] && step_ok "backend/.env trouvé" || step_warn "backend/.env introuvable"
   command -v git >/dev/null 2>&1 && step_ok "git disponible" || step_fail "git absent"
   command -v python3 >/dev/null 2>&1 && step_ok "python3 disponible" || step_fail "python3 absent"
-  command -v yarn >/dev/null 2>&1 && step_ok "yarn disponible" || step_warn "yarn absent ou non accessible"
-  command -v nginx >/dev/null 2>&1 && step_ok "nginx disponible" || step_warn "nginx absent ou non accessible"
-  command -v supervisorctl >/dev/null 2>&1 && step_ok "supervisorctl disponible" || step_warn "supervisorctl absent ou non accessible"
-  command -v mongodump >/dev/null 2>&1 && step_ok "mongodump disponible" || step_warn "mongodump absent : backup MongoDB limité"
-  if check_git_access; then step_ok "Accès au dépôt GitHub OK"; else step_fail "Accès au dépôt GitHub impossible. Configurer GITHUB_TOKEN, gh auth ou une URL SSH valide dans le LXC."; fi
-  local free_kb
+  command -v tar >/dev/null 2>&1 && step_ok "tar disponible" || step_fail "tar absent"
+  [[ -d "$BACKEND_DIR" ]] && step_ok "Dossier backend trouvé" || step_fail "Dossier backend introuvable"
+  [[ -d "$FRONTEND_DIR" ]] && step_ok "Dossier frontend trouvé" || step_fail "Dossier frontend introuvable"
+
+  if check_git_access; then
+    step_ok "Accès git au dépôt OK"
+  else
+    step_fail "Accès git impossible. Vérifier dépôt, branche, GITHUB_TOKEN, gh auth ou clé SSH dans le LXC."
+  fi
+
   free_kb=$(df -Pk "$APP_ROOT" | awk 'NR==2 {print $4}')
-  if [[ -n "$free_kb" && "$free_kb" -gt 2097152 ]]; then step_ok "Espace disque disponible supérieur à 2 Go"; else step_warn "Espace disque potentiellement insuffisant"; fi
-  if [[ $STEPS_ERR -eq 0 ]]; then write_result true; exit 0; fi
+  if [[ -n "$free_kb" && "$free_kb" -gt 2097152 ]]; then
+    step_ok "Espace disque disponible supérieur à 2 Go"
+  else
+    step_warn "Espace disque potentiellement insuffisant"
+  fi
+
+  if [[ $STEPS_ERR -eq 0 ]]; then
+    write_result true
+    exit 0
+  fi
   write_result false
   exit 1
 }
 
-if [[ "$CHECK_ONLY" == "true" ]]; then precheck; fi
+if [[ "$CHECK_ONLY" == "true" ]]; then
+  precheck
+fi
 
 VERSION_BEFORE="$(current_version)"
 NGINX_CONF="$(find_nginx_conf || true)"
@@ -174,36 +217,32 @@ restore_maintenance() {
   fi
 }
 
-cat << HEADER
-========================================================
-  MISE À JOUR $APP_NAME - DEPUIS LE LXC
-  Version actuelle : $VERSION_BEFORE
-  Version cible    : $VERSION_CIBLE
-  Dépôt            : ${GITHUB_USER}/${GITHUB_REPO}:${GITHUB_BRANCH}
-  Update ID        : $UPDATE_ID
-  Date             : $(date '+%d/%m/%Y %H:%M:%S')
-========================================================
-HEADER
+finish_failure() {
+  restore_maintenance
+  write_result false
+  exit 1
+}
 
-# 1. Déconnexion forcée
-echo "[1/9] Déconnexion forcée des utilisateurs..."
-MONGO_CMD="$(command -v mongosh 2>/dev/null || command -v mongo 2>/dev/null || echo "")"
-if [[ -n "$MONGO_CMD" ]]; then
-  if $MONGO_CMD --quiet --eval "db = db.getSiblingDB('$DB_NAME'); db.system_settings.updateOne({key:'force_logout_at'},{\$set:{key:'force_logout_at',timestamp:Date.now()/1000}},{upsert:true}); print('OK');" >/dev/null 2>&1; then
-    step_ok "Force logout envoyé"
-    sleep 10
-  else
-    step_warn "Force logout échoué (non bloquant)"
-  fi
-else
-  step_warn "mongosh/mongo non trouvé, déconnexion ignorée"
-fi
+trap 'echo "[TRAP] Sortie inattendue"; finish_failure' ERR
 
-# 2. Maintenance
-echo "[2/9] Activation maintenance..."
-touch "$MFLAG" 2>/dev/null || step_warn "maintenance.flag non créé"
+echo "=============================================================="
+echo "Mise à jour $APP_NAME"
+echo "Version actuelle : $VERSION_BEFORE"
+echo "Version demandée : $VERSION_CIBLE"
+echo "Dépôt : ${GITHUB_USER}/${GITHUB_REPO}"
+echo "Branche : ${GITHUB_BRANCH}"
+echo "Update ID : $UPDATE_ID"
+echo "=============================================================="
+
+# 1. Activation maintenance
+step_label="[1/9] Page de maintenance"
+echo "$step_label..."
+touch "$MFLAG" 2>/dev/null || true
+cat > "$APP_ROOT/maintenance.html" << 'HTML_MAINT'
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>FSAO Iris - Mise à jour</title><style>body{font-family:Arial,sans-serif;background:#0f172a;color:#e5e7eb;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}.box{max-width:620px;padding:32px;border:1px solid #334155;border-radius:18px;background:#111827;text-align:center}h1{margin:0 0 12px;font-size:28px}p{color:#cbd5e1;line-height:1.5}</style></head><body><div class="box"><h1>FSAO Iris est en mise à jour</h1><p>L'application est momentanément indisponible. Merci de patienter quelques minutes puis de vous reconnecter.</p></div></body></html>
+HTML_MAINT
 if [[ -n "$NGINX_CONF" && -f "$NGINX_REAL" ]]; then
-  [[ -f "$NGINX_BACKUP" ]] || cp "$NGINX_REAL" "$NGINX_BACKUP"
+  cp "$NGINX_REAL" "$NGINX_BACKUP" 2>/dev/null || true
   cat > "$NGINX_REAL" << NGINX_MAINT
 server {
     listen 80;
@@ -226,121 +265,147 @@ server {
     }
 }
 NGINX_MAINT
-  if nginx -t >/dev/null 2>&1 && nginx -s reload >/dev/null 2>&1; then step_ok "Page de maintenance active"; else systemctl reload nginx >/dev/null 2>&1 || true; step_warn "Maintenance activée avec rechargement NGINX imparfait"; fi
+  if nginx -t >/dev/null 2>&1 && nginx -s reload >/dev/null 2>&1; then
+    step_ok "Page de maintenance active"
+  else
+    systemctl reload nginx >/dev/null 2>&1 || true
+    step_warn "Maintenance activée avec rechargement NGINX imparfait"
+  fi
 else
   step_warn "Configuration NGINX non trouvée, maintenance.flag seul"
 fi
 
-# 3. Backup MongoDB
-echo "[3/9] Backup MongoDB..."
+# 2. Backup MongoDB
+step_label="[2/9] Backup MongoDB"
+echo "$step_label..."
 BACKUP_DIR="$APP_ROOT/backups/backup_$(date +%Y%m%d_%H%M%S)"
 mkdir -p "$BACKUP_DIR"
 if command -v mongodump >/dev/null 2>&1; then
-  if mongodump --uri="${MONGO_URL:-mongodb://localhost:27017}" --db="$DB_NAME" --out="$BACKUP_DIR" >/dev/null 2>&1; then step_ok "Backup MongoDB réussi: $BACKUP_DIR"; else step_warn "Backup MongoDB échoué (non bloquant)"; fi
+  if mongodump --uri="${MONGO_URL:-mongodb://localhost:27017}" --db="$DB_NAME" --out="$BACKUP_DIR" >/dev/null 2>&1; then
+    step_ok "Backup MongoDB réussi: $BACKUP_DIR"
+  else
+    step_warn "Backup MongoDB échoué (non bloquant)"
+  fi
 else
   step_warn "mongodump absent, backup MongoDB ignoré"
 fi
 
-# 4. Backup applicatif
-echo "[4/9] Sauvegarde applicative..."
+# 3. Backup applicatif
+step_label="[3/9] Sauvegarde applicative"
+echo "$step_label..."
 APP_BACKUP_PATH="$APP_ROOT/backups/app_$(date +%Y%m%d_%H%M%S).tar.gz"
 export APP_BACKUP_PATH
-if tar --exclude='./backups' --exclude='./backend/venv' --exclude='./frontend/node_modules' --exclude='./frontend/build_backup' -czf "$APP_BACKUP_PATH" -C "$APP_ROOT" . >/dev/null 2>&1; then step_ok "Sauvegarde applicative créée: $APP_BACKUP_PATH"; else step_warn "Sauvegarde applicative échouée"; fi
+mkdir -p "$APP_ROOT/backups"
+if tar --exclude='./backups' --exclude='./backend/venv' --exclude='./frontend/node_modules' --exclude='./frontend/build_backup' -czf "$APP_BACKUP_PATH" -C "$APP_ROOT" . >/dev/null 2>&1; then
+  step_ok "Sauvegarde applicative créée: $APP_BACKUP_PATH"
+else
+  step_fail "Sauvegarde applicative échouée"
+  finish_failure
+fi
 
-# 5. Sauvegarde persistants
-echo "[5/9] Sauvegarde des fichiers persistants..."
+# 4. Sauvegarde fichiers persistants
+step_label="[4/9] Sauvegarde des fichiers persistants"
+echo "$step_label..."
 mkdir -p "$ENV_TMP_DIR"
 for f in "backend/.env" "frontend/.env"; do
-  if [[ -f "$APP_ROOT/$f" ]]; then mkdir -p "$ENV_TMP_DIR/$(dirname "$f")"; cp -a "$APP_ROOT/$f" "$ENV_TMP_DIR/$f"; fi
+  if [[ -f "$APP_ROOT/$f" ]]; then
+    mkdir -p "$ENV_TMP_DIR/$(dirname "$f")"
+    cp -a "$APP_ROOT/$f" "$ENV_TMP_DIR/$f"
+  fi
 done
-[[ -f "$ENV_TMP_DIR/backend/.env" ]] && step_ok "Fichiers .env sauvegardés" || step_fail "backend/.env introuvable"
+[[ -f "$ENV_TMP_DIR/backend/.env" ]] && step_ok "Fichiers .env sauvegardés" || step_warn "backend/.env introuvable"
 
-# 6. Mise à jour code
-echo "[6/9] Synchronisation du code depuis GitHub..."
-cd "$APP_ROOT" || { step_fail "Impossible d'entrer dans $APP_ROOT"; write_result false; exit 1; }
+# 5. Synchronisation du code
+step_label="[5/9] Synchronisation du code depuis GitHub"
+echo "$step_label..."
+cd "$APP_ROOT" || { step_fail "Impossible d'entrer dans $APP_ROOT"; finish_failure; }
 if [[ ! -d .git ]]; then
-  git init >/dev/null 2>&1 || step_fail "git init échoué"
+  git init >/dev/null 2>&1 || { step_fail "git init échoué"; finish_failure; }
   git remote add origin "$GITHUB_URL" >/dev/null 2>&1 || git remote set-url origin "$GITHUB_URL" >/dev/null 2>&1 || true
 else
   git remote set-url origin "$GITHUB_URL" >/dev/null 2>&1 || true
 fi
+
 if run_git fetch origin "$GITHUB_BRANCH" >/dev/null 2>&1; then
+  validate_remote_tree || finish_failure
   if git reset --hard "origin/$GITHUB_BRANCH" >/dev/null 2>&1; then
     git clean -fd -e backups/ -e backend/.env -e frontend/.env -e backend/uploads/ >/dev/null 2>&1 || true
     CODE_UPDATED="true"
     step_ok "Code source synchronisé depuis ${GITHUB_USER}/${GITHUB_REPO}:${GITHUB_BRANCH}"
   else
     step_fail "git reset --hard échoué"
+    finish_failure
   fi
 else
-  step_fail "git fetch échoué : vérifier l'accès GitHub depuis le LXC"
+  step_fail "git fetch échoué depuis ${GITHUB_USER}/${GITHUB_REPO}:${GITHUB_BRANCH}"
+  finish_failure
 fi
 
-# 7. Restauration persistants
-echo "[7/9] Restauration des fichiers persistants..."
+# 6. Restauration persistants
+step_label="[6/9] Restauration des fichiers persistants"
+echo "$step_label..."
 for f in "backend/.env" "frontend/.env"; do
-  if [[ -f "$ENV_TMP_DIR/$f" ]]; then mkdir -p "$APP_ROOT/$(dirname "$f")"; cp -a "$ENV_TMP_DIR/$f" "$APP_ROOT/$f"; fi
+  if [[ -f "$ENV_TMP_DIR/$f" ]]; then
+    mkdir -p "$APP_ROOT/$(dirname "$f")"
+    cp -a "$ENV_TMP_DIR/$f" "$APP_ROOT/$f"
+  fi
 done
-rm -rf "$ENV_TMP_DIR" 2>/dev/null || true
-[[ -f "$APP_ROOT/backend/.env" ]] && step_ok "backend/.env restauré" || step_fail "backend/.env non restauré"
+step_ok "Fichiers persistants restaurés"
 
-# 8. Dépendances et build
-echo "[8/9] Installation dépendances et build..."
-if [[ -d "$BACKEND_DIR" ]]; then
-  [[ -d "$BACKEND_DIR/venv" ]] || python3 -m venv "$BACKEND_DIR/venv" >/dev/null 2>&1 || step_warn "Création venv échouée"
-  if [[ -f "$BACKEND_DIR/venv/bin/activate" ]]; then
-    cd "$BACKEND_DIR"
-    source "$BACKEND_DIR/venv/bin/activate"
-    pip install --upgrade pip wheel setuptools >/dev/null 2>&1 || step_warn "Mise à jour pip avec avertissements"
-    if pip install -r "$BACKEND_DIR/requirements.txt" --extra-index-url "$EXTRA_INDEX" >/dev/null 2>&1; then step_ok "Dépendances backend installées"; else step_fail "pip install backend échoué"; fi
-    if [[ "$INSTALL_EMERGENT_INTEGRATIONS" =~ ^[OoYy]$ ]]; then pip install emergentintegrations --extra-index-url "$EXTRA_INDEX" >/dev/null 2>&1 || step_warn "emergentintegrations non installé"; fi
-    deactivate 2>/dev/null || true
-  fi
+# 7. Backend
+step_label="[7/9] Backend Python"
+echo "$step_label..."
+cd "$BACKEND_DIR" || { step_fail "Dossier backend inaccessible"; finish_failure; }
+if [[ ! -d venv ]]; then
+  python3 -m venv venv >/dev/null 2>&1 || step_warn "Création venv impossible"
 fi
-
-if [[ -d "$FRONTEND_DIR" ]]; then
-  cd "$FRONTEND_DIR"
-  [[ -d build ]] && rm -rf build_backup && cp -a build build_backup
-  yarn install --production=false >/dev/null 2>&1 || step_warn "yarn install avec avertissements"
-  if CI=false yarn build >/dev/null 2>&1 && [[ -f build/index.html ]]; then
-    step_ok "Frontend compilé"
+if [[ -x venv/bin/pip ]]; then
+  venv/bin/pip install --upgrade pip >/dev/null 2>&1 || true
+  if [[ -f requirements.txt ]]; then
+    venv/bin/pip install -r requirements.txt >/dev/null 2>&1 && step_ok "Dépendances backend installées" || step_warn "Installation dépendances backend incomplète"
   else
-    step_fail "Build frontend échoué"
-    if [[ -d build_backup ]]; then rm -rf build; cp -a build_backup build; step_warn "Ancien build restauré"; fi
+    step_warn "requirements.txt absent"
   fi
-  rm -rf build_backup 2>/dev/null || true
 else
-  step_fail "Dossier frontend introuvable"
+  step_warn "venv/bin/pip indisponible"
 fi
-cd "$APP_ROOT" || true
 
-# 9. Redémarrage
-echo "[9/9] Redémarrage applicatif..."
+# 8. Frontend
+step_label="[8/9] Frontend React"
+echo "$step_label..."
+cd "$FRONTEND_DIR" || { step_warn "Dossier frontend inaccessible"; cd "$APP_ROOT"; }
+if [[ -f package.json ]]; then
+  if command -v yarn >/dev/null 2>&1; then
+    yarn install --silent >/dev/null 2>&1 || step_warn "yarn install incomplet"
+    yarn build >/dev/null 2>&1 && step_ok "Frontend reconstruit" || step_warn "Build frontend échoué"
+  elif command -v npm >/dev/null 2>&1; then
+    npm install >/dev/null 2>&1 || step_warn "npm install incomplet"
+    npm run build >/dev/null 2>&1 && step_ok "Frontend reconstruit" || step_warn "Build frontend échoué"
+  else
+    step_warn "npm/yarn absent, build frontend ignoré"
+  fi
+else
+  step_warn "package.json absent"
+fi
+
+# 9. Redémarrage services
+step_label="[9/9] Redémarrage services"
+echo "$step_label..."
 restore_maintenance
-step_ok "Maintenance désactivée"
 if command -v supervisorctl >/dev/null 2>&1; then
   supervisorctl reread >/dev/null 2>&1 || true
   supervisorctl update >/dev/null 2>&1 || true
-  if supervisorctl restart gmao-iris-backend >/dev/null 2>&1 || supervisorctl restart all >/dev/null 2>&1; then step_ok "Backend redémarré via supervisor"; else step_warn "Redémarrage supervisor incertain"; fi
+  supervisorctl restart gmao-iris-backend >/dev/null 2>&1 || supervisorctl restart fsao-iris-backend >/dev/null 2>&1 || step_warn "Redémarrage backend supervisor incertain"
 else
-  step_warn "supervisorctl absent, redémarrage manuel potentiellement nécessaire"
+  step_warn "supervisorctl absent"
 fi
-nginx -t >/dev/null 2>&1 && nginx -s reload >/dev/null 2>&1 || systemctl reload nginx >/dev/null 2>&1 || step_warn "Reload NGINX incertain"
-
-if [[ $STEPS_ERR -eq 0 ]]; then
-  echo ""
-  echo "=========================================="
-  echo "  MISE À JOUR RÉUSSIE"
-  echo "  OK: $STEPS_OK | WARN: $STEPS_WARN | ERR: $STEPS_ERR"
-  echo "=========================================="
-  write_result true
-  exit 0
+if command -v nginx >/dev/null 2>&1; then
+  nginx -t >/dev/null 2>&1 && nginx -s reload >/dev/null 2>&1 && step_ok "NGINX rechargé" || step_warn "Reload NGINX impossible"
 fi
 
-echo ""
-echo "=========================================="
-echo "  MISE À JOUR TERMINÉE AVEC $STEPS_ERR ERREUR(S)"
-echo "  OK: $STEPS_OK | WARN: $STEPS_WARN | ERR: $STEPS_ERR"
-echo "=========================================="
-write_result false
-exit 1
+write_result true
+echo "=============================================================="
+echo "Mise à jour terminée. Version avant: $VERSION_BEFORE / cible: $VERSION_CIBLE"
+echo "Dépôt utilisé: ${GITHUB_USER}/${GITHUB_REPO}:${GITHUB_BRANCH}"
+echo "=============================================================="
+exit 0
