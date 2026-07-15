@@ -1,21 +1,26 @@
 """
 Routes de mise a jour FSAO Iris.
 
-La philosophie retenue est volontairement simple pour l'utilisateur :
-la mise a jour est pilotable depuis l'interface graphique et s'execute dans
+La mise a jour est pilotable depuis l'interface graphique et s'execute dans
 le conteneur LXC applicatif via MAJ_FSAO.sh.
 """
-from fastapi import APIRouter, Depends, HTTPException
-from datetime import datetime, timezone
-from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException, Body
+from datetime import datetime
+from typing import Optional, Dict, Any
 from pathlib import Path
 import logging
 import os
 import subprocess
 
-from models import ActionType, EntityType
 from dependencies import get_current_admin_user
 from routes.shared import db
+from update_repository_config import (
+    apply_update_repository_env,
+    get_update_repository_config,
+    save_update_repository_config,
+    validate_update_repository_config,
+    normalize_update_repository_config,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["Mises a jour"])
@@ -23,10 +28,6 @@ router = APIRouter(tags=["Mises a jour"])
 from update_manager import UpdateManager
 
 update_manager = UpdateManager(db)
-# Alignement avec le dépôt officiel FSAO Iris.
-update_manager.github_user = os.environ.get("GITHUB_USER", "Kinder0083")
-update_manager.github_repo = os.environ.get("GITHUB_REPO", "GMAO_IA")
-update_manager.github_branch = os.environ.get("GITHUB_BRANCH", "main")
 
 APP_ROOT = Path(__file__).resolve().parents[2]
 UPDATE_SCRIPT = APP_ROOT / "MAJ_FSAO.sh"
@@ -44,7 +45,7 @@ def _script_metadata() -> dict:
     }
 
 
-def _workflow_payload() -> dict:
+def _workflow_payload(repository_config: dict) -> dict:
     return {
         "mode": "lxc_in_app",
         "product_name": "FSAO Iris",
@@ -53,6 +54,7 @@ def _workflow_payload() -> dict:
         "can_execute_from_app": True,
         "requires_proxmox_host": False,
         "message": "La mise a jour est lancee depuis l'interface graphique et s'execute dans le conteneur LXC via MAJ_FSAO.sh.",
+        "repository": repository_config,
         "script": _script_metadata(),
         "recommended_flow": [
             "Cliquer sur Verifier pour rechercher une version disponible.",
@@ -67,53 +69,125 @@ def _workflow_payload() -> dict:
     }
 
 
+async def _load_repository_config() -> dict:
+    config = await get_update_repository_config(db)
+    update_manager.github_user = config["github_user"]
+    update_manager.github_repo = config["github_repo"]
+    update_manager.github_branch = config["github_branch"]
+    update_manager.github_url = config["github_url"]
+    return config
+
+
 @router.get("/updates/current")
 async def get_current_version(current_user: dict = Depends(get_current_admin_user)):
     """Récupère la version actuelle (admin uniquement)."""
     version = await update_manager.get_current_version()
-    return {
-        "version": version,
-        "date": datetime.now().isoformat(),
-    }
+    return {"version": version, "date": datetime.now().isoformat()}
+
+
+@router.get("/updates/repository-config")
+async def get_repository_config(current_user: dict = Depends(get_current_admin_user)):
+    """Retourne le dépôt utilisé pour la détection et l'installation des mises à jour."""
+    config = await _load_repository_config()
+    return {"success": True, "config": config}
+
+
+@router.put("/updates/repository-config")
+async def set_repository_config(
+    payload: Dict[str, Any] = Body(...),
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Enregistre le dépôt utilisé par la mise à jour graphique."""
+    try:
+        config = await save_update_repository_config(db, payload, current_user.get("email", ""))
+        update_manager.github_user = config["github_user"]
+        update_manager.github_repo = config["github_repo"]
+        update_manager.github_branch = config["github_branch"]
+        update_manager.github_url = config["github_url"]
+        return {"success": True, "config": config, "message": "Configuration du dépôt enregistrée."}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Erreur sauvegarde config dépôt MAJ: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/updates/repository-config/test")
+async def test_repository_config(
+    payload: Dict[str, Any] = Body(...),
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Teste une configuration sans l'enregistrer."""
+    try:
+        current = await get_update_repository_config(db)
+        config = normalize_update_repository_config(payload, current)
+        validate_update_repository_config(config)
+        previous = {
+            "github_user": update_manager.github_user,
+            "github_repo": update_manager.github_repo,
+            "github_branch": update_manager.github_branch,
+            "github_url": getattr(update_manager, "github_url", ""),
+        }
+        update_manager.github_user = config["github_user"]
+        update_manager.github_repo = config["github_repo"]
+        update_manager.github_branch = config["github_branch"]
+        update_manager.github_url = config["github_url"]
+        result = await update_manager.check_github_version()
+        update_manager.github_user = previous["github_user"]
+        update_manager.github_repo = previous["github_repo"]
+        update_manager.github_branch = previous["github_branch"]
+        update_manager.github_url = previous["github_url"]
+        return {"success": bool(result and not result.get("error")), "config": config, "result": result}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Erreur test config dépôt MAJ: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/updates/check")
 async def check_updates(current_user: dict = Depends(get_current_admin_user)):
     """Vérifie si une mise à jour est disponible (admin uniquement)."""
+    config = await _load_repository_config()
     current = await update_manager.get_current_version()
     latest = await update_manager.check_github_version()
     return {
         "current_version": current,
         "latest_version": latest,
         "update_available": latest is not None and latest.get("available", False),
-        "deployment_workflow": _workflow_payload(),
+        "repository_config": config,
+        "deployment_workflow": _workflow_payload(config),
     }
 
 
 @router.get("/updates/deployment-workflow")
 async def get_deployment_workflow(current_user: dict = Depends(get_current_admin_user)):
     """Retourne la stratégie de mise à jour actuelle."""
-    return _workflow_payload()
+    config = await _load_repository_config()
+    return _workflow_payload(config)
 
 
 @router.post("/updates/precheck")
 async def run_update_precheck(current_user: dict = Depends(get_current_admin_user)):
     """Lance le pre-check de mise a jour dans le conteneur LXC."""
+    config = await _load_repository_config()
     if not UPDATE_SCRIPT.exists():
         return {
             "success": False,
             "can_execute": False,
             "message": f"Script de mise a jour introuvable : {UPDATE_SCRIPT}",
-            "workflow": _workflow_payload(),
+            "workflow": _workflow_payload(config),
         }
 
     try:
+        env = apply_update_repository_env(config, os.environ.copy())
         result = subprocess.run(
             ["bash", str(UPDATE_SCRIPT), "--check"],
             cwd=str(APP_ROOT),
             capture_output=True,
             text=True,
             timeout=240,
+            env=env,
         )
         return {
             "success": result.returncode == 0,
@@ -121,7 +195,8 @@ async def run_update_precheck(current_user: dict = Depends(get_current_admin_use
             "return_code": result.returncode,
             "stdout": result.stdout[-30000:],
             "stderr": result.stderr[-10000:],
-            "workflow": _workflow_payload(),
+            "repository_config": config,
+            "workflow": _workflow_payload(config),
         }
     except Exception as e:
         logger.error(f"Erreur precheck mise a jour: {e}")
@@ -140,7 +215,6 @@ async def list_app_backups(current_user: dict = Depends(get_current_admin_user))
     backups = []
     try:
         if BACKUP_ROOT.exists():
-            # Sauvegardes applicatives créées par MAJ_FSAO.sh
             for path in sorted(BACKUP_ROOT.glob("app_*.tar.gz"), reverse=True):
                 stat = path.stat()
                 backups.append({
@@ -150,7 +224,6 @@ async def list_app_backups(current_user: dict = Depends(get_current_admin_user))
                     "modified_at": datetime.fromtimestamp(stat.st_mtime).isoformat(),
                     "size_bytes": stat.st_size,
                 })
-            # Sauvegardes MongoDB historiques
             for path in sorted(BACKUP_ROOT.glob("backup_*"), reverse=True):
                 if path.is_dir():
                     stat = path.stat()
@@ -184,6 +257,7 @@ async def get_changelog(
     current_user: dict = Depends(get_current_admin_user),
 ):
     """Récupère le changelog (admin uniquement)."""
+    await _load_repository_config()
     changelog = await update_manager.get_changelog(from_version)
     return {"changelog": changelog}
 
