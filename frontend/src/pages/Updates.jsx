@@ -53,6 +53,20 @@ const InputField = ({ label, value, onChange, placeholder, help }) => (
   </div>
 );
 
+const AccessBadge = ({ label, status, detail }) => (
+  <div className="rounded-lg border bg-gray-50 p-3">
+    <div className="flex items-center justify-between gap-3">
+      <div>
+        <p className="text-sm font-medium text-gray-900">{label}</p>
+        {detail && <p className="mt-1 text-xs text-gray-500">{detail}</p>}
+      </div>
+      <StatusBadge type={status === true ? 'ok' : status === false ? 'error' : 'neutral'}>
+        {status === true ? 'OK' : status === false ? 'Erreur' : 'Non testé'}
+      </StatusBadge>
+    </div>
+  </div>
+);
+
 const Updates = () => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
@@ -61,13 +75,17 @@ const Updates = () => {
   const [updating, setUpdating] = useState(false);
   const [repoSaving, setRepoSaving] = useState(false);
   const [repoTesting, setRepoTesting] = useState(false);
+  const [accessChecking, setAccessChecking] = useState(false);
+
   const [currentVersion, setCurrentVersion] = useState('');
   const [latestVersion, setLatestVersion] = useState(null);
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [workflow, setWorkflow] = useState(null);
   const [repositoryConfig, setRepositoryConfig] = useState(null);
+  const [repositoryAccess, setRepositoryAccess] = useState(null);
   const [repoForm, setRepoForm] = useState({ github_user: '', github_repo: '', github_branch: 'main', github_url: '' });
   const [repoTestResult, setRepoTestResult] = useState(null);
+
   const [backups, setBackups] = useState([]);
   const [backupRoot, setBackupRoot] = useState('');
   const [changelog, setChangelog] = useState([]);
@@ -75,6 +93,7 @@ const Updates = () => {
   const [serverLog, setServerLog] = useState('');
   const [serverLogInfo, setServerLogInfo] = useState(null);
   const [serverLogLoading, setServerLogLoading] = useState(false);
+
   const [expandedServerLog, setExpandedServerLog] = useState(true);
   const [expandedChangelog, setExpandedChangelog] = useState(false);
   const [expandedHistory, setExpandedHistory] = useState(false);
@@ -98,6 +117,13 @@ const Updates = () => {
       github_url: config.github_url || '',
     });
   };
+
+  const repoLabel = () => {
+    if (repositoryConfig?.full_name) return `${repositoryConfig.full_name}:${repositoryConfig.github_branch}`;
+    return `${repoForm.github_user || '?'}/${repoForm.github_repo || '?'}:${repoForm.github_branch || 'main'}`;
+  };
+
+  const remoteCommit = () => repositoryAccess?.api_access?.commit || repositoryAccess?.git_access?.remote_commit || latestVersion?.commit || '';
 
   const loadServerLog = async (showToast = true) => {
     try {
@@ -128,14 +154,42 @@ const Updates = () => {
     }
   };
 
+  const runRepositoryAccessCheck = async (payload = null, showToast = false) => {
+    try {
+      setAccessChecking(true);
+      const response = await axios.post(`${BACKEND_URL}/api/updates/repository-access-check`, payload || {}, {
+        headers: authHeaders(),
+        timeout: 30000,
+      });
+      setRepositoryAccess(response.data);
+      if (response.data.config) syncRepoForm(response.data.config);
+      if (showToast) {
+        toast({
+          title: response.data.success ? 'Accès dépôt validé' : 'Accès dépôt incomplet',
+          description: response.data.success ? 'API GitHub et git fetch sont opérationnels.' : 'Consultez le détail API/Git fetch.',
+          variant: response.data.success ? 'default' : 'destructive',
+        });
+      }
+      return response.data;
+    } catch (error) {
+      const data = { success: false, detail: error.response?.data?.detail || error.message || 'Erreur inconnue' };
+      setRepositoryAccess(data);
+      if (showToast) toast({ title: 'Erreur diagnostic dépôt', description: data.detail, variant: 'destructive' });
+      return data;
+    } finally {
+      setAccessChecking(false);
+    }
+  };
+
   const loadUpdateInfo = async () => {
     try {
       setLoading(true);
-      const [currentRes, checkRes, workflowRes, repoRes, changelogRes, historyRes, backupsRes] = await Promise.allSettled([
+      const [currentRes, checkRes, workflowRes, repoRes, accessRes, changelogRes, historyRes, backupsRes] = await Promise.allSettled([
         axios.get(`${BACKEND_URL}/api/updates/current`, { headers: authHeaders() }),
         axios.get(`${BACKEND_URL}/api/updates/check`, { headers: authHeaders() }),
         axios.get(`${BACKEND_URL}/api/updates/deployment-workflow`, { headers: authHeaders() }),
         axios.get(`${BACKEND_URL}/api/updates/repository-config`, { headers: authHeaders() }),
+        axios.post(`${BACKEND_URL}/api/updates/repository-access-check`, {}, { headers: authHeaders(), timeout: 30000 }),
         axios.get(`${BACKEND_URL}/api/updates/changelog`, { headers: authHeaders() }),
         axios.get(`${BACKEND_URL}/api/updates/history`, { headers: authHeaders() }),
         axios.get(`${BACKEND_URL}/api/updates/app-backups`, { headers: authHeaders() }),
@@ -155,6 +209,7 @@ const Updates = () => {
         if (workflowRes.value.data.repository) syncRepoForm(workflowRes.value.data.repository);
       }
       if (repoRes.status === 'fulfilled') syncRepoForm(repoRes.value.data.config);
+      if (accessRes.status === 'fulfilled') setRepositoryAccess(accessRes.value.data);
       if (changelogRes.status === 'fulfilled') setChangelog(changelogRes.value.data.changelog || []);
       if (historyRes.status === 'fulfilled') setHistory(historyRes.value.data.history || historyRes.value.data.data || []);
       if (backupsRes.status === 'fulfilled') {
@@ -172,10 +227,7 @@ const Updates = () => {
     setChecking(true);
     await loadUpdateInfo();
     setChecking(false);
-    toast({
-      title: 'Vérification terminée',
-      description: updateAvailable ? 'Une nouvelle version semble disponible.' : 'Aucune mise à jour détectée.',
-    });
+    toast({ title: 'Vérification terminée', description: 'Informations de mise à jour rafraîchies.' });
   };
 
   const runPrecheck = async () => {
@@ -207,25 +259,16 @@ const Updates = () => {
   };
 
   const testRepositoryConfig = async () => {
-    try {
-      setRepoTesting(true);
-      setRepoTestResult(null);
-      const response = await axios.post(`${BACKEND_URL}/api/updates/repository-config/test`, repoForm, {
-        headers: authHeaders(),
-        timeout: 20000,
-      });
-      setRepoTestResult(response.data);
-      toast({
-        title: response.data.success ? 'Dépôt accessible' : 'Test terminé avec erreur',
-        description: response.data.success ? 'La configuration proposée répond correctement.' : 'Vérifiez le dépôt, la branche ou l’accès GitHub.',
-        variant: response.data.success ? 'default' : 'destructive',
-      });
-    } catch (error) {
-      setRepoTestResult({ success: false, detail: error.response?.data?.detail || error.message });
-      toast({ title: 'Erreur test dépôt', description: error.response?.data?.detail || 'Configuration non valide.', variant: 'destructive' });
-    } finally {
-      setRepoTesting(false);
-    }
+    setRepoTesting(true);
+    setRepoTestResult(null);
+    const result = await runRepositoryAccessCheck(repoForm, false);
+    setRepoTestResult(result);
+    toast({
+      title: result.success ? 'Dépôt accessible' : 'Accès dépôt incomplet',
+      description: result.success ? 'API GitHub et git fetch sont opérationnels.' : 'Vérifiez le dépôt, la branche ou les accès du LXC.',
+      variant: result.success ? 'default' : 'destructive',
+    });
+    setRepoTesting(false);
   };
 
   const saveRepositoryConfig = async () => {
@@ -300,17 +343,25 @@ const Updates = () => {
 
   const handleApplyUpdate = async () => {
     const version = latestVersion?.version || latestVersion?.new_version || currentVersion || 'latest';
-    const repoLabel = repositoryConfig?.full_name ? `${repositoryConfig.full_name}:${repositoryConfig.github_branch}` : `${repoForm.github_user}/${repoForm.github_repo}:${repoForm.github_branch}`;
+    const label = repoLabel();
+    const commit = remoteCommit();
+    const apiOk = repositoryAccess?.api_access?.ok;
+    const gitOk = repositoryAccess?.git_access?.ok;
+    const warning = gitOk === false ? '\n⚠️ ATTENTION : le test git fetch est en erreur ou non validé. La mise à jour risque d’échouer.\n' : '';
     const confirmed = window.confirm(
-      `Lancer la mise à jour depuis le dépôt ${repoLabel} ?\n\n` +
-      'Cette action va prévenir les utilisateurs, sauvegarder les données, mettre à jour le code, reconstruire l’application et redémarrer les services.\n\n' +
-      'Continuer ?'
+      `Vous allez mettre à jour FSAO Iris depuis :\n\n` +
+      `Dépôt : ${label}\n` +
+      `Dernier commit distant : ${commit || 'non vérifié'}\n` +
+      `Accès API GitHub : ${apiOk === true ? 'OK' : apiOk === false ? 'ERREUR' : 'non testé'}\n` +
+      `Accès git fetch : ${gitOk === true ? 'OK' : gitOk === false ? 'ERREUR' : 'non testé'}\n` +
+      warning +
+      `\nCette action va prévenir les utilisateurs, sauvegarder les données, mettre à jour le code, reconstruire l’application et redémarrer les services.\n\nContinuer ?`
     );
     if (!confirmed) return;
 
     try {
       setUpdating(true);
-      setUpdateLogs([`📦 Dépôt sélectionné : ${repoLabel}`, '📢 Envoi de l’avertissement aux utilisateurs connectés...']);
+      setUpdateLogs([`📦 Dépôt sélectionné : ${label}`, `🔖 Commit distant : ${commit || 'non vérifié'}`, '📢 Envoi de l’avertissement aux utilisateurs connectés...']);
       const token = localStorage.getItem('token');
       try {
         const warningRes = await axios.post(`${BACKEND_URL}/api/updates/broadcast-warning`, null, {
@@ -403,11 +454,44 @@ const Updates = () => {
               <div className="mt-2"><StatusBadge type="ok">Interface graphique • LXC</StatusBadge></div>
             </div>
             <div>
-              <div className="mb-2 flex items-center gap-3"><Settings size={24} className="text-gray-600" /><h3 className="text-lg font-semibold text-gray-900">Dépôt</h3></div>
+              <div className="mb-2 flex items-center gap-3"><Settings size={24} className="text-gray-600" /><h3 className="text-lg font-semibold text-gray-900">Dépôt actif</h3></div>
               <p className="text-lg font-semibold text-gray-900">{repositoryConfig?.full_name || `${repoForm.github_user}/${repoForm.github_repo}`}</p>
               <p className="mt-1 text-sm text-gray-500">Branche {repositoryConfig?.github_branch || repoForm.github_branch || 'main'}</p>
+              {remoteCommit() && <p className="mt-1 text-xs text-gray-500">Commit distant {remoteCommit()}</p>}
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <CardTitle className="flex items-center gap-2"><ShieldCheck size={20} />Accès au dépôt sélectionné</CardTitle>
+            <Button variant="outline" size="sm" onClick={() => runRepositoryAccessCheck(null, true)} disabled={accessChecking || updating}>
+              <RefreshCw size={14} className={`mr-2 ${accessChecking ? 'animate-spin' : ''}`} />
+              Tester les accès
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <AccessBadge
+              label="API GitHub"
+              status={repositoryAccess?.api_access?.ok}
+              detail={repositoryAccess?.api_access?.ok ? `Détection OK • commit ${repositoryAccess.api_access.commit || '?'}` : repositoryAccess?.api_access?.message || 'Utilisé pour détecter automatiquement les mises à jour.'}
+            />
+            <AccessBadge
+              label="Git fetch / ls-remote"
+              status={repositoryAccess?.git_access?.ok}
+              detail={repositoryAccess?.git_access?.ok ? `Méthode ${repositoryAccess.git_access.method || 'git'} • commit ${repositoryAccess.git_access.remote_commit || '?'}` : repositoryAccess?.git_access?.message || 'Utilisé par MAJ_FSAO.sh pour récupérer le code.'}
+            />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <StatusBadge type={repositoryAccess?.auth?.github_token_present ? 'ok' : 'neutral'}>GITHUB_TOKEN {repositoryAccess?.auth?.github_token_present ? 'présent' : 'absent'}</StatusBadge>
+            <StatusBadge type={repositoryAccess?.auth?.gh_authenticated ? 'ok' : 'neutral'}>gh auth {repositoryAccess?.auth?.gh_authenticated ? 'OK' : 'non détecté'}</StatusBadge>
+            <StatusBadge type="info">Branche : {repositoryConfig?.github_branch || repoForm.github_branch || 'main'}</StatusBadge>
+          </div>
+          {repositoryAccess?.message && <p className="text-sm text-gray-600">{repositoryAccess.message}</p>}
         </CardContent>
       </Card>
 
@@ -481,7 +565,7 @@ const Updates = () => {
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" onClick={testRepositoryConfig} disabled={repoTesting || repoSaving || updating}>
                 <RefreshCw size={16} className={`mr-2 ${repoTesting ? 'animate-spin' : ''}`} />
-                Tester ce dépôt
+                Tester API + git fetch
               </Button>
               <Button onClick={saveRepositoryConfig} disabled={repoTesting || repoSaving || updating} className="bg-gray-900 hover:bg-gray-800 text-white">
                 <Settings size={16} className={`mr-2 ${repoSaving ? 'animate-spin' : ''}`} />
@@ -491,10 +575,11 @@ const Updates = () => {
             </div>
             {repoTestResult && (
               <div className={`rounded-lg border p-3 text-sm ${repoTestResult.success ? 'border-green-200 bg-green-50 text-green-800' : 'border-red-200 bg-red-50 text-red-800'}`}>
-                <p className="font-medium">{repoTestResult.success ? 'Test réussi' : 'Test échoué'}</p>
-                {repoTestResult.result?.message && <p>{repoTestResult.result.message}</p>}
-                {repoTestResult.result?.error && <p>{repoTestResult.result.error}</p>}
-                {repoTestResult.result?.details && <p className="mt-1 text-xs">{repoTestResult.result.details}</p>}
+                <p className="font-medium">{repoTestResult.success ? 'Test réussi' : 'Test incomplet'}</p>
+                <p>API GitHub : {repoTestResult.api_access?.ok ? 'OK' : repoTestResult.api_access?.message || 'Erreur'}</p>
+                <p>Git fetch : {repoTestResult.git_access?.ok ? `OK (${repoTestResult.git_access.method || 'git'})` : repoTestResult.git_access?.message || 'Erreur'}</p>
+                {repoTestResult.api_access?.commit && <p>Commit API : {repoTestResult.api_access.commit}</p>}
+                {repoTestResult.git_access?.remote_commit && <p>Commit Git : {repoTestResult.git_access.remote_commit}</p>}
                 {repoTestResult.detail && <p>{repoTestResult.detail}</p>}
               </div>
             )}
