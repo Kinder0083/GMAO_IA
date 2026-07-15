@@ -59,6 +59,7 @@ def _workflow_payload(repository_config: dict) -> dict:
         "script": _script_metadata(),
         "recommended_flow": [
             "Cliquer sur Verifier pour rechercher une version disponible.",
+            "Verifier les acces API GitHub et git fetch.",
             "Cliquer sur Pre-verifier pour controler les prerequis dans le LXC.",
             "Cliquer sur Mettre a jour maintenant pour lancer MAJ_FSAO.sh depuis l'interface.",
             "Suivre les logs dans l'interface puis verifier le resultat apres redemarrage des services.",
@@ -84,6 +85,104 @@ def _github_headers() -> dict:
     if token:
         return {"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json"}
     return {"Accept": "application/vnd.github+json"}
+
+
+def _auth_summary() -> dict:
+    """Retourne les methodes d'auth detectees sans exposer les secrets."""
+    token_present = bool(os.environ.get("GITHUB_TOKEN", "").strip())
+    gh_available = False
+    gh_authenticated = False
+    try:
+        gh_available = subprocess.run(["gh", "--version"], capture_output=True, text=True, timeout=5).returncode == 0
+        if gh_available:
+            gh_authenticated = subprocess.run(["gh", "auth", "status"], capture_output=True, text=True, timeout=8).returncode == 0
+    except Exception:
+        gh_available = False
+        gh_authenticated = False
+    return {
+        "github_token_present": token_present,
+        "gh_available": gh_available,
+        "gh_authenticated": gh_authenticated,
+    }
+
+
+async def _check_api_access(config: dict) -> dict:
+    commit_url = f"https://api.github.com/repos/{config['github_user']}/{config['github_repo']}/commits/{config['github_branch']}"
+    try:
+        async with aiohttp.ClientSession(headers=_github_headers()) as session:
+            async with session.get(commit_url, timeout=aiohttp.ClientTimeout(total=12)) as response:
+                if response.status != 200:
+                    detail = await response.text()
+                    return {
+                        "ok": False,
+                        "status": response.status,
+                        "message": f"GitHub API HTTP {response.status}",
+                        "details": detail[:500],
+                    }
+                data = await response.json()
+                return {
+                    "ok": True,
+                    "status": response.status,
+                    "commit": data.get("sha", "")[:7],
+                    "commit_full": data.get("sha", ""),
+                    "date": data.get("commit", {}).get("author", {}).get("date"),
+                    "message": data.get("commit", {}).get("message", "").split("\n")[0],
+                }
+    except Exception as e:
+        return {"ok": False, "message": str(e)}
+
+
+def _check_git_access(config: dict) -> dict:
+    env = apply_update_repository_env(config, os.environ.copy())
+    git_url = config.get("github_url") or f"https://github.com/{config['github_user']}/{config['github_repo']}.git"
+    branch = config.get("github_branch", "main")
+    token_present = bool(env.get("GITHUB_TOKEN", "").strip())
+
+    commands = []
+    if token_present:
+        commands.append({
+            "method": "GITHUB_TOKEN",
+            "cmd": ["git", "-c", "http.extraHeader=AUTHORIZATION: bearer " + env["GITHUB_TOKEN"], "ls-remote", git_url, branch],
+        })
+    commands.append({"method": "git", "cmd": ["git", "ls-remote", git_url, branch]})
+
+    last_error = ""
+    for candidate in commands:
+        try:
+            result = subprocess.run(
+                candidate["cmd"],
+                cwd=str(APP_ROOT),
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=25,
+            )
+            if result.returncode == 0:
+                first_line = (result.stdout or "").strip().splitlines()[0] if result.stdout.strip() else ""
+                remote_commit = first_line.split()[0][:7] if first_line else ""
+                return {
+                    "ok": True,
+                    "method": candidate["method"],
+                    "remote_commit": remote_commit,
+                    "message": "git ls-remote OK",
+                }
+            last_error = (result.stderr or result.stdout or "").strip()[-1200:]
+        except Exception as e:
+            last_error = str(e)
+
+    gh_note = ""
+    try:
+        if subprocess.run(["gh", "auth", "status"], capture_output=True, text=True, timeout=8).returncode == 0:
+            gh_note = "GitHub CLI est authentifie, mais git ls-remote ne repond pas. Verifier gh auth setup-git ou l'URL Git."
+    except Exception:
+        pass
+
+    return {
+        "ok": False,
+        "method": "none",
+        "message": "git ls-remote impossible",
+        "details": gh_note or last_error,
+    }
 
 
 @router.get("/updates/current")
@@ -130,33 +229,44 @@ async def test_repository_config(
         current = await get_update_repository_config(db)
         config = normalize_update_repository_config(payload, current)
         validate_update_repository_config(config)
-        commit_url = f"https://api.github.com/repos/{config['github_user']}/{config['github_repo']}/commits/{config['github_branch']}"
-        async with aiohttp.ClientSession(headers=_github_headers()) as session:
-            async with session.get(commit_url, timeout=aiohttp.ClientTimeout(total=12)) as response:
-                if response.status != 200:
-                    detail = await response.text()
-                    return {
-                        "success": False,
-                        "config": {**config, "full_name": f"{config['github_user']}/{config['github_repo']}"},
-                        "result": {
-                            "error": f"GitHub HTTP {response.status}",
-                            "details": detail[:500],
-                        },
-                    }
-                data = await response.json()
-                return {
-                    "success": True,
-                    "config": {**config, "full_name": f"{config['github_user']}/{config['github_repo']}"},
-                    "result": {
-                        "commit": data.get("sha", "")[:7],
-                        "message": data.get("commit", {}).get("message", "").split("\n")[0],
-                        "branch": config["github_branch"],
-                    },
-                }
+        api_access = await _check_api_access(config)
+        return {
+            "success": bool(api_access.get("ok")),
+            "config": {**config, "full_name": f"{config['github_user']}/{config['github_repo']}"},
+            "result": api_access,
+        }
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Erreur test config dépôt MAJ: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/updates/repository-access-check")
+async def repository_access_check(
+    payload: Dict[str, Any] = Body(default={}),
+    current_user: dict = Depends(get_current_admin_user),
+):
+    """Teste séparément l'accès API GitHub et l'accès git fetch/ls-remote."""
+    try:
+        current = await get_update_repository_config(db)
+        config = normalize_update_repository_config(payload, current)
+        validate_update_repository_config(config)
+        api_access = await _check_api_access(config)
+        git_access = _check_git_access(config)
+        auth = _auth_summary()
+        return {
+            "success": bool(api_access.get("ok") and git_access.get("ok")),
+            "config": {**config, "full_name": f"{config['github_user']}/{config['github_repo']}"},
+            "api_access": api_access,
+            "git_access": git_access,
+            "auth": auth,
+            "message": "Acces API et git fetch OK." if api_access.get("ok") and git_access.get("ok") else "Un ou plusieurs acces sont en erreur.",
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Erreur diagnostic acces dépôt MAJ: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
